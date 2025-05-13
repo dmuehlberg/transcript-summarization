@@ -162,7 +162,7 @@ services:
 
   whisperx:
     build:
-      context: ./whisperx
+      context: ./whisperX-FastAPI
     container_name: whisperx
     networks: ['demo']
     ports:
