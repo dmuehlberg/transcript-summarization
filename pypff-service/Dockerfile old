@@ -1,0 +1,21 @@
+# ---- Basis-Image -----------------------------------------------------------
+FROM python:3.10-slim                          # Debian 12 (bookworm) Grundlage
+
+# ---- Systemabhängigkeiten --------------------------------------------------
+# Debian/Ubuntu bringt libpff & Python-Bindings bereits als Pakete mit.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        python3-pypff            \
+        libpff-dev               \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# ---- Arbeitsverzeichnis & Abhängigkeiten -----------------------------------
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt   # FastAPI, Uvicorn, …
+
+# ---- Anwendungscode --------------------------------------------------------
+COPY . .
+
+# ---- Start-Befehl ----------------------------------------------------------
+CMD ["uvicorn", "pypff_service.main:app", "--host", "0.0.0.0", "--port", "8100"]
