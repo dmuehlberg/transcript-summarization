@@ -179,3 +179,16 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+
+
+  pypff-service:
+    platform: ${TARGETPLATFORM:-linux/amd64}
+    build:
+      context: ./pypff-service
+      dockerfile: Dockerfile
+    container_name: pypff-service
+    networks: ['demo']
+    ports:
+      - "8100:8100"
+    volumes:
+      - ./data/ost:/data/ost
