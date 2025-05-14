@@ -1,0 +1,257 @@
+{
+  "name": "Summarize Transcript",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "e2d490c8-f6da-4ad7-a357-ef1ba96fc759",
+      "name": "When clicking ‘Test workflow’"
+    },
+    {
+      "parameters": {
+        "fileSelector": "/data/shared/summarize_input/2025-04-28 17-01-19.txt",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        220,
+        0
+      ],
+      "id": "0bf3c866-f027-4366-bf51-09752028a6a9",
+      "name": "Read/Write Files from Disk"
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "destinationKey": "transcript",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        440,
+        0
+      ],
+      "id": "197deaf8-22ac-46aa-a7ce-4c7e59dfc5ce",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "text",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        900,
+        320
+      ],
+      "id": "c477259b-91ff-4db3-9049-f435532f44f4",
+      "name": "Convert to File"
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "/data/shared/summarize_input/2025-04-28 17-01-19_transformed.txt",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1080,
+        320
+      ],
+      "id": "3d5bdb4c-e37e-4d28-b02e-528d0f4e36f8",
+      "name": "Read/Write Files from Disk1"
+    },
+    {
+      "parameters": {
+        "language": "python",
+        "pythonCode": "import re\n\n# Wir nehmen den konsolidierten Text aus vorherigem Node\n# Feldname: \"text\", z. B. erzeugt durch vorheriges Skript\n\noutput_items = []\n\nfor item in items:\n    full_text = item['json'].get('text', '')\n    \n    # Aufteilen nach Sprecherblöcken\n    blocks = re.split(r\"\\n(?=\\[\\d{2}:\\d{2}:\\d{2}\\.\\d+\\] SPEAKER_\\d+:)\", full_text)\n\n    for block in blocks:\n        match = re.match(r\"\\[(\\d{2}:\\d{2}:\\d{2}\\.\\d+)\\] (SPEAKER_\\d+):\\n(.+)\", block.strip(), re.DOTALL)\n        if match:\n            start_time, speaker, text = match.groups()\n            output_items.append({\n                \"json\": {\n                    \"speaker\": speaker,\n                    \"start_time\": start_time,\n                    \"text\": text.strip()\n                }\n            })\n\nreturn output_items\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -140
+      ],
+      "id": "35994f8e-5305-49a0-a335-3c5b55e2b404",
+      "name": "Split Speaker Sections into Items"
+    },
+    {
+      "parameters": {
+        "language": "python",
+        "pythonCode": "import re\n\ndef consolidate_speaker_blocks_with_timestamps(transcript_text):\n    lines = transcript_text.strip().split(\"\\n\")\n    consolidated = []\n    current_speaker = None\n    current_text = []\n    start_time = None\n\n    for line in lines:\n        match = re.match(r\"\\[(\\d{2}:\\d{2}:\\d{2}\\.\\d+)\\] (SPEAKER_\\d+):\\s*(.*)\", line)\n        if match:\n            timestamp, speaker, text = match.groups()\n            if speaker != current_speaker:\n                if current_speaker is not None:\n                    consolidated.append(f\"[{start_time}] {current_speaker}:\\n{' '.join(current_text)}\\n\")\n                current_speaker = speaker\n                current_text = [text]\n                start_time = timestamp\n            else:\n                current_text.append(text)\n        elif current_speaker:\n            current_text.append(line.strip())\n\n    if current_speaker and current_text:\n        consolidated.append(f\"[{start_time}] {current_speaker}:\\n{' '.join(current_text)}\\n\")\n\n    return \"\\n\".join(consolidated)\n\nfor item in items:\n    input_text = item['json'].get('transcript', '')  # <--- hier angepasst!\n    output_text = consolidate_speaker_blocks_with_timestamps(input_text)\n    item['json']['text'] = output_text\n\nreturn items\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "id": "6f23030a-3b27-441b-b256-07672aa571c7",
+      "name": "Consolidate Speaker Sections"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Bitte formuliere den folgenden gesprochenen Text als klaren, grammatikalisch korrekten Text in Deutscher Sprache. Entferne Füllwörter wie \"äh\", \"also\", \"halt\", \"irgendwie\" oder unnötige Wiederholungen. Ändere keine inhaltlichen Aussagen oder die Struktur, fasse auch nichts zusammen.\n\nText:\n{{ $json.text }}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.6,
+      "position": [
+        1320,
+        -140
+      ],
+      "id": "4c3ad149-859e-4727-98b0-78555c210935",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "model": "qwen3:1.7b",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmOllama",
+      "typeVersion": 1,
+      "position": [
+        1340,
+        60
+      ],
+      "id": "e7bb3d72-ae8d-48e1-b4ce-7db3ed338c50",
+      "name": "Ollama Model",
+      "credentials": {
+        "ollamaApi": {
+          "id": "OBl4Zc4DOOLWfQEw",
+          "name": "Ollama account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Neue Item-Liste\nconst cleanedItems = [];\n\nfor (const item of items) {\n  const raw = item.json.text || \"\";\n  const match = raw.match(/<\\/think>\\s*([\\s\\S]*)/i);\n  const cleaned = match ? match[1].trim() : raw.trim();\n\n  cleanedItems.push({\n    json: {\n      cleaned_text: cleaned,\n      original_text: raw\n    }\n  });\n}\n\nreturn cleanedItems;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        -140
+      ],
+      "id": "9109d45d-aa44-45ad-b33d-851b565e2acd",
+      "name": "Code"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Test workflow’": {
+      "main": [
+        [
+          {
+            "node": "Read/Write Files from Disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read/Write Files from Disk": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Consolidate Speaker Sections",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert to File": {
+      "main": [
+        [
+          {
+            "node": "Read/Write Files from Disk1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Speaker Sections into Items": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consolidate Speaker Sections": {
+      "main": [
+        [
+          {
+            "node": "Split Speaker Sections into Items",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Convert to File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "ab43e78c-c156-44a4-9288-e1e7f018ce20",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "6d4fe15f3d7a2136d5134243b845c1a09442b26a050f667c7ca033e72ef9ef63"
+  },
+  "id": "RXqC1CkqLDySzJxT",
+  "tags": []
+}

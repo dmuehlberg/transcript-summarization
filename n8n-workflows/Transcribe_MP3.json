@@ -1,0 +1,833 @@
+{
+  "name": "Transcribe MP3",
+  "nodes": [
+    {
+      "parameters": {
+        "fileSelector": "={{ $json.filePath }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        220,
+        0
+      ],
+      "id": "68b9e486-c73e-4e81-8de1-ace115028da3",
+      "name": "Read MP3 File"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "58b271c1-aac2-45fd-a8ef-509cbf7bd4dd",
+              "name": "processId",
+              "value": "={{ $json.body.identifier }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2200,
+        0
+      ],
+      "id": "23a897eb-28ff-4ab4-a50e-14a985308c6d",
+      "name": "Set processId"
+    },
+    {
+      "parameters": {
+        "url": "=http://{{ $('Set Final Transcription Host').item.json.transcriptionHostFinal }}:8000/task/{{ $json.processId }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2460,
+        0
+      ],
+      "id": "fbfebe1d-5e60-43d8-b953-48fe0de54852",
+      "name": "Check Transcription Status"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "completed",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "a8aff566-1d2f-4f21-baf1-404feb3bf1fa"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "yes"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "71b69086-5fef-416f-a50f-7b1e58dc7fca",
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "completed",
+                    "operator": {
+                      "type": "string",
+                      "operation": "notEquals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "no"
+            }
+          ]
+        },
+        "options": {
+          "allMatchingOutputs": true
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        2880,
+        0
+      ],
+      "id": "f4b14993-b800-4169-b788-628dab8d9a0d",
+      "name": "Transcription finished?"
+    },
+    {
+      "parameters": {
+        "amount": 1,
+        "unit": "minutes"
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        3060,
+        120
+      ],
+      "id": "57a4f198-9ffa-40e5-a88d-b6f1fe0bf8f5",
+      "name": "Wait",
+      "webhookId": "9bf9a2b6-5a69-42d7-99a2-0931e04bc858"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "51fe548a-cd88-4fdb-a5fe-e84b9bada7d0",
+              "name": "transcription_start_time",
+              "value": "={{ $json.metadata.start_time }}",
+              "type": "string"
+            },
+            {
+              "id": "81f699b7-fc67-4f3d-a40c-cd70cb869981",
+              "name": "transcription_end_time",
+              "value": "={{ $json.metadata.end_time }}",
+              "type": "string"
+            },
+            {
+              "id": "ad1d851b-45e9-42d8-9861-ba75693f4436",
+              "name": "transcription_duration",
+              "value": "={{ $json.metadata.duration }}",
+              "type": "number"
+            },
+            {
+              "id": "46376169-faf1-46a8-840b-f420c44ecbcd",
+              "name": "transcription_language",
+              "value": "={{ $json.metadata.language }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3320,
+        -100
+      ],
+      "id": "08b01260-1b2d-4628-9c6f-5aea49ab8ccf",
+      "name": "Collect Transcription_Details"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.infrastructure }}",
+                    "rightValue": "local",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "b0ee5b6b-a8c4-4c70-97c9-db2b37240129"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "local"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "6bd128e9-3f11-4f9f-9d3b-00c58887771f",
+                    "leftValue": "={{ $json.infrastructure }}",
+                    "rightValue": "remote",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "remote"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        880,
+        0
+      ],
+      "id": "1f1c3aef-6417-4778-8d02-5c36dc46d24b",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "751ae51c-f328-43cb-8c4e-0626e11b3b68",
+              "name": "baseFileName",
+              "value": "={{ $json.fileName.split('/').pop().split('.')[0] }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        440,
+        0
+      ],
+      "id": "fd1177e9-5fd8-4b6f-96f3-de8afdaece41",
+      "name": "Set Filename"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f462dde0-9383-42d6-bcb4-57769f422b58",
+              "name": "infrastructure",
+              "value": "remote",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        660,
+        0
+      ],
+      "id": "fe7f4209-953d-460c-ab0f-d0225af7a209",
+      "name": "Set Infrastructure (Remote or Local)"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "8d24504b-e43b-453d-8c32-b7640cc8cb65",
+              "name": "transcriptionHost",
+              "value": "whisperx",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1120,
+        -60
+      ],
+      "id": "7dbd06bd-5768-4225-ac38-34cd3785659f",
+      "name": "Set Local Transcription Host"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "25c5729e-a0c1-4f21-a1a9-61c49a74e9c3",
+              "name": "transcriptionHost",
+              "value": "192.168.0.91",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1120,
+        140
+      ],
+      "id": "6b10bd3c-db99-435d-9455-8ecc828d428a",
+      "name": "Set Remote Transcription Host"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://{{ $json.transcriptionHostFinal }}:8000/speech-to-text",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "device",
+              "value": "cpu"
+            },
+            {
+              "name": "model",
+              "value": "large-v3"
+            },
+            {
+              "name": "compute_type",
+              "value": "int8"
+            },
+            {
+              "name": "chunk_size",
+              "value": "5"
+            },
+            {
+              "name": "batch_size",
+              "value": "2"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1920,
+        20
+      ],
+      "id": "4f210950-ffdb-4198-86b3-e021fb14fe3f",
+      "name": "Start Transcription (Send HTTP POST)",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Nimm das erste (und einzige) Item aus dem Merge-Node\nconst item = items[0].json;\nconst segments = item.result.segments;\n\n// 2. Hilfsfunktion: Sekunden → [HH:MM:SS.mmm]\nfunction formatTime(seconds) {\n  const totalMs = Math.floor(seconds * 1000);\n  const ms = totalMs % 1000;\n  const totalSec = Math.floor(totalMs / 1000);\n  const s = totalSec % 60;\n  const totalMin = Math.floor(totalSec / 60);\n  const m = totalMin % 60;\n  const h = Math.floor(totalMin / 60);\n  return `[${String(h).padStart(2,'0')}:` +\n         `${String(m).padStart(2,'0')}:` +\n         `${String(s).padStart(2,'0')}.` +\n         `${String(ms).padStart(3,'0')}]`;\n}\n\n// 3. Baue die Zeilen: Zeitstempel + Speaker + Text\nconst lines = segments.map(seg => {\n  const ts = formatTime(seg.start);\n  return `${ts} ${seg.speaker}:\\n${seg.text.trim()}`;\n});\n\n// 4. Füge zwischen die Blöcke jeweils eine Leerzeile ein\nconst transcriptFormatted = lines.join('\\n\\n');\n\n// 5. Gib das neue JSON-Objekt zurück\nreturn [{\n  json: {\n    status:     item.status,\n    transcript: transcriptFormatted,\n    segments:   segments,\n    metadata:   item.metadata,\n    error:      item.error,\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3540,
+        -100
+      ],
+      "id": "9bbfe4b3-04c7-48c6-bd3e-760a40f423ec",
+      "name": "Merge Transcript Segments"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. JSON-Felder holen\nconst { transcript, baseFileName } = items[0].json;\n\n// 2. Binär‑Payload erstellen\nitems[0].binary = {\n  file: {\n    data: Buffer.from(transcript, 'utf-8'),\n    mimeType: 'text/plain',\n    fileName: `${baseFileName}.txt`,\n  }\n};\n\nreturn items;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3760,
+        -100
+      ],
+      "id": "88360ff8-6ad8-41b2-b3c0-5feffeaf1761",
+      "name": "Prepare Binary File for Transcript"
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{ $('Read MP3 File').item.json.directory }}/{{ $('Set Filename').item.json.baseFileName }}.txt",
+        "dataPropertyName": "file",
+        "options": {
+          "append": false
+        }
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        3980,
+        -100
+      ],
+      "id": "09caba52-eb77-4088-9304-417822e45ab7",
+      "name": "Write Transcript TXT File to Disk"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={\n  \"fileName\": \"{{ $json.metadata.file_name }}\",\n  \"startTime\": \"{{ $json.metadata.start_time }}\",\n  \"endTime\": \"{{ $json.metadata.end_time }}\",\n  \"duration\": {{ $json.metadata.duration }},\n  \"language\": \"{{ $json.metadata.language }}\"\n}\n ",
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        4200,
+        -100
+      ],
+      "id": "af9308ca-28e4-415a-8893-4481be90de07",
+      "name": "Build JSON"
+    },
+    {
+      "parameters": {
+        "operation": "toJson",
+        "binaryPropertyName": "file",
+        "options": {
+          "format": true,
+          "fileName": "={{ $('Set Filename').item.json.baseFileName }}.json"
+        }
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        4420,
+        -100
+      ],
+      "id": "787e5dde-488a-449e-95c3-97ccdd9d51d4",
+      "name": "Convert to File"
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{ $('Read MP3 File').item.json.directory }}/{{ $('Set Filename').item.json.baseFileName }}.json",
+        "dataPropertyName": "file",
+        "options": {
+          "append": false
+        }
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        4640,
+        -100
+      ],
+      "id": "8783d219-a5af-4d0f-acc7-b844f92f8c15",
+      "name": "Read/Write Files from Disk"
+    },
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "filePath"
+            },
+            {
+              "name": "baseFileName"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "1921688e-53bc-4325-b4fa-32910f11e895",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "8e47d0cd-0456-4b80-8842-d8236176494a",
+              "name": "transcriptionHostFinal",
+              "value": "={{ $json.transcriptionHost }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1460,
+        40
+      ],
+      "id": "0dfe0b58-808f-4898-9f9f-f3e690f4a30c",
+      "name": "Set Final Transcription Host"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9136f176-d6b1-4ef6-9d36-1d4b2e8d5c32",
+              "name": "processId",
+              "value": "={{ $('Set processId').item.json.body.identifier }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3280,
+        120
+      ],
+      "id": "9600738d-f9d1-449a-b1b5-5d3df9c6a55d",
+      "name": "Set Process ID"
+    }
+  ],
+  "pinData": {
+    "When Executed by Another Workflow": [
+      {
+        "json": {
+          "filePath": "/data/shared/2025-04-18 13-00-28.mp3"
+        }
+      },
+      {
+        "json": {
+          "baseFileName": "2025-04-18 13-00-28"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Read MP3 File": {
+      "main": [
+        [
+          {
+            "node": "Set Filename",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set processId": {
+      "main": [
+        [
+          {
+            "node": "Check Transcription Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Transcription Status": {
+      "main": [
+        [
+          {
+            "node": "Transcription finished?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transcription finished?": {
+      "main": [
+        [
+          {
+            "node": "Collect Transcription_Details",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Set Process ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Transcription_Details": {
+      "main": [
+        [
+          {
+            "node": "Merge Transcript Segments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Set Local Transcription Host",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set Remote Transcription Host",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Filename": {
+      "main": [
+        [
+          {
+            "node": "Set Infrastructure (Remote or Local)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Infrastructure (Remote or Local)": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Local Transcription Host": {
+      "main": [
+        [
+          {
+            "node": "Set Final Transcription Host",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Remote Transcription Host": {
+      "main": [
+        [
+          {
+            "node": "Set Final Transcription Host",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Transcription (Send HTTP POST)": {
+      "main": [
+        [
+          {
+            "node": "Set processId",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Transcript Segments": {
+      "main": [
+        [
+          {
+            "node": "Prepare Binary File for Transcript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Binary File for Transcript": {
+      "main": [
+        [
+          {
+            "node": "Write Transcript TXT File to Disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Transcript TXT File to Disk": {
+      "main": [
+        [
+          {
+            "node": "Build JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build JSON": {
+      "main": [
+        [
+          {
+            "node": "Convert to File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert to File": {
+      "main": [
+        [
+          {
+            "node": "Read/Write Files from Disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read/Write Files from Disk": {
+      "main": [
+        []
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Read MP3 File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Final Transcription Host": {
+      "main": [
+        [
+          {
+            "node": "Start Transcription (Send HTTP POST)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Process ID": {
+      "main": [
+        [
+          {
+            "node": "Check Transcription Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "04bbc9d0-7684-4231-ad32-174a389d129b",
+  "meta": {
+    "instanceId": "6d4fe15f3d7a2136d5134243b845c1a09442b26a050f667c7ca033e72ef9ef63"
+  },
+  "id": "HR1I3VG4uyexEZfR",
+  "tags": []
+}

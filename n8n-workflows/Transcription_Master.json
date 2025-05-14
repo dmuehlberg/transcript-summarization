@@ -1,0 +1,330 @@
+{
+  "name": "Transcription Master",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "3020de26-ac0b-4d7f-8756-b5139ed32a4e",
+      "name": "When clicking ‘Test workflow’"
+    },
+    {
+      "parameters": {
+        "command": "mkdir -p /data/shared/processing /data/shared/finished"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        220,
+        0
+      ],
+      "id": "f138815c-d13b-4b65-805f-928c32612dea",
+      "name": "Ensure Folders Exist"
+    },
+    {
+      "parameters": {
+        "command": "ls /data/shared/*.mp3"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        440,
+        0
+      ],
+      "id": "2d0fa1a8-d03a-48f2-bfba-b9910dfd21fa",
+      "name": "List MP3s"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. alle Zeilen aus stdout holen\nconst lines = items[0].json.stdout\n  .split('\\n')          // nach Newline splitten\n  .filter(p => p);      // leere Einträge entfernen\n\n// 2. daraus ein Item pro Pfad machen\nreturn lines.map(path => ({\n  json: { filePath: path }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "id": "682fd7d8-dbe7-43c3-9bf5-a4424e63803f",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1b20190d-11de-4614-b896-b32378d44e78",
+              "name": "filePath",
+              "value": "={{ $json.filePath }}",
+              "type": "string"
+            },
+            {
+              "id": "95545a2b-8b06-49e6-b2b4-16c0611967bf",
+              "name": "baseFileName",
+              "value": "={{ $json.filePath.split('/').pop().split('.')[0] }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1140,
+        0
+      ],
+      "id": "bbe9839f-2341-458f-b8d9-a414cd341677",
+      "name": "Extract filePath & baseFileName"
+    },
+    {
+      "parameters": {
+        "executeOnce": false,
+        "command": "=mv \"{{$json.filePath}}\" \"/data/shared/processing/\""
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1360,
+        0
+      ],
+      "id": "0462cc9c-bff0-4747-b1b3-393f63ea8d5e",
+      "name": "Move to Processing"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "85229560-d532-492e-b124-5359b190e335",
+              "name": "filePath",
+              "value": "=/data/shared/processing/{{ $('Extract filePath & baseFileName').item.json.baseFileName }}.mp3",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1640,
+        0
+      ],
+      "id": "752c90ef-4f69-492e-be6d-bf0f0922b53b",
+      "name": "Update filePath to Processing"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "HR1I3VG4uyexEZfR",
+          "mode": "list",
+          "cachedResultName": "Transcribe MP3"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "filePath": "={{ $json.filePath }}",
+            "baseFileName": "={{ $('Extract filePath & baseFileName').item.json.baseFileName }}"
+          },
+          "matchingColumns": [
+            "filePath"
+          ],
+          "schema": [
+            {
+              "id": "filePath",
+              "displayName": "filePath",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "baseFileName",
+              "displayName": "baseFileName",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1860,
+        0
+      ],
+      "id": "4c3122b9-27cd-4353-83cf-ed53277b1f47",
+      "name": "Transcribe MP3"
+    },
+    {
+      "parameters": {
+        "executeOnce": false,
+        "command": "=mv \"/data/shared/processing/{{ $node[\"Extract filePath & baseFileName\"].json.baseFileName }}.mp3\"  \"/data/shared/finished/\" && \\\nmv \"/data/shared/processing/{{ $node[\"Extract filePath & baseFileName\"].json.baseFileName }}.txt\"  \"/data/shared/finished/\" && \\\nmv \"/data/shared/processing/{{ $node[\"Extract filePath & baseFileName\"].json.baseFileName }}.json\" \"/data/shared/finished/\"\n"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        2080,
+        0
+      ],
+      "id": "35f9a4d8-a286-464c-b9f5-fe2bb610cba0",
+      "name": "Execute Command"
+    },
+    {
+      "parameters": {
+        "options": {
+          "reset": false
+        }
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        880,
+        0
+      ],
+      "id": "a7520c37-9ab6-471e-aae5-826d597e6dda",
+      "name": "Loop Over Items"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Test workflow’": {
+      "main": [
+        [
+          {
+            "node": "Ensure Folders Exist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ensure Folders Exist": {
+      "main": [
+        [
+          {
+            "node": "List MP3s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List MP3s": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract filePath & baseFileName": {
+      "main": [
+        [
+          {
+            "node": "Move to Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Move to Processing": {
+      "main": [
+        [
+          {
+            "node": "Update filePath to Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update filePath to Processing": {
+      "main": [
+        [
+          {
+            "node": "Transcribe MP3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transcribe MP3": {
+      "main": [
+        [
+          {
+            "node": "Execute Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Extract filePath & baseFileName",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Command": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "24616076-2abe-464a-87de-84272bcb0014",
+  "meta": {
+    "instanceId": "6d4fe15f3d7a2136d5134243b845c1a09442b26a050f667c7ca033e72ef9ef63"
+  },
+  "id": "9LwvvlI9mX8T740O",
+  "tags": []
+}
