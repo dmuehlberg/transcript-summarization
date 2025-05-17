@@ -10,6 +10,8 @@ RUN apt-get update \
       build-essential autoconf automake autopoint libtool pkg-config \
       git python3-dev gettext gettext-base zlib1g-dev libssl-dev \
       python3-pip \
+      # Explizit pff-tools installieren
+      pff-tools \
     && rm -rf /var/lib/apt/lists/*
 
 # ---------------------------------------------------------------------------
@@ -25,8 +27,14 @@ RUN git clone --depth 1 https://github.com/libyal/libpff.git \
  && ldconfig \
  # Sicherstellen, dass der Python-Pfad korrekt ist und das pypff Modul gefunden wird
  && ln -s /usr/local/lib/python3.10/site-packages/pypff /usr/local/lib/python3.10/dist-packages/ || true \
+ # Auch sicherstellen, dass pffexport im Pfad ist
+ && cp src/pffexport /usr/local/bin/ || true \
+ && chmod +x /usr/local/bin/pffexport || true \
  && cd / \                                                              
  && rm -rf /libpff                                                      # aufräumen
+
+# Prüfen, ob pffexport verfügbar ist
+RUN which pffexport || echo "pffexport nicht im Pfad gefunden!"
 
 # ---------------------------------------------------------------------------
 # 3) Python-Dependencies
