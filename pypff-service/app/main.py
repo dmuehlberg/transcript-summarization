@@ -24,10 +24,14 @@ app = FastAPI()
 @app.post("/export/pffexport")
 async def export_pffexport(
     file: UploadFile = File(...),
-    scope: str = Form("all")  # Optionen: all, message, attachment, calendar etc.
+    scope: str = Form("all")  # Optionen: all, debug, items, recovered
 ):
     """
     Exportiert Items (inkl. Kalender) via pffexport CLI.
+    
+    Parameter:
+    - file: PST/OST-Datei zum Exportieren
+    - scope: Export-Modus (all, debug, items, recovered)
     """
     with tempfile.TemporaryDirectory() as workdir:
         in_path = os.path.join(workdir, file.filename)
@@ -38,33 +42,26 @@ async def export_pffexport(
         with open(in_path, "wb") as f:
             f.write(await file.read())
 
-        # pffexport aufrufen - korrigierte Parameter
-        # Das Tool unterstützt keine -s Option, verwende stattdessen -m für Modus
-        # oder -t für Item-Typen
+        # pffexport aufrufen mit korrekten Parametern basierend auf der Hilfe-Ausgabe
+        cmd = ["pffexport"]
         
-        # Basisbefehl
-        cmd = ["pffexport", "-o", out_dir]
+        # Ausgabeverzeichnis festlegen (als letztes Argument nach der Quelldatei)
         
-        # Je nach gewünschtem Scope/Modus den passenden Parameter hinzufügen
-        if scope == "all":
-            # Standard: Alles exportieren
-            pass
-        elif scope == "message":
-            cmd.append("-t")
-            cmd.append("message")
-        elif scope == "calendar":
-            cmd.append("-t")
-            cmd.append("appointment")
-        elif scope == "attachment":
-            cmd.append("-t")
-            cmd.append("attachment")
+        # Export-Modus festlegen (-m Option)
+        if scope in ["all", "debug", "items", "recovered"]:
+            cmd.extend(["-m", scope])
         else:
-            # Fallback auf -t mit dem angegebenen Wert, falls es ein gültiger Typ ist
-            cmd.append("-t")
-            cmd.append(scope)
-            
-        # Dateinamen anfügen
+            # Wenn ein ungültiger Scope angegeben wurde, Standard verwenden
+            cmd.extend(["-m", "items"])
+        
+        # Ausgabeformat festlegen (-f Option) - alle Formate exportieren
+        cmd.extend(["-f", "all"])
+        
+        # Quelldatei hinzufügen
         cmd.append(in_path)
+        
+        # Ausgabeverzeichnis als letztes Argument (muss nach der Quelldatei kommen)
+        cmd.append(out_dir)
         
         try:
             # Debug-Ausgabe des Befehls
@@ -72,7 +69,7 @@ async def export_pffexport(
             
             result = subprocess.run(
                 cmd, 
-                check=True, 
+                check=True,
                 stdout=subprocess.PIPE, 
                 stderr=subprocess.PIPE
             )
@@ -82,12 +79,13 @@ async def export_pffexport(
             print(f"Stderr: {result.stderr.decode(errors='ignore')}")
             
         except subprocess.CalledProcessError as e:
-            detail = e.stderr.decode(errors="ignore")
+            detail = e.stderr.decode(errors='ignore')
             raise HTTPException(status_code=500, detail=f"pffexport fehlgeschlagen: {detail}")
 
         # Output zippen und zurückgeben
         zip_path = shutil.make_archive(os.path.join(workdir, "export"), "zip", out_dir)
         return FileResponse(zip_path, media_type="application/zip", filename="export_pffexport.zip")
+
 
 # ... weitere bestehende Endpoints ...
 
