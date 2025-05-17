@@ -132,61 +132,61 @@ async def pffexport_help():
         }
     
     @app.get("/debug/check-tools")
-async def check_system_tools():
-    """
-    Überprüft, welche relevanten Tools im System installiert sind.
-    """
-    tools_to_check = ["pffexport", "pffinfo", "python3", "pip3"]
-    results = {}
-    
-    for tool in tools_to_check:
-        try:
-            # Prüfen, ob das Tool im Pfad ist
-            result = subprocess.run(
-                ["which", tool], 
-                check=True,
-                stdout=subprocess.PIPE, 
-                stderr=subprocess.PIPE
-            )
-            path = result.stdout.decode(errors="ignore").strip()
-            
-            # Versionsinformationen abrufen, falls möglich
-            version = "Unbekannt"
+    async def check_system_tools():
+        """
+        Überprüft, welche relevanten Tools im System installiert sind.
+        """
+        tools_to_check = ["pffexport", "pffinfo", "python3", "pip3"]
+        results = {}
+        
+        for tool in tools_to_check:
             try:
-                if tool not in ["which", "pip3"]:
-                    version_result = subprocess.run(
-                        [tool, "--version"], 
-                        check=True,
-                        stdout=subprocess.PIPE, 
-                        stderr=subprocess.PIPE
-                    )
-                    version = version_result.stdout.decode(errors="ignore").strip()
-                    if not version:
-                        version = version_result.stderr.decode(errors="ignore").strip()
-            except Exception:
-                pass
+                # Prüfen, ob das Tool im Pfad ist
+                result = subprocess.run(
+                    ["which", tool], 
+                    check=True,
+                    stdout=subprocess.PIPE, 
+                    stderr=subprocess.PIPE
+                )
+                path = result.stdout.decode(errors="ignore").strip()
                 
-            results[tool] = {
-                "available": True,
-                "path": path,
-                "version": version
-            }
-        except subprocess.CalledProcessError:
-            results[tool] = {
-                "available": False
-            }
-    
-    # Libpff Python-Bindings-Informationen
-    results["pypff"] = {
-        "available": True,
-        "version": getattr(pypff, "__version__", "Unbekannt")
-    }
-            
-    return {
-        "system_tools": results,
-        "container_info": {
-            "hostname": subprocess.getoutput("hostname"),
-            "python_version": subprocess.getoutput("python3 --version"),
-            "debian_version": subprocess.getoutput("cat /etc/debian_version")
+                # Versionsinformationen abrufen, falls möglich
+                version = "Unbekannt"
+                try:
+                    if tool not in ["which", "pip3"]:
+                        version_result = subprocess.run(
+                            [tool, "--version"], 
+                            check=True,
+                            stdout=subprocess.PIPE, 
+                            stderr=subprocess.PIPE
+                        )
+                        version = version_result.stdout.decode(errors="ignore").strip()
+                        if not version:
+                            version = version_result.stderr.decode(errors="ignore").strip()
+                except Exception:
+                    pass
+                    
+                results[tool] = {
+                    "available": True,
+                    "path": path,
+                    "version": version
+                }
+            except subprocess.CalledProcessError:
+                results[tool] = {
+                    "available": False
+                }
+        
+        # Libpff Python-Bindings-Informationen
+        results["pypff"] = {
+            "available": True,
+            "version": getattr(pypff, "__version__", "Unbekannt")
         }
-    }
+                
+        return {
+            "system_tools": results,
+            "container_info": {
+                "hostname": subprocess.getoutput("hostname"),
+                "python_version": subprocess.getoutput("python3 --version"),
+                "debian_version": subprocess.getoutput("cat /etc/debian_version")
+            }
+        }
