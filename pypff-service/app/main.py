@@ -3,16 +3,16 @@ from fastapi.responses import FileResponse
 import os, subprocess, shutil, tempfile
 
 # Bestehende pypff-Logik importieren
-from extractor import (
-    dump_message_classes,
-    list_calendar_entries,
-    extract_calendar_entries,
-    extract_all_calendar_entries,
-    dump_calendar_properties,
-    list_folders
-)
+# from extractor import (
+#     dump_message_classes,
+#     list_calendar_entries,
+#     extract_calendar_entries,
+#     extract_all_calendar_entries,
+#     dump_calendar_properties,
+#     list_folders
+# )
 from datetime import datetime
-from pst_analysis import analyze_pst
+# from pst_analysis import analyze_pst
 
 # Python-Bindings
 import pypff
