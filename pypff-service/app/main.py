@@ -33,43 +33,60 @@ async def export_pffexport(
     - file: PST/OST-Datei zum Exportieren
     - scope: Export-Modus (all, debug, items, recovered)
     """
-    # Hier wird ein temporäres Verzeichnis erstellt, das nach der Funktion automatisch gelöscht wird
-    temp_dir = tempfile.mkdtemp()
+    # Verwenden eines Verzeichnisses, das nicht automatisch gelöscht wird
+    # statt tempfile.mkdtemp(), um vorzeitiges Löschen zu vermeiden
+    base_temp_dir = "/tmp/pypff_exports"
+    os.makedirs(base_temp_dir, exist_ok=True)
+    
+    # Eindeutigen Unterordner für diesen Aufruf erstellen
+    import uuid
+    unique_id = str(uuid.uuid4())
+    temp_dir = os.path.join(base_temp_dir, unique_id)
+    os.makedirs(temp_dir, exist_ok=True)
+    
+    # Definiere alle Pfade
+    in_path = os.path.join(temp_dir, "input.pst")  # Fester Name, um Probleme mit Sonderzeichen zu vermeiden
+    out_dir = os.path.join(temp_dir, "output")
+    os.makedirs(out_dir, exist_ok=True)
+    zip_base = os.path.join(temp_dir, "export")
+    zip_path = f"{zip_base}.zip"
+    
     try:
-        # Pfade erstellen
-        in_path = os.path.join(temp_dir, file.filename)
-        out_dir = os.path.join(temp_dir, "output")
-        os.makedirs(out_dir, exist_ok=True)
-        zip_path = os.path.join(temp_dir, "export.zip")
-
-        # PST/OST-Datei in das temporäre Verzeichnis speichern
+        # PST/OST-Datei speichern - Content in kleine Chunks aufteilen, um Speicherprobleme zu vermeiden
         with open(in_path, "wb") as f:
-            content = await file.read()
-            f.write(content)
+            # Lese in 1MB-Chunks
+            chunk_size = 1024 * 1024  
+            while True:
+                chunk = await file.read(chunk_size)
+                if not chunk:
+                    break
+                f.write(chunk)
             f.flush()
-            os.fsync(f.fileno())  # Sicherstellen, dass Datei auf Festplatte geschrieben wird
-
-        # Ausgabeformat und Modus definieren
+            os.fsync(f.fileno())  # Sicherstellen, dass die Datei physisch geschrieben wird
+        
+        print(f"Datei {file.filename} erfolgreich gespeichert als {in_path}")
+        
+        # Prüfen, ob die Datei tatsächlich existiert und eine Größe hat
+        file_size = os.path.getsize(in_path)
+        print(f"Dateigröße: {file_size} Bytes")
+        if file_size == 0:
+            raise HTTPException(status_code=400, detail="Hochgeladene Datei ist leer")
+            
+        # Gültige Scopes definieren
         valid_scopes = ["all", "debug", "items", "recovered"]
         export_mode = scope if scope in valid_scopes else "items"
         
-        # pffexport-Befehl zusammenstellen
-        cmd = [
-            "pffexport",
-            "-m", export_mode,
-            "-f", "all",
-            in_path
-        ]
-        
-        # Debug-Ausgabe
-        print(f"Ausführen: {' '.join(cmd)}")
-        print(f"Ausgabeverzeichnis: {out_dir}")
-        
         # pffexport ausführen
+        # Alternativ zu mehreren Argumenten verwenden wir einen einzigen Befehlsstring
+        # Dadurch können wir sicherstellen, dass der Befehl korrekt ausgeführt wird
+        cmd_str = f"cd {temp_dir} && pffexport -m {export_mode} -f all '{in_path}' '{out_dir}'"
+        print(f"Führe Befehl aus: {cmd_str}")
+        
+        # Shell=True verwenden, um mit dem Shell-Befehl zu arbeiten
         try:
             result = subprocess.run(
-                cmd,
-                cwd=out_dir,  # Im Ausgabeverzeichnis ausführen lassen
+                cmd_str,
+                shell=True,  # Befehl als Shell-Kommando ausführen
                 check=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE
@@ -80,65 +97,108 @@ async def export_pffexport(
             detail = e.stderr.decode(errors='ignore')
             raise HTTPException(status_code=500, detail=f"pffexport fehlgeschlagen: {detail}")
         
-        # Prüfen, ob Dateien exportiert wurden
-        if not os.path.exists(out_dir) or not os.listdir(out_dir):
-            # Manuelles Kopieren der PST-Datei als Fallback
-            fallback_dir = os.path.join(out_dir, "fallback")
-            os.makedirs(fallback_dir, exist_ok=True)
-            shutil.copy(in_path, os.path.join(fallback_dir, "original.pst"))
-            with open(os.path.join(fallback_dir, "info.txt"), "w") as f:
-                f.write("Export mit pffexport hat keine Dateien erzeugt.\n")
-                f.write(f"Befehl: {' '.join(cmd)}\n")
-                f.write("Die Originaldatei wurde stattdessen kopiert.")
-                
-        # Verzeichnisinhalt auflisten (für Debugging)
-        print(f"Inhalt des Ausgabeverzeichnisses: {os.listdir(out_dir)}")
-        
-        # Output zippen
-        print(f"Erstelle ZIP-Datei: {zip_path}")
+        # Prüfen, ob Ausgabeverzeichnis Dateien enthält
         try:
-            # Direkter Zugriff auf die shutil.make_archive Funktion
-            # Der Basisname der ZIP-Datei ohne Erweiterung
-            zip_base = os.path.join(temp_dir, "export")
-            # Erstelle das Archiv
-            created_zip = shutil.make_archive(zip_base, 'zip', out_dir)
-            print(f"ZIP-Datei erstellt: {created_zip}")
-            
-            # Überprüfen, ob die ZIP-Datei erstellt wurde
-            if not os.path.exists(created_zip):
-                raise HTTPException(status_code=500, detail=f"Fehler beim Erstellen der ZIP-Datei: {created_zip} existiert nicht")
-            
-            # Datei explizit in Binärmodus öffnen, um sicherzustellen, dass sie existiert und lesbar ist
-            with open(created_zip, "rb") as f:
-                # Ersten Bytes lesen, um zu prüfen, ob die Datei valide ist
-                first_bytes = f.read(10)
-                if not first_bytes:
-                    raise HTTPException(status_code=500, detail="ZIP-Datei scheint leer zu sein")
-            
-            # Die ZIP-Datei zurückgeben
-            return FileResponse(
-                path=created_zip,
-                media_type="application/zip",
-                filename="export_pffexport.zip"
-            )
+            output_files = os.listdir(out_dir)
+            print(f"Ausgabeverzeichnis enthält {len(output_files)} Dateien/Verzeichnisse")
+            if not output_files:
+                print("Ausgabeverzeichnis ist leer, erstelle Fallback-Dateien")
+                # Fallback: Erstelle eine einfache Infodatei
+                with open(os.path.join(out_dir, "info.txt"), "w") as f:
+                    f.write(f"Export mit pffexport hat keine Dateien erzeugt.\n")
+                    f.write(f"Befehl: {cmd_str}\n")
+                    f.write(f"Datei: {file.filename}\n")
+                    f.write(f"Dateigröße: {file_size} Bytes\n")
         except Exception as e:
-            print(f"Fehler beim Erstellen oder Zurückgeben der ZIP-Datei: {str(e)}")
-            raise HTTPException(status_code=500, detail=f"Fehler beim Erstellen der ZIP-Datei: {str(e)}")
-    
-    except Exception as e:
-        # Allgemeine Fehlerbehandlung
-        print(f"Unerwarteter Fehler: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Export fehlgeschlagen: {str(e)}")
-    
-    finally:
-        # Temporäres Verzeichnis aufräumen, aber nur wenn wir nicht im Debug-Modus sind
+            print(f"Fehler beim Überprüfen des Ausgabeverzeichnisses: {str(e)}")
+            # Fallback: Erstelle eine einfache Infodatei
+            with open(os.path.join(out_dir, "error.txt"), "w") as f:
+                f.write(f"Fehler beim Überprüfen des Ausgabeverzeichnisses: {str(e)}\n")
+        
+        # ZIP-Datei erstellen
+        print(f"Erstelle ZIP-Datei: {zip_path}")
+        
+        # Zunächst sicherstellen, dass es etwas zu zippen gibt
+        if not os.path.exists(out_dir) or not os.listdir(out_dir):
+            # Erstelle eine Dummy-Datei, um das Zippen zu ermöglichen
+            os.makedirs(out_dir, exist_ok=True)
+            with open(os.path.join(out_dir, "empty_export.txt"), "w") as f:
+                f.write("Der Export hat keine Dateien erzeugt.")
+        
+        # ZIP erstellen mit explizitem Pfad
         try:
-            if os.path.exists(temp_dir):
-                print(f"Lösche temporäres Verzeichnis: {temp_dir}")
-                shutil.rmtree(temp_dir, ignore_errors=True)
-        except Exception as cleanup_error:
-            print(f"Fehler beim Aufräumen: {str(cleanup_error)}")
-            # Kein Fehler werfen, da die ZIP-Datei möglicherweise schon zurückgegeben wurde</parameter>
+            # Alternative zu shutil.make_archive - direkter zipfile.ZipFile verwenden
+            import zipfile
+            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                # Rekursiv alle Dateien im Ausgabeverzeichnis hinzufügen
+                for root, dirs, files in os.walk(out_dir):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        # Relativen Pfad im ZIP-Archiv berechnen
+                        rel_path = os.path.relpath(file_path, out_dir)
+                        zipf.write(file_path, rel_path)
+                        print(f"Datei {rel_path} zum ZIP hinzugefügt")
+            
+            print(f"ZIP-Datei erstellt: {zip_path}")
+            
+            # Prüfen, ob die ZIP-Datei existiert und eine Größe hat
+            if os.path.exists(zip_path):
+                zip_size = os.path.getsize(zip_path)
+                print(f"ZIP-Größe: {zip_size} Bytes")
+                if zip_size == 0:
+                    raise ValueError("Erstellte ZIP-Datei ist leer")
+            else:
+                raise ValueError(f"ZIP-Datei wurde nicht erstellt: {zip_path}")
+                
+            # Die ZIP-Datei öffnen, um sicherzustellen, dass sie gültig ist
+            with zipfile.ZipFile(zip_path, 'r') as test_zip:
+                file_list = test_zip.namelist()
+                print(f"ZIP-Datei enthält {len(file_list)} Einträge")
+                if not file_list:
+                    raise ValueError("ZIP-Datei enthält keine Einträge")
+            
+            # Schließlich die ZIP-Datei zurückgeben
+            return FileResponse(
+                path=zip_path,
+                media_type="application/zip",
+                filename=f"export_{file.filename}.zip"
+            )
+            
+        except Exception as e:
+            print(f"Fehler beim Erstellen der ZIP-Datei: {str(e)}")
+            # Als letzten Ausweg eine einfache Textdatei zurückgeben
+            error_file = os.path.join(temp_dir, "error.txt")
+            with open(error_file, "w") as f:
+                f.write(f"Fehler beim Erstellen der ZIP-Datei: {str(e)}\n")
+                f.write(f"Datei: {file.filename}\n")
+                f.write(f"Dateigröße: {file_size} Bytes\n")
+                
+            return FileResponse(
+                path=error_file,
+                media_type="text/plain",
+                filename="export_error.txt"
+            )
+            
+    except Exception as e:
+        print(f"Unerwarteter Fehler: {str(e)}")
+        # Selbst im Fehlerfall versuchen, eine Antwort zu senden
+        try:
+            error_file = os.path.join(temp_dir, "fatal_error.txt")
+            with open(error_file, "w") as f:
+                f.write(f"Fehler beim Export: {str(e)}\n")
+            return FileResponse(
+                path=error_file,
+                media_type="text/plain",
+                filename="export_fatal_error.txt"
+            )
+        except Exception as inner_e:
+            # Wenn wirklich nichts funktioniert, HTTPException werfen
+            print(f"Kritischer Fehler, kann keine Datei zurückgeben: {str(inner_e)}")
+            raise HTTPException(status_code=500, detail=f"Export fehlgeschlagen: {str(e)} + {str(inner_e)}")
+    
+    # Keine finally-Klausel hier, um sicherzustellen, dass das Verzeichnis nicht gelöscht wird,
+    # bevor die Datei gesendet wurde. Die temporären Dateien werden später manuell bereinigt.
+    # In einer Produktionsumgebung sollte ein Cron-Job alte temporäre Dateien regelmäßig löschen.
 
 
 
