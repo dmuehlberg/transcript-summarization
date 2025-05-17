@@ -190,3 +190,106 @@ async def check_system_tools():
             "debian_version": subprocess.getoutput("cat /etc/debian_version")
         }
     }
+
+
+@app.get("/debug/pffexport-options")
+async def pffexport_options():
+    """
+    Versucht auf verschiedene Weisen, die verfügbaren Optionen des pffexport-Tools zu ermitteln.
+    """
+    results = {
+        "tool_found": False,
+        "tool_path": None,
+        "help_options": {},
+        "direct_run": None,
+        "error_messages": []
+    }
+    
+    # 1. Überprüfen, ob das Tool im Pfad ist
+    try:
+        which_result = subprocess.run(
+            ["which", "pffexport"], 
+            check=True,
+            stdout=subprocess.PIPE, 
+            stderr=subprocess.PIPE
+        )
+        tool_path = which_result.stdout.decode(errors="ignore").strip()
+        if tool_path:
+            results["tool_found"] = True
+            results["tool_path"] = tool_path
+    except subprocess.CalledProcessError as e:
+        results["error_messages"].append(f"Tool nicht im Pfad: {e.stderr.decode(errors='ignore')}")
+        return results
+    
+    # 2. Verschiedene Hilfeparameter ausprobieren
+    help_options = ["--help", "-h", "-?", "/?", "/help", "help"]
+    for option in help_options:
+        try:
+            help_result = subprocess.run(
+                ["pffexport", option], 
+                stdout=subprocess.PIPE, 
+                stderr=subprocess.PIPE,
+                timeout=2  # Timeout nach 2 Sekunden
+            )
+            stdout = help_result.stdout.decode(errors="ignore")
+            stderr = help_result.stderr.decode(errors="ignore")
+            
+            # Prüfen, ob es Informationen in stdout oder stderr gibt
+            output = stdout if stdout else stderr
+            
+            # Suchen nach Hinweisen auf Optionen
+            if output and ("-" in output or "Usage:" in output or "usage:" in output):
+                results["help_options"][option] = {
+                    "success": True,
+                    "output": output[:1000]  # Begrenzen, um große Ausgaben zu vermeiden
+                }
+            else:
+                results["help_options"][option] = {
+                    "success": False,
+                    "output": output[:200] if output else "Keine Ausgabe"
+                }
+        except Exception as e:
+            results["help_options"][option] = {
+                "success": False,
+                "error": str(e)
+            }
+    
+    # 3. Tool ohne Parameter ausführen
+    try:
+        direct_result = subprocess.run(
+            ["pffexport"], 
+            stdout=subprocess.PIPE, 
+            stderr=subprocess.PIPE,
+            timeout=2  # Timeout nach 2 Sekunden
+        )
+        
+        stdout = direct_result.stdout.decode(errors="ignore")
+        stderr = direct_result.stderr.decode(errors="ignore")
+        
+        # Oft gibt die direkte Ausführung ohne Parameter eine Nutzungsanleitung
+        output = stdout if stdout else stderr
+        
+        results["direct_run"] = {
+            "exit_code": direct_result.returncode,
+            "output": output[:1000]  # Begrenzen, um große Ausgaben zu vermeiden
+        }
+    except Exception as e:
+        results["direct_run"] = {
+            "error": str(e)
+        }
+    
+    # 4. Tool-Datei untersuchen (falls es eine Textdatei sein könnte)
+    if results["tool_path"]:
+        try:
+            with open(results["tool_path"], "r", errors="ignore") as f:
+                content = f.read(500)  # Die ersten 500 Zeichen lesen
+                
+                if "usage" in content.lower() or "help" in content.lower():
+                    results["file_content"] = {
+                        "success": True,
+                        "preview": content
+                    }
+        except Exception as e:
+            results["error_messages"].append(f"Konnte Tool-Datei nicht lesen: {str(e)}")
+    
+    return results
