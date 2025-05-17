@@ -38,10 +38,49 @@ async def export_pffexport(
         with open(in_path, "wb") as f:
             f.write(await file.read())
 
-        # pffexport aufrufen
-        cmd = ["pffexport", "-s", scope, "-o", out_dir, in_path]
+        # pffexport aufrufen - korrigierte Parameter
+        # Das Tool unterstützt keine -s Option, verwende stattdessen -m für Modus
+        # oder -t für Item-Typen
+        
+        # Basisbefehl
+        cmd = ["pffexport", "-o", out_dir]
+        
+        # Je nach gewünschtem Scope/Modus den passenden Parameter hinzufügen
+        if scope == "all":
+            # Standard: Alles exportieren
+            pass
+        elif scope == "message":
+            cmd.append("-t")
+            cmd.append("message")
+        elif scope == "calendar":
+            cmd.append("-t")
+            cmd.append("appointment")
+        elif scope == "attachment":
+            cmd.append("-t")
+            cmd.append("attachment")
+        else:
+            # Fallback auf -t mit dem angegebenen Wert, falls es ein gültiger Typ ist
+            cmd.append("-t")
+            cmd.append(scope)
+            
+        # Dateinamen anfügen
+        cmd.append(in_path)
+        
         try:
-            subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            # Debug-Ausgabe des Befehls
+            print(f"Ausführen: {' '.join(cmd)}")
+            
+            result = subprocess.run(
+                cmd, 
+                check=True, 
+                stdout=subprocess.PIPE, 
+                stderr=subprocess.PIPE
+            )
+            
+            # Debug-Ausgabe der Ergebnisse
+            print(f"Stdout: {result.stdout.decode(errors='ignore')}")
+            print(f"Stderr: {result.stderr.decode(errors='ignore')}")
+            
         except subprocess.CalledProcessError as e:
             detail = e.stderr.decode(errors="ignore")
             raise HTTPException(status_code=500, detail=f"pffexport fehlgeschlagen: {detail}")
@@ -51,3 +90,43 @@ async def export_pffexport(
         return FileResponse(zip_path, media_type="application/zip", filename="export_pffexport.zip")
 
 # ... weitere bestehende Endpoints ...
+
+@app.get("/debug/pffexport-help")
+async def pffexport_help():
+    """
+    Zeigt die Hilfe-Ausgabe des pffexport-Tools an, um die korrekten Optionen zu ermitteln.
+    """
+    try:
+        result = subprocess.run(
+            ["pffexport", "--help"], 
+            check=True,
+            stdout=subprocess.PIPE, 
+            stderr=subprocess.PIPE
+        )
+        
+        help_text = result.stdout.decode(errors="ignore")
+        if not help_text:
+            help_text = result.stderr.decode(errors="ignore")
+            
+        # Alle verfügbaren Optionen als strukturierte Daten zurückgeben
+        options = []
+        for line in help_text.split('\n'):
+            if line.strip().startswith('-'):
+                options.append(line.strip())
+                
+        return {
+            "tool": "pffexport",
+            "full_help": help_text,
+            "available_options": options
+        }
+        
+    except subprocess.CalledProcessError as e:
+        return {
+            "error": "Fehler beim Abrufen der Hilfe",
+            "detail": e.stderr.decode(errors="ignore")
+        }
+    except FileNotFoundError:
+        return {
+            "error": "pffexport-Tool nicht gefunden",
+            "suggestion": "Stellen Sie sicher, dass pffexport installiert ist"
+        }
