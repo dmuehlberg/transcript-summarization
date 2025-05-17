@@ -1,0 +1,115 @@
+{
+  "structure": {
+    "name": "",
+    "num_messages": 0,
+    "num_sub_folders": 3,
+    "sub_folders": [
+      {
+        "name": "SPAM Search Folder 2",
+        "num_messages": 0,
+        "num_sub_folders": 0,
+        "sub_folders": []
+      },
+      {
+        "name": "Top of Outlook data file",
+        "num_messages": 0,
+        "num_sub_folders": 2,
+        "sub_folders": [
+          {
+            "name": "Deleted Items",
+            "num_messages": 0,
+            "num_sub_folders": 0,
+            "sub_folders": []
+          },
+          {
+            "name": "Calendar",
+            "num_messages": 2762,
+            "num_sub_folders": 0,
+            "sub_folders": []
+          }
+        ]
+      },
+      {
+        "name": "Search Root",
+        "num_messages": 0,
+        "num_sub_folders": 0,
+        "sub_folders": []
+      }
+    ]
+  },
+  "message_classes": {
+    "<EMPTY>": 2762
+  },
+  "calendar_samples": [
+    {
+      "identifier": 2097188,
+      "message_class": null,
+      "subject": "Abstimmung Benno / David / Michael",
+      "size": null,
+      "creation_time": "2024-02-14T15:57:43.477871",
+      "delivery_time": "2024-02-14T15:57:40.769000",
+      "client_submit_time": "2024-02-14T15:57:40.769000",
+      "local_delivery_time": null,
+      "last_modification_time": null,
+      "number_of_recipients": null,
+      "number_of_attachments": null,
+      "recipients": []
+    },
+    {
+      "identifier": 2097220,
+      "message_class": null,
+      "subject": "Portfolio I&D Konzept Setup",
+      "size": null,
+      "creation_time": "2024-02-14T16:26:54.508603",
+      "delivery_time": "2024-02-14T13:21:16.328742",
+      "client_submit_time": "2024-02-14T13:21:16.328742",
+      "local_delivery_time": null,
+      "last_modification_time": null,
+      "number_of_recipients": null,
+      "number_of_attachments": null,
+      "recipients": []
+    },
+    {
+      "identifier": 2097252,
+      "message_class": null,
+      "subject": "EM Subpractice Meeting",
+      "size": null,
+      "creation_time": "2024-02-13T13:36:26.930702",
+      "delivery_time": "2024-02-13T13:36:24.778000",
+      "client_submit_time": "2024-02-13T13:36:24.787000",
+      "local_delivery_time": null,
+      "last_modification_time": null,
+      "number_of_recipients": null,
+      "number_of_attachments": null,
+      "recipients": []
+    },
+    {
+      "identifier": 2097284,
+      "message_class": null,
+      "subject": "Sprintplanung SWE (APM)",
+      "size": null,
+      "creation_time": "2024-02-13T12:18:51.834828",
+      "delivery_time": "2024-02-13T12:18:48.727000",
+      "client_submit_time": "2024-02-13T12:18:48.727000",
+      "local_delivery_time": null,
+      "last_modification_time": null,
+      "number_of_recipients": null,
+      "number_of_attachments": null,
+      "recipients": []
+    },
+    {
+      "identifier": 2097316,
+      "message_class": null,
+      "subject": "Tanzen",
+      "size": null,
+      "creation_time": "2024-02-13T10:30:32.578223",
+      "delivery_time": "2024-02-13T10:30:26.041000",
+      "client_submit_time": "2024-02-13T10:30:26.053000",
+      "local_delivery_time": null,
+      "last_modification_time": null,
+      "number_of_recipients": null,
+      "number_of_attachments": null,
+      "recipients": []
+    }
+  ]
+}

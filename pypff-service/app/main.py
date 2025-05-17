@@ -1,45 +1,53 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
-import os
-from extractor import dump_calendar_properties, extract_all_calendar_entries, extract_attendees, extract_calendar_entries, list_calendar_entries, list_folders
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException
+from fastapi.responses import FileResponse
+import os, subprocess, shutil, tempfile
+
+# Bestehende pypff-Logik importieren
+from extractor import (
+    dump_message_classes,
+    list_calendar_entries,
+    extract_calendar_entries,
+    extract_all_calendar_entries,
+    dump_calendar_properties,
+    list_folders
+)
+from datetime import datetime
+from pst_analysis import analyze_pst
+
+# Python-Bindings
+import pypff
 
 app = FastAPI()
 
-class FilePath(BaseModel):
-    filename: str
+# ... bestehende Endpoints und Funktionen ...
 
-@app.post("/extract/attendees/by-path")
-def get_attendees(file: FilePath):
-    file_path = os.path.join("/data/ost", file.filename)
-    attendees = extract_attendees(file_path)
-    return {"attendees": attendees}
-
-@app.post("/extract/calendar/by-path")
-def get_calendar(file: FilePath):
-    file_path = os.path.join("/data/ost", file.filename)
-    entries = extract_calendar_entries(file_path)
-    return {"calendar": entries}
-
-
-@app.post("/debug/folders")
-def debug_folders(file: FilePath):
-    file_path = os.path.join("/data/ost", file.filename)
-    return list_folders(file_path)
-
-@app.post("/extract/calendar/all")
-def get_all_calendar(file: FilePath):
-    path = os.path.join("/data/ost", file.filename)
-    return {"calendar": extract_all_calendar_entries(path)}
-
-@app.post("/debug/calendar/properties")
-def debug_cal_props(file: FilePath, limit: int = 5):
+@app.post("/export/pffexport")
+async def export_pffexport(
+    file: UploadFile = File(...),
+    scope: str = Form("all")  # Optionen: all, message, attachment, calendar etc.
+):
     """
-    Liefert alle Properties der ersten `limit` Kalender-Einträge.
+    Exportiert Items (inkl. Kalender) via pffexport CLI.
     """
-    path = os.path.join("/data/ost", file.filename)
-    return dump_calendar_properties(path, max_items=limit)
+    with tempfile.TemporaryDirectory() as workdir:
+        in_path = os.path.join(workdir, file.filename)
+        out_dir = os.path.join(workdir, "output")
+        os.makedirs(out_dir, exist_ok=True)
 
-@app.post("/extract/calendar/clean")
-def get_clean_calendar(file: FilePath):
-    path = os.path.join("/data/ost", file.filename)
-    return {"calendar": list_calendar_entries(path)}
+        # PST/OST sichern
+        with open(in_path, "wb") as f:
+            f.write(await file.read())
+
+        # pffexport aufrufen
+        cmd = ["pffexport", "-s", scope, "-o", out_dir, in_path]
+        try:
+            subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        except subprocess.CalledProcessError as e:
+            detail = e.stderr.decode(errors="ignore")
+            raise HTTPException(status_code=500, detail=f"pffexport fehlgeschlagen: {detail}")
+
+        # Output zippen und zurückgeben
+        zip_path = shutil.make_archive(os.path.join(workdir, "export"), "zip", out_dir)
+        return FileResponse(zip_path, media_type="application/zip", filename="export_pffexport.zip")
+
+# ... weitere bestehende Endpoints ...

@@ -1,0 +1,129 @@
+{
+  "root": {
+    "folders": [
+      {
+        "name": "(kein Name)",
+        "num_messages": 0,
+        "num_sub_folders": 3,
+        "sub_folders": [
+          {
+            "name": "SPAM Search Folder 2",
+            "num_messages": 0,
+            "num_sub_folders": 0,
+            "sub_folders": []
+          },
+          {
+            "name": "Top of Outlook data file",
+            "num_messages": 0,
+            "num_sub_folders": 2,
+            "sub_folders": [
+              {
+                "name": "Deleted Items",
+                "num_messages": 0,
+                "num_sub_folders": 0,
+                "sub_folders": []
+              },
+              {
+                "name": "Calendar",
+                "num_messages": 2762,
+                "num_sub_folders": 0,
+                "sub_folders": []
+              }
+            ]
+          },
+          {
+            "name": "Search Root",
+            "num_messages": 0,
+            "num_sub_folders": 0,
+            "sub_folders": []
+          }
+        ]
+      }
+    ]
+  },
+  "message_classes": {
+    "<EMPTY>": 2762
+  },
+  "calendar_samples": [
+    {
+      "folder": "(kein Name)/Top of Outlook data file/Calendar",
+      "properties": {}
+    },
+    {
+      "folder": "(kein Name)/Top of Outlook data file/Calendar",
+      "properties": {}
+    },
+    {
+      "folder": "(kein Name)/Top of Outlook data file/Calendar",
+      "properties": {}
+    },
+    {
+      "folder": "(kein Name)/Top of Outlook data file/Calendar",
+      "properties": {}
+    },
+    {
+      "folder": "(kein Name)/Top of Outlook data file/Calendar",
+      "properties": {}
+    },
+    {
+      "folder": "(kein Name)/Top of Outlook data file/Calendar",
+      "properties": {}
+    },
+    {
+      "folder": "(kein Name)/Top of Outlook data file/Calendar",
+      "properties": {}
+    },
+    {
+      "folder": "(kein Name)/Top of Outlook data file/Calendar",
+      "properties": {}
+    },
+    {
+      "folder": "(kein Name)/Top of Outlook data file/Calendar",
+      "properties": {}
+    },
+    {
+      "folder": "(kein Name)/Top of Outlook data file/Calendar",
+      "properties": {}
+    },
+    {
+      "folder": "(kein Name)/Top of Outlook data file/Calendar",
+      "properties": {}
+    },
+    {
+      "folder": "(kein Name)/Top of Outlook data file/Calendar",
+      "properties": {}
+    },
+    {
+      "folder": "(kein Name)/Top of Outlook data file/Calendar",
+      "properties": {}
+    },
+    {
+      "folder": "(kein Name)/Top of Outlook data file/Calendar",
+      "properties": {}
+    },
+    {
+      "folder": "(kein Name)/Top of Outlook data file/Calendar",
+      "properties": {}
+    },
+    {
+      "folder": "(kein Name)/Top of Outlook data file/Calendar",
+      "properties": {}
+    },
+    {
+      "folder": "(kein Name)/Top of Outlook data file/Calendar",
+      "properties": {}
+    },
+    {
+      "folder": "(kein Name)/Top of Outlook data file/Calendar",
+      "properties": {}
+    },
+    {
+      "folder": "(kein Name)/Top of Outlook data file/Calendar",
+      "properties": {}
+    },
+    {
+      "folder": "(kein Name)/Top of Outlook data file/Calendar",
+      "properties": {}
+    }
+  ]
+}
