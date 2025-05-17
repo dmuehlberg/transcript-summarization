@@ -51,6 +51,9 @@ async def export_pffexport(
     zip_base = os.path.join(temp_dir, "export")
     zip_path = f"{zip_base}.zip"
     
+    # Original-Dateinamen speichern, bevor wir ihn verlieren
+    original_filename = file.filename
+    
     try:
         # PST/OST-Datei speichern - Content in kleine Chunks aufteilen, um Speicherprobleme zu vermeiden
         with open(in_path, "wb") as f:
@@ -64,7 +67,7 @@ async def export_pffexport(
             f.flush()
             os.fsync(f.fileno())  # Sicherstellen, dass die Datei physisch geschrieben wird
         
-        print(f"Datei {file.filename} erfolgreich gespeichert als {in_path}")
+        print(f"Datei {original_filename} erfolgreich gespeichert als {in_path}")
         
         # Prüfen, ob die Datei tatsächlich existiert und eine Größe hat
         file_size = os.path.getsize(in_path)
@@ -95,7 +98,11 @@ async def export_pffexport(
             print(f"Stderr: {result.stderr.decode(errors='ignore')}")
         except subprocess.CalledProcessError as e:
             detail = e.stderr.decode(errors='ignore')
-            raise HTTPException(status_code=500, detail=f"pffexport fehlgeschlagen: {detail}")
+            print(f"pffexport fehlgeschlagen: {detail}")
+            # Fehlermeldung speichern, aber Verarbeitung fortsetzen
+            with open(os.path.join(out_dir, "pffexport_error.txt"), "w") as f:
+                f.write(f"pffexport fehlgeschlagen: {detail}\n")
+                f.write(f"Befehl: {cmd_str}\n")
         
         # Prüfen, ob Ausgabeverzeichnis Dateien enthält
         try:
@@ -107,7 +114,7 @@ async def export_pffexport(
                 with open(os.path.join(out_dir, "info.txt"), "w") as f:
                     f.write(f"Export mit pffexport hat keine Dateien erzeugt.\n")
                     f.write(f"Befehl: {cmd_str}\n")
-                    f.write(f"Datei: {file.filename}\n")
+                    f.write(f"Datei: {original_filename}\n")
                     f.write(f"Dateigröße: {file_size} Bytes\n")
         except Exception as e:
             print(f"Fehler beim Überprüfen des Ausgabeverzeichnisses: {str(e)}")
@@ -132,8 +139,8 @@ async def export_pffexport(
             with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                 # Rekursiv alle Dateien im Ausgabeverzeichnis hinzufügen
                 for root, dirs, files in os.walk(out_dir):
-                    for file in files:
-                        file_path = os.path.join(root, file)
+                    for file_name in files:
+                        file_path = os.path.join(root, file_name)
                         # Relativen Pfad im ZIP-Archiv berechnen
                         rel_path = os.path.relpath(file_path, out_dir)
                         zipf.write(file_path, rel_path)
@@ -161,7 +168,7 @@ async def export_pffexport(
             return FileResponse(
                 path=zip_path,
                 media_type="application/zip",
-                filename=f"export_{file.filename}.zip"
+                filename=f"export_{original_filename}.zip"
             )
             
         except Exception as e:
@@ -170,7 +177,7 @@ async def export_pffexport(
             error_file = os.path.join(temp_dir, "error.txt")
             with open(error_file, "w") as f:
                 f.write(f"Fehler beim Erstellen der ZIP-Datei: {str(e)}\n")
-                f.write(f"Datei: {file.filename}\n")
+                f.write(f"Datei: {original_filename}\n")
                 f.write(f"Dateigröße: {file_size} Bytes\n")
                 
             return FileResponse(
@@ -195,10 +202,6 @@ async def export_pffexport(
             # Wenn wirklich nichts funktioniert, HTTPException werfen
             print(f"Kritischer Fehler, kann keine Datei zurückgeben: {str(inner_e)}")
             raise HTTPException(status_code=500, detail=f"Export fehlgeschlagen: {str(e)} + {str(inner_e)}")
-    
-    # Keine finally-Klausel hier, um sicherzustellen, dass das Verzeichnis nicht gelöscht wird,
-    # bevor die Datei gesendet wurde. Die temporären Dateien werden später manuell bereinigt.
-    # In einer Produktionsumgebung sollte ein Cron-Job alte temporäre Dateien regelmäßig löschen.
 
 
 
