@@ -709,3 +709,348 @@ async def download_file(filename: str):
         media_type=content_type,
         filename=filename
     )
+
+
+@app.post("/export/calendar")
+async def export_calendar(
+    file: UploadFile = File(...),
+    extended: bool = Form(False)  # Erweiterte Eigenschaften für Kalendereinträge extrahieren
+):
+    """
+    Exportiert speziell Kalendereinträge aus PST/OST-Dateien mit Fokus auf die relevanten Eigenschaften.
+    
+    Parameters:
+    - file: PST/OST-Datei
+    - extended: Falls true, werden zusätzliche MAPI-Eigenschaften extrahiert
+    """
+    # Original-Dateinamen speichern und säubern
+    original_filename = file.filename
+    safe_filename = ''.join(c for c in original_filename if c.isalnum() or c in '._-')
+    
+    # Aktuelles Datum/Uhrzeit für eindeutige Dateinamen
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    # Permanentes Datenverzeichnis (das gemounted ist)
+    data_dir = "/data/ost"
+    
+    # Temporäres Verzeichnis für die Verarbeitung
+    work_dir = os.path.join(data_dir, f"calendar_export_{timestamp}_{safe_filename}")
+    os.makedirs(work_dir, exist_ok=True)
+    
+    # Pfade definieren
+    in_path = os.path.join(work_dir, "input.pst")
+    out_dir = os.path.join(work_dir, "output")
+    os.makedirs(out_dir, exist_ok=True)
+    cal_dir = os.path.join(out_dir, "calendar")
+    os.makedirs(cal_dir, exist_ok=True)
+    
+    # Zielpfad für das ZIP-File im /data/ost Verzeichnis
+    zip_filename = f"calendar_export_{timestamp}_{safe_filename}.zip"
+    zip_path = os.path.join(data_dir, zip_filename)
+    
+    # MAPI-Eigenschaften für Kalendereinträge definieren
+    # Diese MAPI-Property-IDs sind spezifisch für Kalendereinträge
+    CALENDAR_PROPS = {
+        0x001A: "Message Class",               # PR_MESSAGE_CLASS
+        0x0037: "Subject",                     # PR_SUBJECT
+        0x003D: "Creation Time",               # PR_CREATION_TIME (nur Info)
+        0x1000: "Body",                        # PR_BODY
+        0x0C1A: "Sender Name",                 # PR_SENDER_NAME
+        0x8004: "Start Time",                  # PidLidAppointmentStartWhole
+        0x8005: "End Time",                    # PidLidAppointmentEndWhole
+        0x0063: "Response Status",             # PidLidResponseStatus
+        0x0024: "Location",                    # PidLidLocation
+        0x0065: "Reminder Minutes",            # PidLidReminderMinutesBeforeStart
+        0x0E1D: "Normalized Subject",          # PR_NORMALIZED_SUBJECT
+        0x0070: "Topic",                       # PR_CONVERSATION_TOPIC
+        0x0023: "Creation Time",               # PR_LAST_MODIFICATION_TIME
+        0x0E04: "Display To",                  # PR_DISPLAY_TO (Liste der Teilnehmer)
+        0x0E03: "Display CC",                  # PR_DISPLAY_CC
+        0x0062: "Importance",                  # PR_IMPORTANCE
+        0x0017: "Importance",                  # PR_IMPORTANCE (zweite Methode)
+        0x0036: "Sensitivity",                 # PR_SENSITIVITY
+        0x000F: "Reply To",                    # PR_REPLY_RECIPIENT_NAMES
+        0x0FFF: "Body HTML",                   # PR_HTML
+        0x0C1F: "Sender Address Type",         # PR_SENDER_ADDRTYPE
+        0x0075: "Received By Name",            # PR_RECEIVED_BY_NAME
+        0x0E1F: "Message Status",              # PR_MSG_STATUS
+        0x8201: "Is Recurring",                # Wiederholung - PidLidAppointmentRecur
+        0x8216: "All Day Event",               # PidLidAppointmentAllDayEvent
+        0x0E2D: "Has Attachment",              # PR_HASATTACH (Anhänge)
+        0x8580: "Recurrence Type",             # PidLidRecurrenceType
+        0x8582: "Recurrence Pattern",          # PidLidRecurrencePattern
+        0x8501: "Reminder Set",                # PidLidReminderSet
+        0x001F: "Organizer",                   # PidTagSenderName
+    }
+    
+    # Zusätzliche erweiterte Eigenschaften
+    EXTENDED_PROPS = {
+        0x8530: "Appointment Color",           # PidLidAppointmentColor
+        0x8502: "Reminder Time",               # PidLidReminderTime
+        0x8560: "Attendee Type",               # Teilnehmertyp
+        0x8518: "Appointment Type",            # PidLidAppointmentType
+        0x8208: "Is Online Meeting",           # PidLidConferenceServer
+        0x0029: "Description",                 # PidLidAutoStartCheck
+        0x0020: "Attachment Files",            # PR_ATTACH_DATA_BIN
+    }
+    
+    # Dictionary mit Properties kombinieren je nach extended Flag
+    properties_to_check = CALENDAR_PROPS.copy()
+    if extended:
+        properties_to_check.update(EXTENDED_PROPS)
+    
+    try:
+        # PST/OST-Datei in Chunks speichern
+        with open(in_path, "wb") as f:
+            chunk_size = 1024 * 1024  # 1MB pro Chunk
+            while True:
+                chunk = await file.read(chunk_size)
+                if not chunk:
+                    break
+                f.write(chunk)
+        
+        print(f"Datei {original_filename} erfolgreich gespeichert als {in_path}")
+        
+        # Datei mit pypff öffnen
+        pst = None
+        try:
+            pst = pypff.file()
+            pst.open(in_path)
+            root_folder = pst.get_root_folder()
+            
+            # Infotext erstellen
+            with open(os.path.join(out_dir, "info.txt"), "w") as f:
+                f.write(f"Kalenderexport aus PST-Datei: {original_filename}\n")
+                f.write(f"Export-Datum: {datetime.now().isoformat()}\n")
+                f.write(f"Anzahl Root-Ordner: {root_folder.number_of_sub_folders}\n")
+                f.write(f"Nachrichten im Root: {root_folder.number_of_sub_messages}\n")
+            
+            # Kalendereinträge zählen
+            calendar_count = 0
+            total_msg_count = 0
+            
+            # Diese Funktion extrahiert die Eigenschaften einer Nachricht mit Fokus auf Kalendereigenschaften
+            def extract_properties(msg):
+                props = {}
+                
+                # Nachrichtenklasse zuerst ermitteln
+                msg_class = None
+                try:
+                    if hasattr(msg, "get_message_class"):
+                        msg_class = msg.get_message_class()
+                    elif hasattr(msg, "property_values") and 0x001A in msg.property_values:
+                        msg_class = msg.property_values[0x001A]
+                    elif hasattr(msg, "get_property_data"):
+                        msg_class = msg.get_property_data(0x001A)
+                        
+                    # String-Konvertierung
+                    if isinstance(msg_class, bytes):
+                        msg_class = msg_class.decode('utf-8', errors='ignore')
+                    else:
+                        msg_class = str(msg_class or "Unknown")
+                except Exception as e:
+                    msg_class = f"Error getting class: {str(e)}"
+                
+                props["Message Class"] = msg_class
+                
+                # Alle relevanten Eigenschaften durchgehen
+                for prop_id, prop_name in properties_to_check.items():
+                    try:
+                        # Wert über verschiedene Methoden extrahieren
+                        value = None
+                        if hasattr(msg, "property_values") and prop_id in msg.property_values:
+                            value = msg.property_values[prop_id]
+                        elif hasattr(msg, "get_property_data"):
+                            try:
+                                value = msg.get_property_data(prop_id)
+                            except:
+                                pass
+                        
+                        # Bereinigen und konvertieren
+                        if value is not None:
+                            if isinstance(value, bytes):
+                                try:
+                                    # Für Datum/Zeitwerte
+                                    if prop_id in [0x8004, 0x8005, 0x003D, 0x0023, 0x8502]:
+                                        # Versuchen, als Datumsstring zu interpretieren
+                                        if b":" in value and b"-" in value:  # Wahrscheinlich ein ISO-Datum
+                                            value = value.decode('utf-8', errors='ignore').strip('\x00')
+                                        else:
+                                            # Möglicherweise ein binäres Datum - als HEX ausgeben
+                                            value = value.hex()
+                                    else:
+                                        # Standardkonvertierung für Strings
+                                        value = value.decode('utf-8', errors='ignore').strip('\x00')
+                                except Exception:
+                                    # Fallback auf Hex-Darstellung
+                                    value = value.hex()
+                            props[prop_name] = value
+                    except Exception as e:
+                        # Fehler protokollieren, aber fortfahren
+                        print(f"Fehler beim Extrahieren von {prop_name}: {str(e)}")
+                
+                return props, msg_class
+            
+            # Diese Funktion exportiert rekursiv alle Kalendereinträge aus einem Ordner
+            def export_calendar_items(folder, folder_path):
+                nonlocal calendar_count, total_msg_count
+                
+                # Ordnernamen für den Pfad extrahieren und bereinigen
+                folder_name = folder.name or "Unnamed"
+                safe_name = ''.join(c for c in folder_name if c.isalnum() or c in ' ._-')
+                current_path = os.path.join(folder_path, safe_name)
+                
+                # Speziellen Kalenderordner für mögliche Kalendereinträge erstellen
+                if "Calendar" in folder_name or "Kalender" in folder_name:
+                    calendar_folder_path = os.path.join(cal_dir, safe_name)
+                    os.makedirs(calendar_folder_path, exist_ok=True)
+                    
+                    # Info über den Kalenderordner schreiben
+                    with open(os.path.join(calendar_folder_path, "_calendar_info.txt"), "w") as f:
+                        f.write(f"Kalenderordner: {folder_name}\n")
+                        f.write(f"Anzahl Elemente: {folder.number_of_sub_messages}\n")
+                        f.write(f"Pfad: {folder_path}/{safe_name}\n")
+                else:
+                    # Kein Kalenderordner, aber trotzdem nach Kalendereinträgen suchen
+                    calendar_folder_path = None
+                
+                # Alle Nachrichten im Ordner durchgehen
+                for i in range(folder.number_of_sub_messages):
+                    total_msg_count += 1
+                    try:
+                        msg = folder.get_sub_message(i)
+                        
+                        # Eigenschaften extrahieren
+                        props, msg_class = extract_properties(msg)
+                        
+                        # Ist es ein Kalendereintrag?
+                        is_calendar_item = (
+                            "IPM.Appointment" in msg_class or
+                            "IPM.Schedule.Meeting" in msg_class or
+                            "IPM.OLE.CLASS.{00061055-0000-0000-C000-000000000046}" in msg_class
+                        )
+                        
+                        if is_calendar_item:
+                            calendar_count += 1
+                            
+                            # Betreff und Datum für den Dateinamen extrahieren
+                            subject = props.get("Subject", f"NoSubject_{i}")
+                            safe_subject = ''.join(c for c in subject if c.isalnum() or c in ' ._-')
+                            safe_subject = safe_subject[:50]  # Längenbegrenzung
+                            
+                            # Start- und Endzeit extrahieren für den Dateinamen
+                            start_time = props.get("Start Time", "")
+                            if start_time:
+                                # Versuchen, ein Datum zu extrahieren und zu formatieren
+                                try:
+                                    if isinstance(start_time, str) and "T" in start_time:
+                                        date_part = start_time.split("T")[0]
+                                        safe_subject = f"{date_part}_{safe_subject}"
+                                except Exception:
+                                    pass
+                            
+                            # Speicherort festlegen - im speziellen Kalenderordner oder im aktuellen Ordner
+                            save_path = calendar_folder_path if calendar_folder_path else current_path
+                            os.makedirs(save_path, exist_ok=True)
+                            
+                            # Kalendereintrag als Text speichern
+                            cal_file = os.path.join(save_path, f"calendar_{calendar_count}_{safe_subject}.txt")
+                            with open(cal_file, "w", encoding="utf-8") as f:
+                                # Wichtige Eigenschaften zuerst
+                                f.write(f"KALENDEREINTRAG #{calendar_count}\n")
+                                f.write(f"{'='*50}\n")
+                                
+                                # Wichtige Attribute in einer bestimmten Reihenfolge anzeigen
+                                for key in ["Subject", "Start Time", "End Time", "Location", "Body", "Display To"]:
+                                    if key in props:
+                                        f.write(f"{key}: {props[key]}\n")
+                                
+                                f.write(f"\nALLE EIGENSCHAFTEN:\n")
+                                f.write(f"{'-'*50}\n")
+                                
+                                # Alle anderen Eigenschaften sortiert ausgeben
+                                for key, value in sorted(props.items()):
+                                    f.write(f"{key}: {value}\n")
+                    except Exception as msg_error:
+                        # Fehler bei einzelnen Nachrichten protokollieren, aber weitermachen
+                        print(f"Fehler beim Verarbeiten der Nachricht {i}: {str(msg_error)}")
+                
+                # Unterordner rekursiv durchsuchen
+                for i in range(folder.number_of_sub_folders):
+                    try:
+                        sub_folder = folder.get_sub_folder(i)
+                        export_calendar_items(sub_folder, current_path)
+                    except Exception as folder_error:
+                        print(f"Fehler beim Verarbeiten des Unterordners {i}: {str(folder_error)}")
+            
+            # Export starten
+            export_calendar_items(root_folder, out_dir)
+            
+            # Zusammenfassung erstellen
+            with open(os.path.join(out_dir, "calendar_summary.txt"), "w") as f:
+                f.write(f"Kalenderexport abgeschlossen\n")
+                f.write(f"Gefundene Kalendereinträge: {calendar_count}\n")
+                f.write(f"Gesamtzahl der Nachrichten: {total_msg_count}\n")
+                f.write(f"Erweiterte Eigenschaften: {'Ja' if extended else 'Nein'}\n")
+                f.write(f"Export-Ende: {datetime.now().isoformat()}\n")
+        
+        except Exception as pff_error:
+            # Fehler protokollieren, aber fortfahren
+            error_msg = str(pff_error)
+            print(f"Fehler beim Verarbeiten der PST-Datei: {error_msg}")
+            with open(os.path.join(out_dir, "error.txt"), "w") as f:
+                f.write(f"Fehler beim Verarbeiten der PST-Datei: {error_msg}\n")
+                f.write(f"Datei: {original_filename}\n")
+        
+        finally:
+            # PST-Datei schließen
+            if pst:
+                try:
+                    pst.close()
+                except Exception:
+                    pass
+        
+        # ZIP-Datei erstellen
+        import zipfile
+        print(f"Erstelle ZIP-Datei: {zip_path}")
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for root, dirs, files in os.walk(out_dir):
+                for file_name in files:
+                    file_path = os.path.join(root, file_name)
+                    rel_path = os.path.relpath(file_path, out_dir)
+                    zipf.write(file_path, rel_path)
+        
+        # Ergebnis zurückgeben
+        if os.path.exists(zip_path):
+            zip_size = os.path.getsize(zip_path)
+            return {
+                "success": True,
+                "message": f"Kalenderexport erfolgreich. {calendar_count} Kalendereinträge gefunden.",
+                "file_path": f"/data/ost/{zip_filename}",
+                "file_size": zip_size,
+                "calendar_count": calendar_count,
+                "total_messages": total_msg_count,
+                "download_url": f"/download/{zip_filename}"
+            }
+        else:
+            return {
+                "success": False,
+                "message": "Fehler beim Erstellen der ZIP-Datei"
+            }
+    
+    except Exception as e:
+        # Allgemeiner Fehler
+        error_msg = str(e)
+        print(f"Unerwarteter Fehler: {error_msg}")
+        return {
+            "success": False,
+            "message": f"Fehler beim Export: {error_msg}"
+        }
+    
+    finally:
+        # Temporäres Verzeichnis aufräumen
+        try:
+            if os.path.exists(work_dir):
+                shutil.rmtree(work_dir)
+        except Exception as e:
+            print(f"Fehler beim Aufräumen: {str(e)}")
