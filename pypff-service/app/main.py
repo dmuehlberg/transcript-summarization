@@ -1,6 +1,17 @@
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.responses import FileResponse
 import os, subprocess, shutil, tempfile
+import os
+import re
+import json
+import struct
+import shutil
+import tempfile
+import subprocess
+from datetime import datetime, timedelta
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException
+from fastapi.responses import FileResponse
+import pypff
 
 # Bestehende pypff-Logik importieren
 # from extractor import (
@@ -11,11 +22,11 @@ import os, subprocess, shutil, tempfile
 #     dump_calendar_properties,
 #     list_folders
 # )
-from datetime import datetime
+
 # from pst_analysis import analyze_pst
 
 # Python-Bindings
-import pypff
+
 
 app = FastAPI()
 
@@ -1958,3 +1969,1086 @@ async def raw_pst_inspector(
                 pst.close()
             except Exception:
                 pass
+
+
+@app.post("/calendar/advanced")
+async def advanced_calendar_extraction(
+    file: UploadFile = File(...),
+    folder_path: str = Form(""),  # Optionaler spezifischer Kalenderpfad
+    export_format: str = Form("json"),  # Format: json oder text
+    use_extended_props: bool = Form(True)  # Erweiterte Eigenschaftssuche aktivieren
+):
+    """
+    Erweiterter Kalenderexport mit verbesserten Methoden zur Eigenschaftsextraktion
+    
+    Parameters:
+    - file: PST/OST-Datei
+    - folder_path: Optionaler Pfad zum Kalenderordner (leer = automatische Suche)
+    - export_format: Ausgabeformat (json oder text)
+    - use_extended_props: Aktiviert die erweiterte Suche nach Kalendereigenschaften
+    """
+    # Original-Dateinamen speichern und säubern
+    original_filename = file.filename
+    safe_filename = ''.join(c for c in original_filename if c.isalnum() or c in '._-')
+    
+    # Aktuelles Datum/Uhrzeit für eindeutige Dateinamen
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    # Datenverzeichnis
+    data_dir = "/data/ost"
+    
+    # Arbeitsverzeichnis
+    work_dir = os.path.join(data_dir, f"adv_cal_{timestamp}_{safe_filename}")
+    os.makedirs(work_dir, exist_ok=True)
+    
+    # Pfade definieren
+    in_path = os.path.join(work_dir, "input.pst")
+    out_dir = os.path.join(work_dir, "output")
+    os.makedirs(out_dir, exist_ok=True)
+    
+    # ZIP-Dateiname
+    zip_filename = f"advanced_calendar_{timestamp}_{safe_filename}.zip"
+    zip_path = os.path.join(data_dir, zip_filename)
+    
+    # -------------------------------------------------------------------------
+    # 1. ERWEITERTE EIGENSCHAFTSZUORDNUNGEN FÜR KALENDERELEMENTE
+    # -------------------------------------------------------------------------
+    
+    # Standard MAPI-Properties, die für Kalendereinträge relevant sind
+    STANDARD_CAL_PROPS = {
+        0x001A: "MessageClass",               # PR_MESSAGE_CLASS
+        0x0037: "Subject",                     # PR_SUBJECT
+        0x003D: "CreationTime",                # PR_CREATION_TIME
+        0x1000: "Body",                        # PR_BODY
+        0x0C1A: "SenderName",                  # PR_SENDER_NAME
+        0x8004: "StartTime",                   # PidLidAppointmentStartWhole
+        0x8005: "EndTime",                     # PidLidAppointmentEndWhole
+        0x0063: "ResponseStatus",              # PidLidResponseStatus
+        0x0024: "Location",                    # PidLidLocation
+        0x0065: "ReminderMinutesBeforeStart",  # PidLidReminderMinutesBeforeStart
+        0x0E1D: "NormalizedSubject",           # PR_NORMALIZED_SUBJECT
+        0x0070: "ConversationTopic",           # PR_CONVERSATION_TOPIC
+        0x0E04: "DisplayTo",                   # PR_DISPLAY_TO (Teilnehmerliste)
+        0x0E03: "DisplayCC",                   # PR_DISPLAY_CC
+        0x0062: "Importance",                  # PR_IMPORTANCE
+        0x0FFF: "HtmlBody",                    # PR_HTML
+        0x8201: "IsRecurring",                 # PidLidAppointmentRecur
+        0x8216: "AllDayEvent",                 # PidLidAppointmentAllDayEvent
+        0x0E2D: "HasAttachment",               # PR_HASATTACH
+        0x8501: "ReminderSet",                 # PidLidReminderSet
+        0x001F: "OrganizerName",               # PidTagSenderName
+    }
+    
+    # Erweiterte Property-Set - alternative IDs und zusätzliche Eigenschaften
+    EXTENDED_CAL_PROPS = {
+        # Alternative IDs für Standardeigenschaften
+        0x00430102: "StartTime_Alt1",          # Alternative für Startzeit
+        0x00440102: "EndTime_Alt1",            # Alternative für Endzeit
+        0x0002: "StartTime_Alt2",              # Weitere Alternative für Startzeit
+        0x0003: "EndTime_Alt2",                # Weitere Alternative für Endzeit
+        0x0060: "StartTime_Alt3",              # Weitere Alternative für Startzeit
+        0x0061: "EndTime_Alt3",                # Weitere Alternative für Endzeit
+        0x82000102: "StartTime_Named",         # Named Property für Startzeit
+        0x82010102: "EndTime_Named",           # Named Property für Endzeit
+        0x82050102: "StartDate",               # Startdatum (Named Property)
+        0x82060102: "EndDate",                 # Enddatum (Named Property)
+        0x0094: "Location_Alt",                # Alternative für Ort
+        0x8208: "Location_Named",              # Named Property für Ort
+        
+        # Zusätzliche Kalendereigenschaften
+        0x8530: "AppointmentColor",            # PidLidAppointmentColor
+        0x8502: "ReminderTime",                # PidLidReminderTime
+        0x8560: "AttendeeType",                # Teilnehmertyp
+        0x8518: "AppointmentType",             # PidLidAppointmentType
+        0x8208: "IsOnlineMeeting",             # PidLidConferenceServer
+        0x8582: "RecurrencePattern",           # PidLidRecurrencePattern
+        0x8580: "RecurrenceType",              # PidLidRecurrenceType
+        
+        # Spezielle für RTF und HTML Inhalte
+        0x1009: "RtfCompressed",               # PR_RTF_COMPRESSED
+        0x1013: "HtmlContent",                 # Alternative HTML
+        0x1014: "BodyContentId",               # Content-ID für HTML
+        
+        # Erweiterte Teilnehmer- und Organisator-Informationen
+        0x0042: "OrganizerEmail",              # Organisator-E-Mail 
+        0x0044: "ReceivedRepresentingName",    # Repräsentierende Person
+        0x004D: "OrganizerAddressType",        # Organisator-Adresstyp
+        0x0081: "OrganizerEmailAddress",       # E-Mail-Adresse des Organisators
+        0x8084: "OrganizerPhoneNumber",        # Telefonnummer des Organisators
+        
+        # Anlagenspezifische Properties
+        0x0E13: "AttachmentCount",             # Anzahl der Anlagen
+        0x0E21: "AttachmentFiles",             # Anlagendateien
+        
+        # Für Unicode-Textfelder
+        0x001F001F: "SubjectUnicode",          # Betreff (Unicode)
+        0x0037001F: "SubjectAlt",              # Alternativer Betreff
+        0x0070001F: "TopicUnicode",            # Thema (Unicode)
+        0x1000001F: "BodyUnicode",             # Text (Unicode)
+        0x0E04001F: "DisplayToUnicode",        # Empfänger (Unicode)
+    }
+    
+    # Kombinierte Eigenschaftsliste basierend auf use_extended_props
+    property_map = STANDARD_CAL_PROPS.copy()
+    if use_extended_props:
+        property_map.update(EXTENDED_CAL_PROPS)
+    
+    # -------------------------------------------------------------------------
+    # 2. HILFSFUNKTIONEN FÜR ERWEITERTE EIGENSCHAFTSABFRAGE
+    # -------------------------------------------------------------------------
+    
+    def get_property_value(msg, prop_id, property_name=None):
+        """
+        Versucht, den Wert einer Eigenschaft mit mehreren Methoden zu erhalten.
+        
+        Args:
+            msg: Die Nachricht (pypff-Objekt)
+            prop_id: Property-ID (int oder hex-string)
+            property_name: Optionaler Name für Debug-Ausgaben
+            
+        Returns:
+            Der Wert der Eigenschaft oder None, wenn nicht gefunden
+        """
+        value = None
+        debug_info = []
+        
+        try:
+            # Property-ID konvertieren, falls nötig
+            if isinstance(prop_id, str):
+                if prop_id.startswith("0x"):
+                    prop_id = int(prop_id, 16)
+                else:
+                    prop_id = int(prop_id)
+            
+            # Methode 1: Über property_values dict (moderne API)
+            if hasattr(msg, "property_values") and prop_id in msg.property_values:
+                value = msg.property_values[prop_id]
+                debug_info.append(f"Gefunden über property_values[{prop_id}]")
+            
+            # Methode 2: Über get_property_value (falls vorhanden)
+            elif hasattr(msg, "get_property_value"):
+                try:
+                    value = msg.get_property_value(prop_id)
+                    if value is not None:
+                        debug_info.append(f"Gefunden über get_property_value({prop_id})")
+                except Exception as e:
+                    debug_info.append(f"get_property_value Fehler: {str(e)}")
+            
+            # Methode 3: Über get_property_data (ältere API)
+            elif hasattr(msg, "get_property_data"):
+                try:
+                    value = msg.get_property_data(prop_id)
+                    if value is not None:
+                        debug_info.append(f"Gefunden über get_property_data({prop_id})")
+                except Exception as e:
+                    debug_info.append(f"get_property_data Fehler: {str(e)}")
+            
+            # Bereinigen und Konvertieren des Wertes
+            if value is not None:
+                if isinstance(value, bytes):
+                    # Verarbeitung für verschiedene Eigenschaftstypen
+                    try:
+                        # Für Datums-/Zeitwerte
+                        if prop_id in [0x8004, 0x8005, 0x003D, 0x0023, 0x8502, 
+                                    0x00430102, 0x00440102, 0x0002, 0x0003, 
+                                    0x0060, 0x0061, 0x82000102, 0x82010102]:
+                            # Versuchen als ISO-Datum zu dekodieren
+                            if b":" in value and b"-" in value:
+                                value = value.decode('utf-8', errors='ignore').strip('\x00')
+                                debug_info.append("Als ISO-Datum dekodiert")
+                            else:
+                                # Falls binäres Format, umwandeln
+                                # TODO: Korrekte Datumskonvertierung 
+                                # von binärem FILETIME Format hinzufügen
+                                value = f"Binäres Datum: {value.hex()}"
+                                debug_info.append("Binäres Datum als Hex")
+                        else:
+                            # Standard-Stringkonvertierung für Text
+                            value = value.decode('utf-8', errors='ignore').strip('\x00')
+                            debug_info.append("Als UTF-8 String dekodiert")
+                    except Exception as e:
+                        value = f"Binäre Daten: {value.hex()}"
+                        debug_info.append(f"Konvertierungsfehler: {str(e)}")
+            
+            # Debug-Informationen
+            if property_name and debug_info:
+                print(f"Property {property_name} (ID 0x{prop_id:X}): {', '.join(debug_info)}")
+                
+            return value
+            
+        except Exception as e:
+            print(f"Fehler beim Zugriff auf Property 0x{prop_id:X}: {str(e)}")
+            return None
+    
+    def extract_all_properties(msg):
+        """
+        Extrahiert alle verfügbaren Eigenschaften einer Nachricht.
+        
+        Args:
+            msg: Die Nachricht (pypff-Objekt)
+            
+        Returns:
+            Ein Dictionary mit allen gefundenen Eigenschaften
+        """
+        all_props = {}
+        
+        # Methode 1: Über property_values (moderne API)
+        if hasattr(msg, "property_values"):
+            for prop_id, value in msg.property_values.items():
+                prop_name = f"0x{prop_id:04X}"
+                
+                # Wert konvertieren
+                if isinstance(value, bytes):
+                    try:
+                        # Spezialbehandlung für bekannte Datumsfelder
+                        if prop_id in [0x8004, 0x8005, 0x003D, 0x0023]:
+                            if b":" in value and b"-" in value:
+                                value = value.decode('utf-8', errors='ignore').strip('\x00')
+                            else:
+                                value = f"Binäres Datum: {value.hex()}"
+                        else:
+                            # Normale Textkonvertierung
+                            value = value.decode('utf-8', errors='ignore').strip('\x00')
+                    except Exception:
+                        value = f"Binäre Daten ({len(value)} Bytes): {value.hex()[:60]}..."
+                
+                all_props[prop_name] = value
+        
+        # Methode 2: Über get_number_of_properties (ältere API)
+        elif hasattr(msg, "get_number_of_properties"):
+            try:
+                num_props = msg.get_number_of_properties()
+                
+                for i in range(num_props):
+                    try:
+                        prop_type = msg.get_property_type(i)
+                        prop_tag = msg.get_property_tag(i)
+                        prop_name = f"0x{prop_tag:04X}"
+                        
+                        # Wert abrufen
+                        try:
+                            value = msg.get_property_data(prop_tag)
+                            
+                            # Wert konvertieren
+                            if isinstance(value, bytes):
+                                try:
+                                    # Spezialbehandlung für bekannte Datumsfelder
+                                    if prop_tag in [0x8004, 0x8005, 0x003D, 0x0023]:
+                                        if b":" in value and b"-" in value:
+                                            value = value.decode('utf-8', errors='ignore').strip('\x00')
+                                        else:
+                                            value = f"Binäres Datum: {value.hex()}"
+                                    else:
+                                        # Normale Textkonvertierung
+                                        value = value.decode('utf-8', errors='ignore').strip('\x00')
+                                except Exception:
+                                    value = f"Binäre Daten ({len(value)} Bytes): {value.hex()[:60]}..."
+                                
+                            all_props[prop_name] = value
+                        except Exception as e:
+                            all_props[prop_name] = f"Fehler beim Abrufen des Werts: {str(e)}"
+                    except Exception as e:
+                        print(f"Fehler bei Property {i}: {str(e)}")
+            except Exception as e:
+                print(f"Fehler beim Zugriff auf Properties: {str(e)}")
+        
+        return all_props
+    
+    def get_calendar_properties(msg):
+        """
+        Extrahiert alle für Kalendereinträge relevanten Eigenschaften mit erweiterten Methoden.
+        
+        Args:
+            msg: Die Nachricht (pypff-Objekt)
+            
+        Returns:
+            Ein Dictionary mit den Eigenschaften des Kalendereintrags
+        """
+        calendar_data = {
+            "raw_props": {},  # Alle rohen Eigenschaften
+            "properties": {}  # Geordnete und bereinigte Eigenschaften
+        }
+        
+        # Zuerst alle Eigenschaften extrahieren - für Debugging und Redundanz
+        raw_props = extract_all_properties(msg)
+        calendar_data["raw_props"] = raw_props
+        
+        # Nachrichtenklasse bestimmen
+        msg_class = None
+        for prop_id in [0x001A, 0x001A001F]:
+            value = get_property_value(msg, prop_id)
+            if value:
+                msg_class = value
+                break
+        
+        if not msg_class:
+            msg_class = "Unknown"
+        
+        calendar_data["properties"]["MessageClass"] = msg_class
+        
+        # Kernfelder mit Fallback-Optionen extrahieren
+        # 1. Betreff
+        subject = None
+        for prop_id in [0x0037, 0x0037001F, 0x0E1D, 0x0070]:
+            value = get_property_value(msg, prop_id)
+            if value:
+                subject = value
+                calendar_data["properties"]["Subject"] = value
+                break
+        
+        # 2. Startzeit - mehrere mögliche Property-IDs probieren
+        for prop_id in [0x8004, 0x00430102, 0x0002, 0x0060, 0x82000102, 0x82050102]:
+            value = get_property_value(msg, prop_id)
+            if value:
+                calendar_data["properties"]["StartTime"] = value
+                break
+        
+        # 3. Endzeit - mehrere mögliche Property-IDs probieren
+        for prop_id in [0x8005, 0x00440102, 0x0003, 0x0061, 0x82010102, 0x82060102]:
+            value = get_property_value(msg, prop_id)
+            if value:
+                calendar_data["properties"]["EndTime"] = value
+                break
+        
+        # 4. Ort - mehrere mögliche Property-IDs probieren
+        for prop_id in [0x0024, 0x0094, 0x8208]:
+            value = get_property_value(msg, prop_id)
+            if value:
+                calendar_data["properties"]["Location"] = value
+                break
+        
+        # 5. Textkörper - versuche mehrere Formate
+        body = None
+        
+        # Plain Text
+        for prop_id in [0x1000, 0x1000001F]:
+            value = get_property_value(msg, prop_id)
+            if value:
+                body = value
+                calendar_data["properties"]["Body"] = value
+                break
+        
+        # HTML (falls kein Plain Text gefunden wurde oder zusätzlich)
+        for prop_id in [0x0FFF, 0x1013, 0x1014]:
+            value = get_property_value(msg, prop_id)
+            if value:
+                calendar_data["properties"]["HtmlBody"] = value
+                # Falls noch kein Body gefunden wurde, HTML als Fallback verwenden
+                if "Body" not in calendar_data["properties"]:
+                    # HTML-Tags entfernen für eine einfache Textdarstellung
+                    text_body = re.sub(r'<[^>]+>', ' ', value)
+                    text_body = re.sub(r'\s+', ' ', text_body).strip()
+                    calendar_data["properties"]["Body"] = text_body
+                break
+        
+        # RTF Compressed (als letzter Versuch)
+        rtf_value = get_property_value(msg, 0x1009)
+        if rtf_value and "Body" not in calendar_data["properties"]:
+            calendar_data["properties"]["RtfCompressed"] = "RTF data available (binary)"
+        
+        # 6. Teilnehmer 
+        for prop_id in [0x0E04, 0x0E04001F]:
+            value = get_property_value(msg, prop_id)
+            if value:
+                calendar_data["properties"]["DisplayTo"] = value
+                break
+        
+        # 7. Organisator-Informationen
+        for prop_id in [0x0042, 0x0081, 0x001F]:
+            value = get_property_value(msg, prop_id)
+            if value:
+                calendar_data["properties"]["Organizer"] = value
+                break
+        
+        # 8. Wichtige Flags
+        # Ganztägiges Ereignis
+        all_day = get_property_value(msg, 0x8216)
+        if all_day is not None:
+            calendar_data["properties"]["AllDayEvent"] = all_day
+        
+        # Erinnerung gesetzt
+        reminder_set = get_property_value(msg, 0x8501)
+        if reminder_set is not None:
+            calendar_data["properties"]["ReminderSet"] = reminder_set
+        
+        # Erinnerungszeit
+        reminder_minutes = get_property_value(msg, 0x0065)
+        if reminder_minutes is not None:
+            calendar_data["properties"]["ReminderMinutesBeforeStart"] = reminder_minutes
+        
+        # Wiederholung
+        is_recurring = get_property_value(msg, 0x8201)
+        if is_recurring is not None:
+            calendar_data["properties"]["IsRecurring"] = is_recurring
+        
+        # Wiederholungsmuster
+        recurrence_pattern = get_property_value(msg, 0x8582)
+        if recurrence_pattern:
+            calendar_data["properties"]["RecurrencePattern"] = recurrence_pattern
+        
+        # 9. Weitere wichtige Eigenschaften hinzufügen, wenn vorhanden
+        for prop_name, prop_id in property_map.items():
+            # Überspringen von bereits verarbeiteten Kernfeldern
+            if (prop_name in calendar_data["properties"] or 
+                prop_name.endswith("_Alt") or 
+                prop_name.endswith("_Alt1") or 
+                prop_name.endswith("_Alt2") or
+                prop_name.endswith("_Alt3") or
+                prop_name.endswith("_Named") or
+                prop_name.endswith("Unicode")):
+                continue
+                
+            value = get_property_value(msg, prop_id)
+            if value is not None:
+                calendar_data["properties"][prop_name] = value
+        
+        # Ist dies wirklich ein Kalendereintrag?
+        is_calendar = (
+            "IPM.Appointment" in msg_class or
+            "IPM.Schedule.Meeting" in msg_class or
+            "calendar" in msg_class.lower() or
+            "appointment" in msg_class.lower() or
+            "meeting" in msg_class.lower() or
+            "{00061055-0000-0000-C000-000000000046}" in msg_class
+        )
+        
+        # Alternative Erkennung über vorhandene Kalendereigenschaften
+        if not is_calendar:
+            calendar_indicators = [
+                "StartTime" in calendar_data["properties"],
+                "EndTime" in calendar_data["properties"],
+                "AllDayEvent" in calendar_data["properties"],
+                "Location" in calendar_data["properties"] and "Body" in calendar_data["properties"],
+                "ReminderSet" in calendar_data["properties"],
+                # Weitere spezifische Indikatoren können hier hinzugefügt werden
+            ]
+            
+            is_calendar = any(calendar_indicators)
+        
+        calendar_data["is_calendar_item"] = is_calendar
+        
+        return calendar_data
+    
+    # -------------------------------------------------------------------------
+    # 3. HILFSFUNKTION ZUM AUFFINDEN VON KALENDERORDNERN
+    # -------------------------------------------------------------------------
+    
+    def find_calendar_folders(folder, path="", results=None):
+        """
+        Findet alle Kalenderordner in der PST-Datei.
+        
+        Args:
+            folder: Der aktuelle Ordner
+            path: Der Pfad zum aktuellen Ordner
+            results: Liste der gefundenen Kalenderordner
+            
+        Returns:
+            Liste der gefundenen Kalenderordner mit Pfaden
+        """
+        if results is None:
+            results = []
+            
+        folder_name = folder.name or "Unnamed"
+        current_path = f"{path}/{folder_name}" if path else f"/{folder_name}"
+        
+        # Prüfen, ob es ein Kalenderordner ist
+        is_calendar_folder = (
+            "Calendar" in folder_name or 
+            "Kalender" in folder_name or
+            "calendar" in folder_name.lower()
+        )
+        
+        if is_calendar_folder:
+            results.append({
+                "name": folder_name,
+                "path": current_path,
+                "folder": folder,
+                "message_count": folder.number_of_sub_messages
+            })
+        
+        # Rekursiv Unterordner durchsuchen
+        for i in range(folder.number_of_sub_folders):
+            try:
+                sub_folder = folder.get_sub_folder(i)
+                find_calendar_folders(sub_folder, current_path, results)
+            except Exception as e:
+                print(f"Fehler beim Durchsuchen von Unterordner {i} in {current_path}: {str(e)}")
+        
+        return results
+    
+    # -------------------------------------------------------------------------
+    # 4. FUNKTION ZUM FINDEN EINES ORDNERS ANHAND EINES PFADES
+    # -------------------------------------------------------------------------
+    
+    def find_folder_by_path(root_folder, target_path):
+        """
+        Findet einen Ordner anhand seines Pfades.
+        
+        Args:
+            root_folder: Der Root-Ordner
+            target_path: Der Pfad zum gesuchten Ordner
+            
+        Returns:
+            Der gefundene Ordner oder None
+        """
+        if not target_path or target_path == "/" or target_path == "":
+            return root_folder
+            
+        # Pfadteile extrahieren
+        parts = [p for p in target_path.split("/") if p]
+        current = root_folder
+        
+        for part in parts:
+            found = False
+            # Unterordner durchsuchen
+            for i in range(current.number_of_sub_folders):
+                sub_folder = current.get_sub_folder(i)
+                sub_name = sub_folder.name or "Unnamed"
+                
+                if sub_name.lower() == part.lower():
+                    current = sub_folder
+                    found = True
+                    break
+            
+            if not found:
+                return None
+        
+        return current
+    
+    # -------------------------------------------------------------------------
+    # 5. HAUPTEXPORTFUNKTION
+    # -------------------------------------------------------------------------
+    
+    try:
+        # PST/OST-Datei in Chunks speichern
+        with open(in_path, "wb") as f:
+            chunk_size = 1024 * 1024  # 1MB pro Chunk
+            while True:
+                chunk = await file.read(chunk_size)
+                if not chunk:
+                    break
+                f.write(chunk)
+        
+        print(f"Datei {original_filename} erfolgreich gespeichert als {in_path}")
+        
+        # PST öffnen
+        pst = None
+        calendar_entries = []
+        calendar_folders = []
+        total_messages = 0
+        calendar_count = 0
+        errors = []
+        
+        try:
+            pst = pypff.file()
+            pst.open(in_path)
+            root_folder = pst.get_root_folder()
+            
+            # Info-Datei erstellen
+            with open(os.path.join(out_dir, "info.txt"), "w") as f:
+                f.write(f"Erweiterter Kalenderexport aus PST-Datei: {original_filename}\n")
+                f.write(f"Export-Datum: {datetime.now().isoformat()}\n")
+                f.write(f"Anzahl Root-Ordner: {root_folder.number_of_sub_folders}\n")
+                f.write(f"Nachrichten im Root: {root_folder.number_of_sub_messages}\n")
+            
+            # Kalenderordner finden
+            if folder_path:
+                # Wenn ein bestimmter Pfad angegeben wurde, diesen verwenden
+                target_folder = find_folder_by_path(root_folder, folder_path)
+                if target_folder:
+                    calendar_folders = [{
+                        "name": target_folder.name or "Spezifizierter Ordner",
+                        "path": folder_path,
+                        "folder": target_folder,
+                        "message_count": target_folder.number_of_sub_messages
+                    }]
+                else:
+                    raise ValueError(f"Ordner nicht gefunden: {folder_path}")
+            else:
+                # Automatische Suche nach Kalenderordnern
+                calendar_folders = find_calendar_folders(root_folder)
+            
+            # Kalenderordner in Info-Datei dokumentieren
+            with open(os.path.join(out_dir, "calendar_folders.txt"), "w") as f:
+                f.write(f"Gefundene Kalenderordner: {len(calendar_folders)}\n")
+                f.write("=" * 50 + "\n\n")
+                
+                for i, cal_folder in enumerate(calendar_folders):
+                    f.write(f"Kalenderordner {i+1}:\n")
+                    f.write(f"  Name: {cal_folder['name']}\n")
+                    f.write(f"  Pfad: {cal_folder['path']}\n")
+                    f.write(f"  Anzahl Nachrichten: {cal_folder['message_count']}\n\n")
+            
+            # Kalendereinträge extrahieren
+            for folder_info in calendar_folders:
+                folder = folder_info["folder"]
+                folder_path = folder_info["path"]
+                
+                # Ordnerverzeichnis erstellen
+                folder_dir = os.path.join(out_dir, f"folder_{folder_info['name']}")
+                os.makedirs(folder_dir, exist_ok=True)
+                
+                print(f"Verarbeite Ordner: {folder_info['path']} mit {folder.number_of_sub_messages} Nachrichten")
+                
+                # Alle Nachrichten durchgehen
+                for i in range(folder.number_of_sub_messages):
+                    total_messages += 1
+                    
+                    try:
+                        # Nachricht abrufen
+                        msg = folder.get_sub_message(i)
+                        
+                        # Eigenschaften extrahieren mit erweiterter Methode
+                        calendar_data = get_calendar_properties(msg)
+                        
+                        # Nur Kalendereinträge weiterverarbeiten
+                        if calendar_data["is_calendar_item"]:
+                            calendar_count += 1
+                            
+                            # Betreff für Dateinamen extrahieren
+                            subject = calendar_data["properties"].get("Subject", f"Termin_{i}")
+                            safe_subject = ''.join(c for c in subject if c.isalnum() or c in ' ._-')
+                            safe_subject = safe_subject[:50]  # Längenbegrenzung
+                            
+                            # Startzeit für Dateinamen
+                            start_time = calendar_data["properties"].get("StartTime", "")
+                            if start_time:
+                                try:
+                                    # Versuchen, ein Datum aus ISO-Format zu extrahieren
+                                    if isinstance(start_time, str) and "T" in start_time:
+                                        date_part = start_time.split("T")[0]
+                                        safe_subject = f"{date_part}_{safe_subject}"
+                                except Exception:
+                                    pass
+                            
+                            # Eintrag sowohl als JSON als auch als Text speichern
+                            
+                            # JSON-Format (für maschinelle Verarbeitung)
+                            json_path = os.path.join(folder_dir, f"cal_{calendar_count}_{safe_subject}.json")
+                            with open(json_path, "w", encoding="utf-8") as f:
+                                import json
+                                json.dump(calendar_data, f, indent=2, ensure_ascii=False)
+                            
+                            # Textformat (für menschliche Lesbarkeit)
+                            text_path = os.path.join(folder_dir, f"cal_{calendar_count}_{safe_subject}.txt")
+                            with open(text_path, "w", encoding="utf-8") as f:
+                                # Header
+                                f.write(f"KALENDEREINTRAG #{calendar_count}\n")
+                                f.write("=" * 50 + "\n\n")
+                                
+                                # Kernfelder in bestimmter Reihenfolge
+                                core_fields = ["Subject", "StartTime", "EndTime", "Location", "Organizer", 
+                                              "DisplayTo", "Body", "IsRecurring", "RecurrencePattern"]
+                                
+                                for field in core_fields:
+                                    if field in calendar_data["properties"]:
+                                        value = calendar_data["properties"][field]
+                                        if field == "Body" and value:
+                                            f.write(f"{field}:\n{'-'*40}\n{value}\n{'-'*40}\n\n")
+                                        else:
+                                            f.write(f"{field}: {value}\n")
+                                
+                                # Weitere Felder
+                                f.write("\nWEITERE EIGENSCHAFTEN:\n")
+                                f.write("-" * 50 + "\n")
+                                
+                                for key, value in sorted(calendar_data["properties"].items()):
+                                    if key not in core_fields:
+                                        f.write(f"{key}: {value}\n")
+                                
+                                # Rohe Eigenschaften (für Debugging)
+                                if use_extended_props:
+                                    f.write("\nROHE EIGENSCHAFTEN:\n")
+                                    f.write("-" * 50 + "\n")
+                                    
+                                    for key, value in sorted(calendar_data["raw_props"].items()):
+                                        # Nur die ersten 100 Zeichen für lange Werte
+                                        if isinstance(value, str) and len(value) > 100:
+                                            value = value[:100] + "..."
+                                        f.write(f"{key}: {value}\n")
+                            
+                            # Eintrag zur Liste hinzufügen
+                            entry_summary = {
+                                "id": calendar_count,
+                                "subject": calendar_data["properties"].get("Subject", "Kein Betreff"),
+                                "start_time": calendar_data["properties"].get("StartTime", "Keine Startzeit"),
+                                "end_time": calendar_data["properties"].get("EndTime", "Keine Endzeit"),
+                                "location": calendar_data["properties"].get("Location", "Kein Ort"),
+                                "folder": folder_info["path"],
+                                "index": i
+                            }
+                            
+                            calendar_entries.append(entry_summary)
+                            
+                    except Exception as e:
+                        error_msg = f"Fehler bei Nachricht {i} in {folder_info['path']}: {str(e)}"
+                        print(error_msg)
+                        errors.append(error_msg)
+            
+            # Erstelle eine Zusammenfassung aller Kalendereinträge
+            summary_path = os.path.join(out_dir, "calendar_summary.json")
+            with open(summary_path, "w", encoding="utf-8") as f:
+                import json
+                summary = {
+                    "file": original_filename,
+                    "export_date": datetime.now().isoformat(),
+                    "total_messages": total_messages,
+                    "calendar_count": calendar_count,
+                    "calendar_folders": [{"name": f["name"], "path": f["path"], "message_count": f["message_count"]} 
+                                        for f in calendar_folders],
+                    "calendar_entries": calendar_entries,
+                    "errors": errors
+                }
+                json.dump(summary, f, indent=2, ensure_ascii=False)
+            
+            # Erstelle eine menschenlesbare Übersicht
+            overview_path = os.path.join(out_dir, "calendar_overview.txt")
+            with open(overview_path, "w", encoding="utf-8") as f:
+                f.write(f"KALENDEREXPORT ÜBERSICHT\n")
+                f.write("=" * 50 + "\n\n")
+                f.write(f"Datei: {original_filename}\n")
+                f.write(f"Exportdatum: {datetime.now().isoformat()}\n")
+                f.write(f"Gesamtzahl der Nachrichten: {total_messages}\n")
+                f.write(f"Gefundene Kalendereinträge: {calendar_count}\n")
+                f.write(f"Anzahl Kalenderordner: {len(calendar_folders)}\n\n")
+                
+                f.write("KALENDERORDNER:\n")
+                f.write("-" * 50 + "\n")
+                for i, folder in enumerate(calendar_folders):
+                    f.write(f"{i+1}. {folder['name']} ({folder['path']}): {folder['message_count']} Nachrichten\n")
+                
+                f.write("\nKALENDEREINTRÄGE:\n")
+                f.write("-" * 50 + "\n")
+                for i, entry in enumerate(calendar_entries):
+                    f.write(f"{i+1}. {entry['subject']}\n")
+                    f.write(f"   Start: {entry['start_time']}\n")
+                    f.write(f"   Ende: {entry['end_time']}\n")
+                    f.write(f"   Ort: {entry['location']}\n")
+                    f.write(f"   Ordner: {entry['folder']}\n\n")
+                
+                if errors:
+                    f.write("\nFEHLER WÄHREND DES EXPORTS:\n")
+                    f.write("-" * 50 + "\n")
+                    for i, error in enumerate(errors):
+                        f.write(f"{i+1}. {error}\n")
+            
+        except Exception as e:
+            error_msg = str(e)
+            print(f"Fehler beim Verarbeiten der PST-Datei: {error_msg}")
+            with open(os.path.join(out_dir, "error.txt"), "w") as f:
+                f.write(f"Fehler beim Verarbeiten der PST-Datei: {error_msg}\n")
+                f.write(f"Datei: {original_filename}\n")
+        
+        finally:
+            # PST-Datei schließen
+            if pst:
+                try:
+                    pst.close()
+                except Exception:
+                    pass
+        
+        # ZIP-Datei erstellen
+        import zipfile
+        print(f"Erstelle ZIP-Datei: {zip_path}")
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for root, dirs, files in os.walk(out_dir):
+                for file_name in files:
+                    file_path = os.path.join(root, file_name)
+                    rel_path = os.path.relpath(file_path, out_dir)
+                    zipf.write(file_path, rel_path)
+        
+        # Ergebnis zurückgeben
+        if os.path.exists(zip_path):
+            zip_size = os.path.getsize(zip_path)
+            
+            # Wenn das Format JSON ist, gib ein detailliertes JSON zurück
+            if export_format.lower() == "json":
+                return {
+                    "success": True,
+                    "message": f"Erweiterter Kalenderexport erfolgreich. {calendar_count} Kalendereinträge gefunden.",
+                    "file_path": f"/data/ost/{zip_filename}",
+                    "file_size": zip_size,
+                    "calendar_count": calendar_count,
+                    "total_messages": total_messages,
+                    "calendar_folders": [{"name": f["name"], "path": f["path"]} for f in calendar_folders],
+                    "calendar_entries": calendar_entries[:10],  # Erste 10 Einträge zurückgeben
+                    "errors_count": len(errors),
+                    "download_url": f"/download/{zip_filename}"
+                }
+            else:
+                # Ansonsten ein einfacheres Format
+                return {
+                    "success": True,
+                    "message": f"Erweiterter Kalenderexport erfolgreich. {calendar_count} Kalendereinträge gefunden.",
+                    "file_path": f"/data/ost/{zip_filename}",
+                    "file_size": zip_size,
+                    "calendar_count": calendar_count,
+                    "total_messages": total_messages,
+                    "download_url": f"/download/{zip_filename}"
+                }
+        else:
+            return {
+                "success": False,
+                "message": "Fehler beim Erstellen der ZIP-Datei"
+            }
+    
+    except Exception as e:
+        # Allgemeiner Fehler
+        error_msg = str(e)
+        print(f"Unerwarteter Fehler: {error_msg}")
+        return {
+            "success": False,
+            "message": f"Fehler beim Export: {error_msg}"
+        }
+    
+    finally:
+        # Arbeitsverzeichnis aufräumen
+        try:
+            if os.path.exists(work_dir):
+                shutil.rmtree(work_dir)
+        except Exception as e:
+            print(f"Fehler beim Aufräumen: {str(e)}")
+
+
+@app.post("/debug/inspect-calendar-properties")
+async def inspect_calendar_properties(
+    file: UploadFile = File(...),
+    folder_path: str = Form(""),  # Optionaler Pfad zum Kalenderordner
+    max_items: int = Form(5)      # Maximale Anzahl zu inspizierender Kalendereinträge
+):
+    """
+    Inspiziert detailliert die Kalendereigenschaften in einer PST-Datei.
+    
+    Besonders nützlich, um alle verfügbaren Eigenschaften und ihre Werte anzuzeigen,
+    damit die korrekten Property-IDs für die Kalenderextraktion bestimmt werden können.
+    
+    Parameters:
+    - file: PST/OST-Datei
+    - folder_path: Optionaler Pfad zum spezifischen Kalenderordner
+    - max_items: Maximale Anzahl zu inspizierender Kalendereinträge
+    """
+    # Funktionen, Variablen und Import-Statements wie im erweiterten Kalendererport-Endpunkt
+    
+    # Original-Dateinamen speichern und säubern
+    original_filename = file.filename
+    safe_filename = ''.join(c for c in original_filename if c.isalnum() or c in '._-')
+    
+    # Aktuelles Datum/Uhrzeit für eindeutige Dateinamen
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    # Temporäres Verzeichnis für die Verarbeitung
+    work_dir = os.path.join("/tmp", f"cal_inspect_{timestamp}")
+    os.makedirs(work_dir, exist_ok=True)
+    
+    # Pfade definieren
+    in_path = os.path.join(work_dir, "input.pst")
+    
+    try:
+        # PST/OST-Datei in Chunks speichern
+        with open(in_path, "wb") as f:
+            chunk_size = 1024 * 1024  # 1MB pro Chunk
+            while True:
+                chunk = await file.read(chunk_size)
+                if not chunk:
+                    break
+                f.write(chunk)
+        
+        # PST öffnen
+        pst = None
+        inspection_results = {
+            "file_info": {
+                "filename": original_filename,
+                "inspect_time": datetime.now().isoformat()
+            },
+            "calendar_folders": [],
+            "inspected_items": [],
+            "property_stats": {}  # Statistiken über gefundene Eigenschaften
+        }
+        
+        try:
+            pst = pypff.file()
+            pst.open(in_path)
+            root_folder = pst.get_root_folder()
+            
+            # Kalenderordner finden
+            calendar_folders = []
+            
+            if folder_path:
+                # Wenn ein bestimmter Pfad angegeben wurde, diesen verwenden
+                target_folder = find_folder_by_path(root_folder, folder_path)
+                if target_folder:
+                    calendar_folders = [{
+                        "name": target_folder.name or "Spezifizierter Ordner",
+                        "path": folder_path,
+                        "folder": target_folder,
+                        "message_count": target_folder.number_of_sub_messages
+                    }]
+                else:
+                    return {
+                        "success": False,
+                        "message": f"Ordner nicht gefunden: {folder_path}"
+                    }
+            else:
+                # Automatische Suche nach Kalenderordnern
+                calendar_folders = find_calendar_folders(root_folder)
+            
+            # Kalenderordner speichern
+            inspection_results["calendar_folders"] = [
+                {
+                    "name": f["name"],
+                    "path": f["path"],
+                    "message_count": f["message_count"]
+                } for f in calendar_folders
+            ]
+            
+            # Kalendereinträge inspizieren
+            items_inspected = 0
+            property_counts = {}  # Zählt das Vorkommen jeder Property
+            
+            for folder_info in calendar_folders:
+                folder = folder_info["folder"]
+                folder_path = folder_info["path"]
+                
+                # Maximal max_items Nachrichten pro Ordner durchgehen
+                message_count = min(folder.number_of_sub_messages, max_items)
+                
+                for i in range(message_count):
+                    try:
+                        # Nachricht abrufen
+                        msg = folder.get_sub_message(i)
+                        
+                        # Alle Eigenschaften extrahieren
+                        all_props = extract_all_properties_enhanced(msg)
+                        
+                        # Nachrichtenklasse bestimmen
+                        msg_class = None
+                        for prop_id in ["0x001A", "0x001A001F"]:
+                            if prop_id in all_props:
+                                msg_class = all_props[prop_id]
+                                break
+                        
+                        if not msg_class:
+                            msg_class = "Unknown"
+                        
+                        # Ist es ein Kalendereintrag?
+                        is_calendar = (
+                            "IPM.Appointment" in str(msg_class) or
+                            "IPM.Schedule.Meeting" in str(msg_class) or
+                            "calendar" in str(msg_class).lower() or
+                            "appointment" in str(msg_class).lower() or
+                            "{00061055-0000-0000-C000-000000000046}" in str(msg_class)
+                        )
+                        
+                        # Relevanz berechnen
+                        relevance = 0
+                        
+                        # Erhöhung der Relevanz bei bestimmten Eigenschaften
+                        for prop_id in ["0x8004", "0x8005", "0x0024", "0x8216", "0x8501"]:
+                            if prop_id in all_props:
+                                relevance += 1
+                        
+                        # Erhöhung für Kalenderklasse
+                        if is_calendar:
+                            relevance += 3
+                        
+                        # Statistiken über Eigenschaften aktualisieren
+                        for prop_id, value in all_props.items():
+                            if prop_id.startswith("0x"):  # Nur echte Eigenschaften zählen
+                                if prop_id not in property_counts:
+                                    property_counts[prop_id] = {
+                                        "count": 0,
+                                        "calendar_count": 0,
+                                        "example_value": None
+                                    }
+                                
+                                property_counts[prop_id]["count"] += 1
+                                
+                                if is_calendar:
+                                    property_counts[prop_id]["calendar_count"] += 1
+                                
+                                # Beispielwert speichern (falls noch nicht vorhanden)
+                                if property_counts[prop_id]["example_value"] is None:
+                                    # Für lange Werte nur die ersten 100 Zeichen speichern
+                                    if isinstance(value, str) and len(value) > 100:
+                                        property_counts[prop_id]["example_value"] = value[:100] + "..."
+                                    else:
+                                        property_counts[prop_id]["example_value"] = value
+                        
+                        # Betreff für die Anzeige extrahieren
+                        subject = "Ohne Betreff"
+                        for prop_id in ["0x0037", "0x0037001F", "0x0E1D", "0x0070"]:
+                            if prop_id in all_props and all_props[prop_id]:
+                                subject = all_props[prop_id]
+                                break
+                        
+                        # Eintrag zur Liste hinzufügen
+                        item_info = {
+                            "folder": folder_path,
+                            "index": i,
+                            "message_class": msg_class,
+                            "subject": subject,
+                            "is_calendar_item": is_calendar,
+                            "relevance": relevance,
+                            "property_count": len([p for p in all_props.keys() if p.startswith("0x")]),
+                            "all_properties": {k: v for k, v in all_props.items() if k.startswith("0x")}
+                        }
+                        
+                        inspection_results["inspected_items"].append(item_info)
+                        items_inspected += 1
+                        
+                    except Exception as e:
+                        print(f"Fehler bei Nachricht {i} in {folder_path}: {str(e)}")
+            
+            # Property-Statistiken sortieren und formatieren
+            property_stats = []
+            for prop_id, stats in property_counts.items():
+                property_stats.append({
+                    "property_id": prop_id,
+                    "total_count": stats["count"],
+                    "calendar_count": stats["calendar_count"],
+                    "calendar_percentage": int(stats["calendar_count"] / max(1, stats["count"]) * 100),
+                    "example_value": stats["example_value"]
+                })
+            
+            # Nach Relevanz für Kalendereinträge sortieren
+            property_stats.sort(key=lambda x: x["calendar_percentage"], reverse=True)
+            inspection_results["property_stats"] = property_stats
+            
+            # Ergebnisse sortieren - Kalendereinträge zuerst, dann nach Relevanz
+            inspection_results["inspected_items"].sort(
+                key=lambda x: (not x["is_calendar_item"], -x["relevance"])
+            )
+            
+            return {
+                "success": True,
+                "message": f"Eigenschaften inspiziert: {items_inspected} Elemente in {len(calendar_folders)} Kalenderordnern",
+                "inspection_results": inspection_results
+            }
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "message": f"Fehler beim Inspizieren der PST-Datei: {str(e)}"
+            }
+        
+        finally:
+            # PST-Datei schließen
+            if pst:
+                try:
+                    pst.close()
+                except Exception:
+                    pass
+    
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Unerwarteter Fehler: {str(e)}"
+        }
+    
+    finally:
+        # Arbeitsverzeichnis aufräumen
+        try:
+            if os.path.exists(work_dir):
+                shutil.rmtree(work_dir)
+        except Exception as e:
+            print(f"Fehler beim Aufräumen: {str(e)}")
