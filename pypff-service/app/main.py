@@ -1562,3 +1562,399 @@ async def export_calendar_debug(
                 shutil.rmtree(work_dir)
         except Exception as e:
             print(f"Fehler beim Aufräumen: {str(e)}")
+
+
+@app.post("/debug/raw-pst")
+async def raw_pst_inspector(
+    file: UploadFile = File(...),
+    folder_path: str = Form("/")  # Optionaler Pfad zu einem bestimmten Ordner
+):
+    """
+    Analysiert eine PST-Datei auf niedrigster Ebene, um alle zugänglichen Informationen zu extrahieren.
+    
+    Parameters:
+    - file: PST/OST-Datei
+    - folder_path: Optionaler Pfad zu einem bestimmten Ordner (z.B. "/Top of Personal Folders/Kalender")
+    """
+    # Original-Dateinamen speichern und säubern
+    original_filename = file.filename
+    safe_filename = ''.join(c for c in original_filename if c.isalnum() or c in '._-')
+    
+    # Aktuelles Datum/Uhrzeit für eindeutige Dateinamen
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    # Permanentes Datenverzeichnis
+    data_dir = "/data/ost"
+    
+    # Arbeitsverzeichnis
+    work_dir = os.path.join(data_dir, f"raw_pst_{timestamp}_{safe_filename}")
+    os.makedirs(work_dir, exist_ok=True)
+    
+    # Pfade definieren
+    in_path = os.path.join(work_dir, "input.pst")
+    out_dir = os.path.join(work_dir, "output")
+    os.makedirs(out_dir, exist_ok=True)
+    
+    # Zielpfad für das ZIP-File
+    zip_filename = f"raw_pst_{timestamp}_{safe_filename}.zip"
+    zip_path = os.path.join(data_dir, zip_filename)
+    
+    # Ergebnisse sammeln
+    results = {
+        "folder_count": 0,
+        "message_count": 0,
+        "folder_structure": [],
+        "errors": [],
+        "properties_found": set(),
+    }
+    
+    try:
+        # PST/OST-Datei speichern
+        with open(in_path, "wb") as f:
+            chunk_size = 1024 * 1024
+            while True:
+                chunk = await file.read(chunk_size)
+                if not chunk:
+                    break
+                f.write(chunk)
+        
+        print(f"Datei {original_filename} erfolgreich gespeichert")
+        
+        # PST öffnen
+        pst = pypff.file()
+        pst.open(in_path)
+        root_folder = pst.get_root_folder()
+        
+        # Objekt-Struktur analysieren und introspizieren
+        def inspect_object(obj, prefix=""):
+            """Analysiert ein pypff-Objekt mit Introspection"""
+            attributes = {}
+            
+            # Schritt 1: Alle Attribute des Objekts erfassen
+            for attr in dir(obj):
+                if attr.startswith("_"):
+                    continue  # Interne Attribute überspringen
+                
+                try:
+                    value = getattr(obj, attr)
+                    
+                    # Methoden ignorieren
+                    if callable(value):
+                        continue
+                        
+                    # Wert in einen String konvertieren oder repr verwenden
+                    if isinstance(value, (str, int, float, bool, type(None))):
+                        attributes[attr] = value
+                    else:
+                        attributes[attr] = repr(value)
+                except Exception as e:
+                    attributes[f"{attr}_error"] = f"Fehler: {str(e)}"
+            
+            # Schritt 2: Methoden aufrufen, die keine Parameter erfordern
+            methods = {}
+            for attr in dir(obj):
+                if attr.startswith("_") or not callable(getattr(obj, attr)):
+                    continue
+                
+                try:
+                    # Nur parameterlose Methoden aufrufen
+                    method_obj = getattr(obj, attr)
+                    if "get_" in attr or "is_" in attr or "has_" in attr:
+                        result = method_obj()
+                        if isinstance(result, (str, int, float, bool, type(None))):
+                            methods[attr] = result
+                        else:
+                            methods[attr] = repr(result)
+                except Exception:
+                    # Methoden, die Parameter benötigen, ignorieren
+                    pass
+            
+            # Schritt 3: Auf Property-Werte zugreifen, wenn verfügbar
+            properties = {}
+            
+            # Direkte property_values-Zugriff prüfen
+            if hasattr(obj, "property_values"):
+                try:
+                    prop_values = obj.property_values
+                    for prop_id, value in prop_values.items():
+                        # Hexadezimale Darstellung des Property IDs
+                        prop_name = f"0x{prop_id:04X}"
+                        
+                        # Wert konvertieren
+                        if isinstance(value, bytes):
+                            try:
+                                str_value = value.decode('utf-8', errors='ignore').strip('\x00')
+                                properties[prop_name] = str_value
+                                # Für die Gesamtstatistik
+                                results["properties_found"].add(prop_name)
+                            except Exception:
+                                properties[prop_name] = value.hex()
+                        else:
+                            properties[prop_name] = value
+                except Exception as e:
+                    properties["property_values_error"] = f"Fehler: {str(e)}"
+            
+            # Ältere API: get_number_of_properties und get_property_*
+            if hasattr(obj, "get_number_of_properties"):
+                try:
+                    num_props = obj.get_number_of_properties()
+                    properties["count"] = num_props
+                    
+                    for i in range(num_props):
+                        try:
+                            prop_type = obj.get_property_type(i)
+                            prop_tag = obj.get_property_tag(i)
+                            prop_value = obj.get_property_data(prop_tag)
+                            
+                            # Hexadezimale Darstellung des Property-Tags
+                            prop_name = f"0x{prop_tag:04X}"
+                            
+                            # Wert konvertieren
+                            if isinstance(prop_value, bytes):
+                                try:
+                                    str_value = prop_value.decode('utf-8', errors='ignore').strip('\x00')
+                                    properties[prop_name] = str_value
+                                    # Für die Gesamtstatistik
+                                    results["properties_found"].add(prop_name)
+                                except Exception:
+                                    properties[prop_name] = prop_value.hex()
+                            else:
+                                properties[prop_name] = prop_value
+                        except Exception as e:
+                            properties[f"property_{i}_error"] = f"Fehler: {str(e)}"
+                except Exception as e:
+                    properties["get_properties_error"] = f"Fehler: {str(e)}"
+            
+            return {
+                "attributes": attributes,
+                "methods": methods,
+                "properties": properties,
+                "type": type(obj).__name__
+            }
+        
+        # Hilfsfunktion um einen Ordnerpfad zu extrahieren
+        def get_folder_path(folder):
+            path_parts = []
+            current = folder
+            while current:
+                name = current.name or "Unnamed"
+                path_parts.append(name)
+                # Zugriff auf parent-Attribut oder parent-Methode
+                if hasattr(current, "parent") and not callable(current.parent):
+                    current = current.parent
+                elif hasattr(current, "get_parent"):
+                    try:
+                        current = current.get_parent()
+                    except Exception:
+                        current = None
+                else:
+                    current = None
+            return "/" + "/".join(reversed(path_parts))
+        
+        # Hilfsfunktion, um einen Ordner nach Pfad zu finden
+        def find_folder_by_path(root, target_path):
+            if target_path == "/" or not target_path:
+                return root
+                
+            path_parts = [p for p in target_path.split("/") if p]
+            current = root
+            
+            for part in path_parts:
+                found = False
+                for i in range(current.number_of_sub_folders):
+                    sub_folder = current.get_sub_folder(i)
+                    if sub_folder.name and sub_folder.name.lower() == part.lower():
+                        current = sub_folder
+                        found = True
+                        break
+                
+                if not found:
+                    return None
+            
+            return current
+        
+        # Folder für die Analyse finden
+        target_folder = root_folder
+        if folder_path and folder_path != "/":
+            target_folder = find_folder_by_path(root_folder, folder_path)
+            if not target_folder:
+                raise ValueError(f"Ordner '{folder_path}' nicht gefunden")
+        
+        # Rekursive Analyse der Ordnerstruktur
+        def analyze_folder(folder, path=""):
+            results["folder_count"] += 1
+            folder_info = {
+                "name": folder.name or "Unnamed",
+                "path": path + "/" + (folder.name or "Unnamed"),
+                "sub_folders": folder.number_of_sub_folders,
+                "messages": folder.number_of_sub_messages,
+                "inspection": inspect_object(folder)
+            }
+            
+            # Nachrichten im Ordner analysieren
+            message_infos = []
+            for i in range(folder.number_of_sub_messages):
+                try:
+                    results["message_count"] += 1
+                    msg = folder.get_sub_message(i)
+                    
+                    # Nachrichten analysieren
+                    message_info = {
+                        "index": i,
+                        "inspection": inspect_object(msg)
+                    }
+                    
+                    # Betreff extrahieren (wenn vorhanden)
+                    subject = None
+                    if "properties" in message_info["inspection"]:
+                        # Bekannte Property-ID für Betreff: 0x0037
+                        subject = message_info["inspection"]["properties"].get("0x0037", f"Message {i}")
+                    
+                    message_info["subject"] = subject
+                    message_infos.append(message_info)
+                    
+                    # Erste 10 Nachrichten als einzelne Dateien speichern (für detaillierte Analyse)
+                    if len(message_infos) <= 10:
+                        msg_path = os.path.join(out_dir, f"message_{results['message_count']}_{i}.json")
+                        with open(msg_path, "w") as f:
+                            import json
+                            json.dump(message_info, f, indent=2, default=str)
+                except Exception as e:
+                    results["errors"].append(f"Fehler bei Nachricht {i} in {folder_info['path']}: {str(e)}")
+            
+            folder_info["messages_info"] = message_infos
+            
+            # Unterordner rekursiv analysieren
+            sub_folders = []
+            for i in range(folder.number_of_sub_folders):
+                try:
+                    sub_folder = folder.get_sub_folder(i)
+                    sub_info = analyze_folder(sub_folder, folder_info["path"])
+                    sub_folders.append(sub_info)
+                except Exception as e:
+                    results["errors"].append(f"Fehler bei Unterordner {i} in {folder_info['path']}: {str(e)}")
+            
+            folder_info["sub_folders_info"] = sub_folders
+            return folder_info
+        
+        # Analyse starten
+        folder_info = analyze_folder(target_folder)
+        results["folder_structure"] = folder_info
+        
+        # Property-Liste in eine sortierte Liste umwandeln
+        sorted_properties = sorted(list(results["properties_found"]))
+        results["properties_found"] = sorted_properties
+        
+        # Ergebnisse speichern
+        summary_path = os.path.join(out_dir, "summary.json")
+        with open(summary_path, "w") as f:
+            import json
+            json.dump({
+                "file": original_filename,
+                "timestamp": timestamp,
+                "folder_count": results["folder_count"],
+                "message_count": results["message_count"],
+                "properties_found": results["properties_found"],
+                "errors": results["errors"]
+            }, f, indent=2, default=str)
+        
+        # Ordnerstruktur speichern (ohne die detaillierten Nachrichteninspektionen)
+        structure_path = os.path.join(out_dir, "folder_structure.json")
+        with open(structure_path, "w") as f:
+            import json
+            # Hilfsfunktion zum Bereinigen der Struktur (nur wichtige Infos behalten)
+            def clean_structure(folder):
+                return {
+                    "name": folder["name"],
+                    "path": folder["path"],
+                    "sub_folders": folder["sub_folders"],
+                    "messages": folder["messages"],
+                    "message_subjects": [m.get("subject", f"Message {i}") for i, m in enumerate(folder.get("messages_info", []))],
+                    "sub_folders_info": [clean_structure(sub) for sub in folder.get("sub_folders_info", [])]
+                }
+            
+            json.dump(clean_structure(folder_info), f, indent=2, default=str)
+        
+        # Menschenlesbare Properties-Tabelle erstellen
+        properties_path = os.path.join(out_dir, "properties_table.txt")
+        with open(properties_path, "w") as f:
+            f.write("GEFUNDENE MAPI-PROPERTIES\n")
+            f.write("=" * 50 + "\n\n")
+            f.write("| Property ID | Bekannte Bedeutung |\n")
+            f.write("|-------------|-------------------|\n")
+            
+            # Bekannte MAPI-Properties
+            known_props = {
+                "0x001A": "PR_MESSAGE_CLASS",
+                "0x0037": "PR_SUBJECT",
+                "0x003D": "PR_CREATION_TIME",
+                "0x1000": "PR_BODY",
+                "0x0C1A": "PR_SENDER_NAME",
+                "0x8004": "PidLidAppointmentStartWhole",
+                "0x8005": "PidLidAppointmentEndWhole",
+                "0x0063": "PidLidResponseStatus",
+                "0x0024": "PidLidLocation",
+                "0x0065": "PidLidReminderMinutesBeforeStart",
+                "0x0E1D": "PR_NORMALIZED_SUBJECT",
+                "0x0070": "PR_CONVERSATION_TOPIC",
+                "0x0023": "PR_LAST_MODIFICATION_TIME",
+                "0x0E04": "PR_DISPLAY_TO",
+                "0x0E03": "PR_DISPLAY_CC",
+                "0x0062": "PR_IMPORTANCE",
+                "0x0017": "PR_IMPORTANCE (alternate)",
+                "0x0036": "PR_SENSITIVITY",
+                "0x000F": "PR_REPLY_RECIPIENT_NAMES",
+                "0x0FFF": "PR_HTML",
+                "0x0C1F": "PR_SENDER_ADDRTYPE",
+                "0x0075": "PR_RECEIVED_BY_NAME",
+                "0x0E1F": "PR_MSG_STATUS",
+                "0x8201": "PidLidAppointmentRecur",
+                "0x8216": "PidLidAppointmentAllDayEvent",
+                "0x0E2D": "PR_HASATTACH",
+                "0x8580": "PidLidRecurrenceType",
+                "0x8582": "PidLidRecurrencePattern",
+                "0x8501": "PidLidReminderSet",
+                "0x001F": "PidTagSenderName"
+            }
+            
+            for prop_id in sorted_properties:
+                known_name = known_props.get(prop_id.upper(), "Unbekannt")
+                f.write(f"| {prop_id} | {known_name} |\n")
+        
+        # ZIP-Datei erstellen
+        import zipfile
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for root, dirs, files in os.walk(out_dir):
+                for file_name in files:
+                    file_path = os.path.join(root, file_name)
+                    rel_path = os.path.relpath(file_path, out_dir)
+                    zipf.write(file_path, rel_path)
+        
+        # Erfolgsmeldung zurückgeben
+        return {
+            "success": True,
+            "message": f"PST Raw-Analyse erfolgreich. {results['folder_count']} Ordner und {results['message_count']} Nachrichten gefunden.",
+            "file_path": f"/data/ost/{zip_filename}",
+            "folder_count": results["folder_count"],
+            "message_count": results["message_count"],
+            "properties_count": len(results["properties_found"]),
+            "errors_count": len(results["errors"]),
+            "download_url": f"/download/{zip_filename}"
+        }
+    
+    except Exception as e:
+        # Allgemeiner Fehler
+        error_msg = str(e)
+        print(f"Unerwarteter Fehler: {error_msg}")
+        return {
+            "success": False,
+            "message": f"Fehler bei der PST-Analyse: {error_msg}"
+        }
+    
+    finally:
+        # PST-Datei schließen
+        if 'pst' in locals():
+            try:
+                pst.close()
+            except Exception:
+                pass
