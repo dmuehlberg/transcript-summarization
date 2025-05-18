@@ -1054,3 +1054,511 @@ async def export_calendar(
                 shutil.rmtree(work_dir)
         except Exception as e:
             print(f"Fehler beim Aufräumen: {str(e)}")
+
+
+@app.post("/export/calendar-debug")
+async def export_calendar_debug(
+    file: UploadFile = File(...),
+    extended: bool = Form(False),
+    debug_mode: bool = Form(True)  # Aktiviert das Debugging
+):
+    """
+    Exportiert Kalendereinträge mit zusätzlichen Debugging-Informationen.
+    
+    Parameters:
+    - file: PST/OST-Datei
+    - extended: Falls true, werden zusätzliche MAPI-Eigenschaften extrahiert
+    - debug_mode: Speichert zusätzliche Debugging-Informationen
+    """
+    # Original-Dateinamen speichern und säubern
+    original_filename = file.filename
+    safe_filename = ''.join(c for c in original_filename if c.isalnum() or c in '._-')
+    
+    # Aktuelles Datum/Uhrzeit für eindeutige Dateinamen
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    # Permanentes Datenverzeichnis (das gemounted ist)
+    data_dir = "/data/ost"
+    
+    # Temporäres Verzeichnis für die Verarbeitung
+    work_dir = os.path.join(data_dir, f"caldbg_{timestamp}_{safe_filename}")
+    os.makedirs(work_dir, exist_ok=True)
+    
+    # Pfade definieren
+    in_path = os.path.join(work_dir, "input.pst")
+    out_dir = os.path.join(work_dir, "output")
+    os.makedirs(out_dir, exist_ok=True)
+    cal_dir = os.path.join(out_dir, "calendar")
+    os.makedirs(cal_dir, exist_ok=True)
+    debug_dir = os.path.join(out_dir, "debug")
+    os.makedirs(debug_dir, exist_ok=True)
+    
+    # Zielpfad für das ZIP-File im /data/ost Verzeichnis
+    zip_filename = f"caldbg_{timestamp}_{safe_filename}.zip"
+    zip_path = os.path.join(data_dir, zip_filename)
+    
+    # MAPI-Eigenschaften für Kalendereinträge definieren
+    # Diese MAPI-Property-IDs sind spezifisch für Kalendereinträge
+    CALENDAR_PROPS = {
+        0x001A: "Message Class",               # PR_MESSAGE_CLASS
+        0x0037: "Subject",                     # PR_SUBJECT
+        0x003D: "Creation Time",               # PR_CREATION_TIME
+        0x1000: "Body",                        # PR_BODY
+        0x0C1A: "Sender Name",                 # PR_SENDER_NAME
+        0x8004: "Start Time",                  # PidLidAppointmentStartWhole
+        0x8005: "End Time",                    # PidLidAppointmentEndWhole
+        0x0063: "Response Status",             # PidLidResponseStatus
+        0x0024: "Location",                    # PidLidLocation
+        0x0065: "Reminder Minutes",            # PidLidReminderMinutesBeforeStart
+        0x0E1D: "Normalized Subject",          # PR_NORMALIZED_SUBJECT
+        0x0070: "Topic",                       # PR_CONVERSATION_TOPIC
+        0x0023: "Creation Time",               # PR_LAST_MODIFICATION_TIME
+        0x0E04: "Display To",                  # PR_DISPLAY_TO (Liste der Teilnehmer)
+        0x0E03: "Display CC",                  # PR_DISPLAY_CC
+        0x0062: "Importance",                  # PR_IMPORTANCE
+        0x0017: "Importance",                  # PR_IMPORTANCE (zweite Methode)
+        0x0036: "Sensitivity",                 # PR_SENSITIVITY
+        0x000F: "Reply To",                    # PR_REPLY_RECIPIENT_NAMES
+        0x0FFF: "Body HTML",                   # PR_HTML
+        0x0C1F: "Sender Address Type",         # PR_SENDER_ADDRTYPE
+        0x0075: "Received By Name",            # PR_RECEIVED_BY_NAME
+        0x0E1F: "Message Status",              # PR_MSG_STATUS
+        0x8201: "Is Recurring",                # Wiederholung - PidLidAppointmentRecur
+        0x8216: "All Day Event",               # PidLidAppointmentAllDayEvent
+        0x0E2D: "Has Attachment",              # PR_HASATTACH (Anhänge)
+        0x8580: "Recurrence Type",             # PidLidRecurrenceType
+        0x8582: "Recurrence Pattern",          # PidLidRecurrencePattern
+        0x8501: "Reminder Set",                # PidLidReminderSet
+        0x001F: "Organizer",                   # PidTagSenderName
+    }
+    
+    # Zusätzliche erweiterte Eigenschaften
+    EXTENDED_PROPS = {
+        0x8530: "Appointment Color",           # PidLidAppointmentColor
+        0x8502: "Reminder Time",               # PidLidReminderTime
+        0x8560: "Attendee Type",               # Teilnehmertyp
+        0x8518: "Appointment Type",            # PidLidAppointmentType
+        0x8208: "Is Online Meeting",           # PidLidConferenceServer
+        0x0029: "Description",                 # PidLidAutoStartCheck
+        0x0020: "Attachment Files",            # PR_ATTACH_DATA_BIN
+    }
+    
+    # Dictionary mit Properties kombinieren je nach extended Flag
+    properties_to_check = CALENDAR_PROPS.copy()
+    if extended:
+        properties_to_check.update(EXTENDED_PROPS)
+    
+    # Debug-Sammler
+    debug_info = {
+        "message_classes": set(),
+        "calendar_like_items": [],
+        "item_stats": {},
+        "errors": []
+    }
+    
+    try:
+        # PST/OST-Datei in Chunks speichern
+        with open(in_path, "wb") as f:
+            chunk_size = 1024 * 1024  # 1MB pro Chunk
+            while True:
+                chunk = await file.read(chunk_size)
+                if not chunk:
+                    break
+                f.write(chunk)
+        
+        print(f"Datei {original_filename} erfolgreich gespeichert als {in_path}")
+        
+        # Datei mit pypff öffnen
+        pst = None
+        try:
+            pst = pypff.file()
+            pst.open(in_path)
+            root_folder = pst.get_root_folder()
+            
+            # Infotext erstellen
+            with open(os.path.join(out_dir, "info.txt"), "w") as f:
+                f.write(f"Kalenderexport (Debug) aus PST-Datei: {original_filename}\n")
+                f.write(f"Export-Datum: {datetime.now().isoformat()}\n")
+                f.write(f"Anzahl Root-Ordner: {root_folder.number_of_sub_folders}\n")
+                f.write(f"Nachrichten im Root: {root_folder.number_of_sub_messages}\n")
+            
+            # Kalendereinträge zählen
+            calendar_count = 0
+            total_msg_count = 0
+            
+            # Diese Funktion extrahiert die Eigenschaften einer Nachricht
+            def extract_all_properties(msg):
+                """Extrahiert alle verfügbaren Eigenschaften einer Nachricht"""
+                props = {}
+                
+                # Versuchen, property_values zu bekommen (moderne API)
+                if hasattr(msg, "property_values"):
+                    # Alle Properties durchgehen
+                    for prop_id, value in msg.property_values.items():
+                        prop_name = f"0x{prop_id:04X}"  # Hex-Format für unbekannte IDs
+                        
+                        # Bereinigen und konvertieren
+                        if value is not None:
+                            if isinstance(value, bytes):
+                                try:
+                                    # Für Datumswerte
+                                    if prop_id in [0x8004, 0x8005, 0x003D, 0x0023, 0x8502]:
+                                        if b":" in value and b"-" in value:  # ISO-Datum
+                                            value = value.decode('utf-8', errors='ignore').strip('\x00')
+                                        else:
+                                            value = value.hex()
+                                    else:
+                                        # Standardkonvertierung
+                                        value = value.decode('utf-8', errors='ignore').strip('\x00')
+                                except Exception:
+                                    value = value.hex()
+                            props[prop_name] = value
+                
+                # Ältere API-Methode
+                elif hasattr(msg, "get_number_of_properties"):
+                    try:
+                        for i in range(msg.get_number_of_properties()):
+                            try:
+                                prop_id = msg.get_property_tag(i)
+                                value = msg.get_property_data(prop_id)
+                                
+                                prop_name = f"0x{prop_id & 0xFFFF:04X}"  # Hex-Format
+                                
+                                # Bereinigen und konvertieren
+                                if value is not None:
+                                    if isinstance(value, bytes):
+                                        try:
+                                            value = value.decode('utf-8', errors='ignore').strip('\x00')
+                                        except Exception:
+                                            value = value.hex()
+                                    props[prop_name] = value
+                            except Exception as e:
+                                print(f"Fehler bei Property {i}: {str(e)}")
+                    except Exception as e:
+                        print(f"Fehler beim Zugriff auf Properties: {str(e)}")
+                
+                return props
+            
+            # Diese Funktion extrahiert die Eigenschaften einer Nachricht mit Fokus auf Kalendereigenschaften
+            def extract_properties(msg):
+                props = {}
+                
+                # Nachrichtenklasse zuerst ermitteln
+                msg_class = None
+                try:
+                    if hasattr(msg, "get_message_class"):
+                        msg_class = msg.get_message_class()
+                    elif hasattr(msg, "property_values") and 0x001A in msg.property_values:
+                        msg_class = msg.property_values[0x001A]
+                    elif hasattr(msg, "get_property_data"):
+                        msg_class = msg.get_property_data(0x001A)
+                        
+                    # String-Konvertierung
+                    if isinstance(msg_class, bytes):
+                        msg_class = msg_class.decode('utf-8', errors='ignore')
+                    else:
+                        msg_class = str(msg_class or "Unknown")
+                except Exception as e:
+                    msg_class = f"Error getting class: {str(e)}"
+                
+                props["Message Class"] = msg_class
+                
+                # Für Debug-Zwecke die Nachrichtenklasse speichern
+                debug_info["message_classes"].add(msg_class)
+                
+                # Alle relevanten Eigenschaften durchgehen
+                for prop_id, prop_name in properties_to_check.items():
+                    try:
+                        # Wert über verschiedene Methoden extrahieren
+                        value = None
+                        if hasattr(msg, "property_values") and prop_id in msg.property_values:
+                            value = msg.property_values[prop_id]
+                        elif hasattr(msg, "get_property_data"):
+                            try:
+                                value = msg.get_property_data(prop_id)
+                            except:
+                                pass
+                        
+                        # Bereinigen und konvertieren
+                        if value is not None:
+                            if isinstance(value, bytes):
+                                try:
+                                    # Für Datum/Zeitwerte
+                                    if prop_id in [0x8004, 0x8005, 0x003D, 0x0023, 0x8502]:
+                                        # Versuchen, als Datumsstring zu interpretieren
+                                        if b":" in value and b"-" in value:  # ISO-Datum
+                                            value = value.decode('utf-8', errors='ignore').strip('\x00')
+                                        else:
+                                            # Binäres Datum - als HEX ausgeben
+                                            value = value.hex()
+                                    else:
+                                        # Standardkonvertierung für Strings
+                                        value = value.decode('utf-8', errors='ignore').strip('\x00')
+                                except Exception:
+                                    # Fallback auf Hex-Darstellung
+                                    value = value.hex()
+                            props[prop_name] = value
+                    except Exception as e:
+                        print(f"Fehler beim Extrahieren von {prop_name}: {str(e)}")
+                
+                return props, msg_class
+            
+            # Diese Funktion exportiert rekursiv alle Kalendereinträge aus einem Ordner
+            def export_calendar_items(folder, folder_path):
+                nonlocal calendar_count, total_msg_count
+                
+                # Ordnernamen für den Pfad extrahieren und bereinigen
+                folder_name = folder.name or "Unnamed"
+                safe_name = ''.join(c for c in folder_name if c.isalnum() or c in ' ._-')
+                current_path = os.path.join(folder_path, safe_name)
+                
+                # Ist es ein Kalenderordner?
+                is_calendar_folder = ("Calendar" in folder_name or "Kalender" in folder_name)
+                
+                # Speziellen Kalenderordner für mögliche Kalendereinträge erstellen
+                if is_calendar_folder:
+                    calendar_folder_path = os.path.join(cal_dir, safe_name)
+                    os.makedirs(calendar_folder_path, exist_ok=True)
+                    
+                    # Info über den Kalenderordner schreiben
+                    with open(os.path.join(calendar_folder_path, "_calendar_info.txt"), "w") as f:
+                        f.write(f"Kalenderordner: {folder_name}\n")
+                        f.write(f"Anzahl Elemente: {folder.number_of_sub_messages}\n")
+                        f.write(f"Pfad: {folder_path}/{safe_name}\n")
+                else:
+                    # Kein Kalenderordner, aber trotzdem nach Kalendereinträgen suchen
+                    calendar_folder_path = os.path.join(out_dir, "non_calendar_items")
+                    os.makedirs(calendar_folder_path, exist_ok=True)
+                
+                # Alle Nachrichten im Ordner durchgehen
+                for i in range(folder.number_of_sub_messages):
+                    total_msg_count += 1
+                    try:
+                        msg = folder.get_sub_message(i)
+                        
+                        # Eigenschaften extrahieren
+                        props, msg_class = extract_properties(msg)
+                        
+                        # Für Debug-Zwecke alle Eigenschaften extrahieren
+                        if debug_mode:
+                            all_props = extract_all_properties(msg)
+                        
+                        # Erweiterter Check auf Kalendereintrag
+                        is_calendar_item = False
+                        calendar_indicators = [
+                            # Standard-Klassen
+                            "IPM.Appointment" in msg_class,
+                            "IPM.Schedule.Meeting" in msg_class,
+                            "IPM.OLE.CLASS.{00061055-0000-0000-C000-000000000046}" in msg_class,
+                            # Weitere Indikatoren
+                            "Start Time" in props and "End Time" in props,  # Hat Start/End-Zeit
+                            is_calendar_folder,  # Liegt in einem Kalenderordner
+                            "Location" in props,  # Hat Ortsangabe
+                            "All Day Event" in props,  # Hat All-Day-Flag
+                            "Appointment" in msg_class  # "Appointment" im Klassennamen
+                        ]
+                        
+                        # Wenn irgendein Indikator zutrifft, als Kalendereintrag behandeln
+                        is_calendar_item = any(calendar_indicators)
+                        
+                        # Für Debug-Zwecke bei potenziellen Kalendereinträgen
+                        if not is_calendar_item and is_calendar_folder:
+                            # Wenn im Kalenderordner, aber nicht als Kalendereintrag erkannt
+                            debug_info["calendar_like_items"].append({
+                                "message_class": msg_class,
+                                "path": f"{folder_path}/{safe_name}",
+                                "index": i,
+                                "properties": props,
+                                "all_properties": all_props if debug_mode else None
+                            })
+                        
+                        # Statistik für den Nachrichtentyp
+                        if msg_class not in debug_info["item_stats"]:
+                            debug_info["item_stats"][msg_class] = 0
+                        debug_info["item_stats"][msg_class] += 1
+                        
+                        # Nachricht exportieren (für alle Nachrichten im Debug-Modus)
+                        if debug_mode or is_calendar_item:
+                            calendar_count += 1 if is_calendar_item else 0
+                            
+                            # Betreff und Datum für den Dateinamen extrahieren
+                            subject = props.get("Subject", f"NoSubject_{i}")
+                            safe_subject = ''.join(c for c in subject if c.isalnum() or c in ' ._-')
+                            safe_subject = safe_subject[:50]  # Längenbegrenzung
+                            
+                            # Start-Zeit extrahieren für den Dateinamen
+                            start_time = props.get("Start Time", "")
+                            if start_time:
+                                try:
+                                    if isinstance(start_time, str) and "T" in start_time:
+                                        date_part = start_time.split("T")[0]
+                                        safe_subject = f"{date_part}_{safe_subject}"
+                                except Exception:
+                                    pass
+                            
+                            # Speicherort festlegen
+                            if is_calendar_item:
+                                # Kalendereinträge in den Kalenderordner
+                                save_path = calendar_folder_path
+                            else:
+                                # Andere Nachrichten in den Debug-Ordner
+                                save_path = os.path.join(debug_dir, safe_name)
+                            
+                            os.makedirs(save_path, exist_ok=True)
+                            
+                            # Datei-Präfix je nach Typ
+                            file_prefix = "calendar" if is_calendar_item else "msg"
+                            
+                            # Nachricht als Text speichern
+                            msg_file = os.path.join(save_path, f"{file_prefix}_{i}_{safe_subject}.txt")
+                            with open(msg_file, "w", encoding="utf-8") as f:
+                                # Header
+                                f.write(f"{'KALENDEREINTRAG' if is_calendar_item else 'NACHRICHT'} #{i}\n")
+                                f.write(f"{'='*50}\n")
+                                
+                                # Stammdaten
+                                f.write(f"Message Class: {msg_class}\n")
+                                f.write(f"Item Index: {i}\n")
+                                f.write(f"Folder: {folder_name}\n")
+                                f.write(f"Path: {folder_path}/{safe_name}\n")
+                                f.write(f"Calendar Item: {'Ja' if is_calendar_item else 'Nein'}\n\n")
+                                
+                                # Wichtige Attribute in einer bestimmten Reihenfolge anzeigen
+                                for key in ["Subject", "Start Time", "End Time", "Location", "Body", "Display To"]:
+                                    if key in props:
+                                        f.write(f"{key}: {props[key]}\n")
+                                
+                                f.write(f"\nALLE EXTRAHIERTEN EIGENSCHAFTEN:\n")
+                                f.write(f"{'-'*50}\n")
+                                
+                                # Alle anderen Eigenschaften sortiert ausgeben
+                                for key, value in sorted(props.items()):
+                                    if key not in ["Subject", "Start Time", "End Time", "Location", "Body", "Display To"]:
+                                        f.write(f"{key}: {value}\n")
+                                
+                                # Im Debug-Modus auch alle rohen Eigenschaften ausgeben
+                                if debug_mode:
+                                    f.write(f"\nROHE EIGENSCHAFTEN (ALLE IDs):\n")
+                                    f.write(f"{'-'*50}\n")
+                                    
+                                    for key, value in sorted(all_props.items()):
+                                        f.write(f"{key}: {value}\n")
+                    except Exception as msg_error:
+                        # Fehler bei einzelnen Nachrichten protokollieren
+                        error_msg = str(msg_error)
+                        print(f"Fehler bei Nachricht {i}: {error_msg}")
+                        debug_info["errors"].append(f"Fehler bei Nachricht {i} in {folder_path}/{safe_name}: {error_msg}")
+                
+                # Unterordner rekursiv durchsuchen
+                for i in range(folder.number_of_sub_folders):
+                    try:
+                        sub_folder = folder.get_sub_folder(i)
+                        export_calendar_items(sub_folder, current_path)
+                    except Exception as folder_error:
+                        error_msg = str(folder_error)
+                        print(f"Fehler bei Unterordner {i}: {error_msg}")
+                        debug_info["errors"].append(f"Fehler bei Unterordner {i} in {folder_path}/{safe_name}: {error_msg}")
+            
+            # Export starten
+            export_calendar_items(root_folder, out_dir)
+            
+            # Debug-Informationen speichern
+            if debug_mode:
+                # Nachrichtenklassen
+                with open(os.path.join(debug_dir, "message_classes.txt"), "w") as f:
+                    f.write("GEFUNDENE NACHRICHTENKLASSEN:\n")
+                    f.write("=" * 50 + "\n")
+                    for cls in sorted(debug_info["message_classes"]):
+                        count = debug_info["item_stats"].get(cls, 0)
+                        f.write(f"{cls}: {count} Vorkommen\n")
+                
+                # Nicht erkannte Kalenderelemente
+                with open(os.path.join(debug_dir, "calendar_like_items.txt"), "w") as f:
+                    f.write("POTENZIELLE KALENDEREINTRÄGE, DIE NICHT ERKANNT WURDEN:\n")
+                    f.write("=" * 50 + "\n")
+                    for item in debug_info["calendar_like_items"]:
+                        f.write(f"Nachrichtenklasse: {item['message_class']}\n")
+                        f.write(f"Pfad: {item['path']}\n")
+                        f.write(f"Index: {item['index']}\n")
+                        f.write(f"Eigenschaften:\n")
+                        for k, v in item['properties'].items():
+                            f.write(f"  {k}: {v}\n")
+                        f.write("-" * 50 + "\n")
+                
+                # Fehler
+                with open(os.path.join(debug_dir, "errors.txt"), "w") as f:
+                    f.write("FEHLER WÄHREND DES EXPORTS:\n")
+                    f.write("=" * 50 + "\n")
+                    for error in debug_info["errors"]:
+                        f.write(f"{error}\n")
+            
+            # Zusammenfassung erstellen
+            with open(os.path.join(out_dir, "calendar_summary.txt"), "w") as f:
+                f.write(f"Kalenderexport abgeschlossen\n")
+                f.write(f"Gefundene Kalendereinträge: {calendar_count}\n")
+                f.write(f"Gesamtzahl der Nachrichten: {total_msg_count}\n")
+                f.write(f"Erweiterte Eigenschaften: {'Ja' if extended else 'Nein'}\n")
+                f.write(f"Debug-Modus: {'Ja' if debug_mode else 'Nein'}\n")
+                f.write(f"Export-Ende: {datetime.now().isoformat()}\n")
+        
+        except Exception as pff_error:
+            # Fehler protokollieren
+            error_msg = str(pff_error)
+            print(f"Fehler beim Verarbeiten der PST-Datei: {error_msg}")
+            with open(os.path.join(out_dir, "error.txt"), "w") as f:
+                f.write(f"Fehler beim Verarbeiten der PST-Datei: {error_msg}\n")
+                f.write(f"Datei: {original_filename}\n")
+        
+        finally:
+            # PST-Datei schließen
+            if pst:
+                try:
+                    pst.close()
+                except Exception:
+                    pass
+        
+        # ZIP-Datei erstellen
+        import zipfile
+        print(f"Erstelle ZIP-Datei: {zip_path}")
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for root, dirs, files in os.walk(out_dir):
+                for file_name in files:
+                    file_path = os.path.join(root, file_name)
+                    rel_path = os.path.relpath(file_path, out_dir)
+                    zipf.write(file_path, rel_path)
+        
+        # Ergebnis zurückgeben
+        if os.path.exists(zip_path):
+            zip_size = os.path.getsize(zip_path)
+            return {
+                "success": True,
+                "message": f"Kalenderexport (Debug) erfolgreich. {calendar_count} Kalendereinträge gefunden.",
+                "file_path": f"/data/ost/{zip_filename}",
+                "file_size": zip_size,
+                "calendar_count": calendar_count,
+                "total_messages": total_msg_count,
+                "message_classes_count": len(debug_info["message_classes"]),
+                "download_url": f"/download/{zip_filename}"
+            }
+        else:
+            return {
+                "success": False,
+                "message": "Fehler beim Erstellen der ZIP-Datei"
+            }
+    
+    except Exception as e:
+        # Allgemeiner Fehler
+        error_msg = str(e)
+        print(f"Unerwarteter Fehler: {error_msg}")
+        return {
+            "success": False,
+            "message": f"Fehler beim Export: {error_msg}"
+        }
+    
+    finally:
+        # Temporäres Verzeichnis aufräumen
+        try:
+            if os.path.exists(work_dir):
+                shutil.rmtree(work_dir)
+        except Exception as e:
+            print(f"Fehler beim Aufräumen: {str(e)}")
