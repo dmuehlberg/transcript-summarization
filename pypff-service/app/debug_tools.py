@@ -848,3 +848,29 @@ async def inspect_calendar_properties(
         except Exception as e:
             print(f"Fehler beim Aufräumen: {str(e)}")
     pass
+
+
+def inspect_message_diagnostics(msg):
+    """Zeigt detaillierte diagnostische Informationen über eine Nachricht"""
+    diagnostics = {
+        "object_type": type(msg).__name__,
+        "available_attributes": dir(msg),
+        "has_property_values": hasattr(msg, "property_values"),
+        "property_values_size": len(msg.property_values) if hasattr(msg, "property_values") else 0,
+        "has_get_property_data": hasattr(msg, "get_property_data"),
+        "has_get_message_class": hasattr(msg, "get_message_class"),
+        "message_class": None
+    }
+    
+    # Versuche, die Nachrichtenklasse zu extrahieren
+    try:
+        if hasattr(msg, "get_message_class"):
+            diagnostics["message_class"] = msg.get_message_class()
+        elif hasattr(msg, "property_values") and 0x001A in msg.property_values:
+            diagnostics["message_class"] = msg.property_values[0x001A]
+    except Exception as e:
+        diagnostics["message_class_error"] = str(e)
+    
+    return diagnostics
+
+
