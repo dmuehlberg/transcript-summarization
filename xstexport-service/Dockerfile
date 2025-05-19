@@ -91,10 +91,10 @@ COPY requirements.txt /app/
 RUN pip3 install -r requirements.txt
 
 # FastAPI-Anwendung kopieren
-COPY app/ /app/
+COPY app/ /app/app/
 
 # Port öffnen
-EXPOSE 8000
+EXPOSE 8200
 
 # FastAPI starten
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8200"]
