@@ -1,10 +1,8 @@
-# .NET Core Runtime als Basis
-FROM mcr.microsoft.com/dotnet/core/runtime:2.1 AS runtime
+# Erster Stage zum Herunterladen und Extrahieren von XstReader
+FROM debian:bullseye AS downloader
 
 # Installieren benötigter Tools für Download und Extraktion
 RUN apt-get update && apt-get install -y \
-    python3 \
-    python3-pip \
     curl \
     unzip \
     wget \
@@ -12,11 +10,11 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Arbeitsverzeichnis einrichten
-WORKDIR /app
+WORKDIR /download
 
 # XstReader von GitHub herunterladen und extrahieren
-RUN mkdir -p /tmp/xstreader && \
-    cd /tmp/xstreader && \
+RUN mkdir -p xstreader && \
+    cd xstreader && \
     # Neueste Release-URL ermitteln
     DOWNLOAD_URL=$(curl -s https://api.github.com/repos/Dijji/XstReader/releases/latest | \
                   jq -r '.assets[] | select(.name | endswith(".zip")) | .browser_download_url') && \
@@ -24,13 +22,23 @@ RUN mkdir -p /tmp/xstreader && \
     # Download durchführen
     wget -q "$DOWNLOAD_URL" -O xstreader.zip && \
     # Entpacken
-    unzip -q xstreader.zip && \
-    # Dateien in das App-Verzeichnis kopieren
-    cp XstPortableExport.dll /app/ && \
-    cp -r XstReader.Base /app/ && \
-    # Aufräumen
-    cd /app && \
-    rm -rf /tmp/xstreader
+    unzip -q xstreader.zip
+
+# Zweiter Stage mit .NET Runtime
+FROM mcr.microsoft.com/dotnet/runtime:6.0 AS runtime
+
+# Installieren von Python
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Arbeitsverzeichnis einrichten
+WORKDIR /app
+
+# XstReader-Dateien vom ersten Stage kopieren
+COPY --from=downloader /download/xstreader/XstPortableExport.dll /app/
+COPY --from=downloader /download/xstreader/XstReader.Base /app/XstReader.Base/
 
 # Python-Abhängigkeiten installieren
 COPY requirements.txt /app/
@@ -43,4 +51,4 @@ COPY app/ /app/
 EXPOSE 8000
 
 # FastAPI starten
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8100"]
