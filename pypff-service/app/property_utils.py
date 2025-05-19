@@ -518,7 +518,9 @@ def get_calendar_properties(msg, use_extended_props=True):
     # 9. Weitere wichtige Eigenschaften hinzufügen, wenn vorhanden
     for prop_name, prop_id in property_map.items():
         # Überspringen von bereits verarbeiteten Kernfeldern
-        if (prop_name in calendar_data["properties"] or 
+        if prop_name in calendar_data["properties"]:
+            continue
+        if isinstance(prop_name, str) and (
             prop_name.endswith("_Alt") or 
             prop_name.endswith("_Alt1") or 
             prop_name.endswith("_Alt2") or
