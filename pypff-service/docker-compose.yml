@@ -1,7 +1,6 @@
 services:
   pypff-service:
-    # platform: linux/amd64
-    platform: platform: ${TARGETPLATFORM:-linux/amd64}
+    platform: ${TARGETPLATFORM:-linux/amd64}
     build:
       context: .
       dockerfile: Dockerfile
