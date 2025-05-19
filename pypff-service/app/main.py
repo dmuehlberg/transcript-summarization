@@ -1,5 +1,6 @@
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.responses import FileResponse
+import os
 
 # Importe aus den neu erstellten Modulen
 from extractor import export_pffexport
