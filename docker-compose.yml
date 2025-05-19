@@ -192,3 +192,16 @@ services:
       - "8100:8100"
     volumes:
       - ./data/ost:/data/ost
+
+
+  xstexport-service:
+    platform: ${TARGETPLATFORM:-linux/amd64}
+    build:
+      context: ./xstexport-service
+      dockerfile: Dockerfile
+    container_name: xstexport-service
+    networks: ['demo']
+    ports:
+      - "8100:8100"
+    volumes:
+      - ./data/ost:/data/ost
