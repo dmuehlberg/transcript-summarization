@@ -17,7 +17,8 @@ from debug_tools import (
     pffexport_options,
     raw_pst_inspector,
     inspect_calendar_properties,
-    inspect_message_diagnostics
+    inspect_message_diagnostics,
+    message_diagnostics
 )
 from file_utils import export_simple, download_file
 from date_utils import convert_binary_date
@@ -178,7 +179,7 @@ async def convert_binary_date_endpoint(
     return await convert_binary_date(file, hex_value)
 
 @app.post("/debug/message-diagnostics")
-async def message_diagnostics(
+async def message_diagnostics_endpoint(
     file: UploadFile = File(...),
     folder_path: str = Form(""),
     index: int = Form(0)
@@ -191,69 +192,4 @@ async def message_diagnostics(
     - folder_path: Pfad zum Ordner (z.B. "/Unnamed/Top of Personal Folders/mail@david-muehlberg.de/Kalender")
     - index: Index der Nachricht im Ordner (z.B. 0, 1, 2, ...)
     """
-    # Initialisiere temp_file Variable, bevor sie verwendet wird
-    temp_file = f"/tmp/diagnostic_{datetime.now().strftime('%Y%m%d%H%M%S')}.pst"
-    
-    try:
-        # Speichere die Datei temporär
-        with open(temp_file, "wb") as f:
-            content = await file.read()
-            f.write(content)
-        
-        # Öffne die PST-Datei
-        pst = None
-        try:
-            pst = pypff.file()
-            pst.open(temp_file)
-            root_folder = pst.get_root_folder()
-            
-            # Finde den angegebenen Ordner
-            target_folder = root_folder
-            if folder_path:
-                target_folder = find_folder_by_path(root_folder, folder_path)
-                if not target_folder:
-                    return {"error": f"Ordner nicht gefunden: {folder_path}"}
-            
-            # Prüfe, ob der Index gültig ist
-            if index < 0 or index >= target_folder.number_of_sub_messages:
-                return {"error": f"Ungültiger Index: {index}. Der Ordner hat {target_folder.number_of_sub_messages} Nachrichten."}
-            
-            # Hole die Nachricht
-            msg = target_folder.get_sub_message(index)
-            
-            # Sammle Diagnose-Informationen
-            diagnostics = inspect_message_diagnostics(msg)
-            
-            # Versuche aggressiv, alle Properties zu extrahieren
-            properties = extract_all_properties_enhanced(msg)
-            
-            # Füge auch die rohen Bytes der ersten 200 Byte der Nachricht hinzu
-            try:
-                if hasattr(msg, "get_data"):
-                    data = msg.get_data()
-                    if data:
-                        diagnostics["raw_data_preview"] = data[:200].hex()
-            except Exception as e:
-                diagnostics["raw_data_error"] = str(e)
-            
-            return {
-                "success": True,
-                "message": f"Diagnose für Nachricht {index} in {folder_path}",
-                "diagnostics": diagnostics,
-                "properties": properties
-            }
-        finally:
-            # PST-Datei schließen
-            if pst:
-                try:
-                    pst.close()
-                except Exception:
-                    pass
-    
-    except Exception as e:
-        return {"success": False, "message": f"Fehler: {str(e)}"}
-    
-    finally:
-        # Temporäre Datei aufräumen
-        if os.path.exists(temp_file):
-            os.remove(temp_file)
+    return await message_diagnostics(file, folder_path, index)
