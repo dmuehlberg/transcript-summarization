@@ -1,4 +1,5 @@
 # property_utils.py
+import re
 from date_utils import convert_filetime_to_datetime
 
 def extract_properties(msg, properties_to_check):
