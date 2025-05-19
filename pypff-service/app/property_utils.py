@@ -1,6 +1,7 @@
 # property_utils.py
 import re
 from date_utils import convert_filetime_to_datetime
+from constants import STANDARD_CAL_PROPS, EXTENDED_CAL_PROPS
 
 def extract_properties(msg, properties_to_check):
     """Extrahiert bestimmte Eigenschaften einer Nachricht."""
@@ -377,7 +378,7 @@ def get_property_value(msg, prop_id, property_name=None):
         return None
     pass
 
-def get_calendar_properties(msg):
+def get_calendar_properties(msg, use_extended_props=True):
     """
     Extrahiert alle für Kalendereinträge relevanten Eigenschaften mit erweiterten Methoden.
     
@@ -395,6 +396,11 @@ def get_calendar_properties(msg):
     # Zuerst alle Eigenschaften extrahieren - für Debugging und Redundanz
     raw_props = extract_all_properties(msg)
     calendar_data["raw_props"] = raw_props
+
+    # Kombinierte Eigenschaftsliste
+    property_map = STANDARD_CAL_PROPS.copy()
+    if use_extended_props:
+        property_map.update(EXTENDED_CAL_PROPS)
     
     # Nachrichtenklasse bestimmen
     msg_class = None
