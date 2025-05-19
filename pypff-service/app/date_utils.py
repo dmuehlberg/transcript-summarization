@@ -1,7 +1,7 @@
 # date_utils.py
 import struct
 from datetime import datetime, timedelta
-from fastapi import UploadFile, File, Form
+from fastapi import UploadFile, File, Form, HTTPException
 
 def convert_filetime_to_datetime(filetime_bytes):
     """
@@ -41,6 +41,115 @@ def convert_filetime_to_datetime(filetime_bytes):
     except Exception as e:
         print(f"Fehler bei der Datumskonvertierung: {str(e)}")
         return f"Binäres Datum: {filetime_bytes.hex()}"
+
+def try_convert_binary_date(value, formats=None):
+    """
+    Versucht, einen binären Wert in ein Datum zu konvertieren, indem verschiedene Formate ausprobiert werden.
+    
+    Args:
+        value: Der zu konvertierende binäre Wert (bytes)
+        formats: Optionale Liste von zu versuchenden Formaten 
+                 (gültige Werte: 'filetime', 'ole', 'unix', 'systemtime')
+                 
+    Returns:
+        Ein ISO-formatierter Datumsstring oder None bei Fehler
+    """
+    if not formats:
+        formats = ['filetime', 'ole', 'systemtime', 'unix']
+    
+    if not value or not isinstance(value, bytes):
+        return None
+    
+    results = {}
+    
+    # 1. FILETIME-Format testen (8 Bytes)
+    if 'filetime' in formats and len(value) >= 8:
+        try:
+            filetime_data = value[:8]
+            date = convert_filetime_to_datetime(filetime_data)
+            if date:
+                results['filetime'] = date
+        except Exception:
+            pass
+    
+    # 2. OLE Automation Date testen (8 Bytes als Double)
+    if 'ole' in formats and len(value) >= 8:
+        try:
+            import struct
+            double_data = value[:8]
+            double_value = struct.unpack('<d', double_data)[0]
+            
+            # OLE Datum (Tage seit 30.12.1899)
+            import datetime
+            base_date = datetime.datetime(1899, 12, 30)
+            
+            days = int(double_value)
+            day_fraction = double_value - days
+            
+            date_part = base_date + datetime.timedelta(days=days)
+            seconds = int(day_fraction * 86400)
+            time_part = datetime.timedelta(seconds=seconds)
+            
+            ole_date = date_part + time_part
+            
+            # Plausibilitätsprüfung
+            if 0 <= double_value <= 2958465:  # Etwa bis zum Jahr 9999
+                results['ole'] = ole_date.isoformat()
+        except Exception:
+            pass
+    
+    # 3. Unix-Timestamp testen (4 Bytes)
+    if 'unix' in formats and len(value) >= 4:
+        try:
+            unix_data = value[:4]
+            unix_timestamp = int.from_bytes(unix_data, byteorder='little')
+            
+            import datetime
+            unix_date = datetime.datetime.fromtimestamp(unix_timestamp)
+            
+            # Plausibilitätsprüfung: Zwischen 1980 und 2040
+            if 315532800 <= unix_timestamp <= 2208988800:
+                results['unix'] = unix_date.isoformat()
+        except Exception:
+            pass
+    
+    # 4. SYSTEMTIME-Struktur testen (16 Bytes)
+    if 'systemtime' in formats and len(value) >= 16:
+        try:
+            systemtime_data = value[:16]
+            year = int.from_bytes(systemtime_data[0:2], byteorder='little')
+            month = int.from_bytes(systemtime_data[2:4], byteorder='little')
+            day = int.from_bytes(systemtime_data[6:8], byteorder='little')
+            hour = int.from_bytes(systemtime_data[8:10], byteorder='little')
+            minute = int.from_bytes(systemtime_data[10:12], byteorder='little')
+            second = int.from_bytes(systemtime_data[12:14], byteorder='little')
+            millisecond = int.from_bytes(systemtime_data[14:16], byteorder='little')
+            
+            if (1601 <= year <= 2100 and 1 <= month <= 12 and 1 <= day <= 31 and
+                0 <= hour <= 23 and 0 <= minute <= 59 and 0 <= second <= 59):
+                
+                import datetime
+                try:
+                    systemtime_date = datetime.datetime(
+                        year, month, day, hour, minute, second, millisecond * 1000
+                    )
+                    results['systemtime'] = systemtime_date.isoformat()
+                except ValueError:
+                    pass
+        except Exception:
+            pass
+    
+    # Ergebnisse auswerten
+    if results:
+        # Prioritätsreihenfolge: FILETIME, SYSTEMTIME, OLE, UNIX
+        for fmt in ['filetime', 'systemtime', 'ole', 'unix']:
+            if fmt in results:
+                return results[fmt]
+        
+        # Falls die Prioritätsformate nicht vorhanden sind, erstes gefundenes Ergebnis nehmen
+        return next(iter(results.values()))
+    
+    return None
 
 async def convert_binary_date(
     file: UploadFile = File(None),
@@ -229,112 +338,3 @@ async def convert_binary_date(
     except Exception as e:
         result["error"] = f"Allgemeiner Fehler: {str(e)}"
         return result
-
-def try_convert_binary_date(value, formats=None):
-    """
-    Versucht, einen binären Wert in ein Datum zu konvertieren, indem verschiedene Formate ausprobiert werden.
-    
-    Args:
-        value: Der zu konvertierende binäre Wert (bytes)
-        formats: Optionale Liste von zu versuchenden Formaten 
-                 (gültige Werte: 'filetime', 'ole', 'unix', 'systemtime')
-                 
-    Returns:
-        Ein ISO-formatierter Datumsstring oder None bei Fehler
-    """
-    if not formats:
-        formats = ['filetime', 'ole', 'systemtime', 'unix']
-    
-    if not value or not isinstance(value, bytes):
-        return None
-    
-    results = {}
-    
-    # 1. FILETIME-Format testen (8 Bytes)
-    if 'filetime' in formats and len(value) >= 8:
-        try:
-            filetime_data = value[:8]
-            date = convert_filetime_to_datetime(filetime_data)
-            if date:
-                results['filetime'] = date
-        except Exception:
-            pass
-    
-    # 2. OLE Automation Date testen (8 Bytes als Double)
-    if 'ole' in formats and len(value) >= 8:
-        try:
-            import struct
-            double_data = value[:8]
-            double_value = struct.unpack('<d', double_data)[0]
-            
-            # OLE Datum (Tage seit 30.12.1899)
-            import datetime
-            base_date = datetime.datetime(1899, 12, 30)
-            
-            days = int(double_value)
-            day_fraction = double_value - days
-            
-            date_part = base_date + datetime.timedelta(days=days)
-            seconds = int(day_fraction * 86400)
-            time_part = datetime.timedelta(seconds=seconds)
-            
-            ole_date = date_part + time_part
-            
-            # Plausibilitätsprüfung
-            if 0 <= double_value <= 2958465:  # Etwa bis zum Jahr 9999
-                results['ole'] = ole_date.isoformat()
-        except Exception:
-            pass
-    
-    # 3. Unix-Timestamp testen (4 Bytes)
-    if 'unix' in formats and len(value) >= 4:
-        try:
-            unix_data = value[:4]
-            unix_timestamp = int.from_bytes(unix_data, byteorder='little')
-            
-            import datetime
-            unix_date = datetime.datetime.fromtimestamp(unix_timestamp)
-            
-            # Plausibilitätsprüfung: Zwischen 1980 und 2040
-            if 315532800 <= unix_timestamp <= 2208988800:
-                results['unix'] = unix_date.isoformat()
-        except Exception:
-            pass
-    
-    # 4. SYSTEMTIME-Struktur testen (16 Bytes)
-    if 'systemtime' in formats and len(value) >= 16:
-        try:
-            systemtime_data = value[:16]
-            year = int.from_bytes(systemtime_data[0:2], byteorder='little')
-            month = int.from_bytes(systemtime_data[2:4], byteorder='little')
-            day = int.from_bytes(systemtime_data[6:8], byteorder='little')
-            hour = int.from_bytes(systemtime_data[8:10], byteorder='little')
-            minute = int.from_bytes(systemtime_data[10:12], byteorder='little')
-            second = int.from_bytes(systemtime_data[12:14], byteorder='little')
-            millisecond = int.from_bytes(systemtime_data[14:16], byteorder='little')
-            
-            if (1601 <= year <= 2100 and 1 <= month <= 12 and 1 <= day <= 31 and
-                0 <= hour <= 23 and 0 <= minute <= 59 and 0 <= second <= 59):
-                
-                import datetime
-                try:
-                    systemtime_date = datetime.datetime(
-                        year, month, day, hour, minute, second, millisecond * 1000
-                    )
-                    results['systemtime'] = systemtime_date.isoformat()
-                except ValueError:
-                    pass
-        except Exception:
-            pass
-    
-    # Ergebnisse auswerten
-    if results:
-        # Prioritätsreihenfolge: FILETIME, SYSTEMTIME, OLE, UNIX
-        for fmt in ['filetime', 'systemtime', 'ole', 'unix']:
-            if fmt in results:
-                return results[fmt]
-        
-        # Falls die Prioritätsformate nicht vorhanden sind, erstes gefundenes Ergebnis nehmen
-        return next(iter(results.values()))
-    
-    return None
