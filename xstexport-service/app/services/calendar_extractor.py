@@ -35,7 +35,8 @@ def find_dll(name: str) -> str:
 async def extract_calendar_data(
     file: UploadFile, 
     format: str = "csv",
-    target_folder: Optional[str] = None
+    target_folder: Optional[str] = None,
+    pst_folder: str = "Calendar"  # Neuer Parameter für benutzerdefinierten Ordner
 ) -> ExtractionResult:
     """
     Extrahiert Kalenderdaten aus einer PST/OST-Datei.
@@ -44,6 +45,7 @@ async def extract_calendar_data(
         file: Die hochgeladene PST/OST-Datei
         format: Format der Extraktion ('csv' oder 'native')
         target_folder: Optionaler Zielordner
+        pst_folder: Name des Ordners in der PST-Datei (Standard: "Calendar")
         
     Returns:
         ExtractionResult: Ergebnis mit Pfad zur ZIP-Datei
@@ -121,7 +123,7 @@ async def extract_calendar_data(
             "dotnet", 
             dll_path, 
             export_option,
-            "-f=Calendar", 
+            f"-f={pst_folder}",  # Angepasst: Benutzerdefinierten Ordner verwenden
             "-t=" + result_dir,
             file_path
         ]
@@ -165,7 +167,7 @@ async def extract_calendar_data(
         base_filename = os.path.splitext(source_filename)[0]
         
         # Ergebnisse als ZIP verpacken und in das Ausgangsverzeichnis schreiben
-        output_zip_name = f"{base_filename}_calendar_export.zip"
+        output_zip_name = f"{base_filename}_{pst_folder.lower()}_export.zip"
         output_zip_path = os.path.join(output_dir, output_zip_name)
         
         # Stellen sicher, dass das Ausgabeverzeichnis existiert
@@ -181,7 +183,7 @@ async def extract_calendar_data(
         
         return ExtractionResult(
             zip_path=output_zip_path,
-            message=f"Calendar data successfully extracted to {output_zip_path}"
+            message=f"{pst_folder} data successfully extracted to {output_zip_path}"
         )
     
     except Exception as e:

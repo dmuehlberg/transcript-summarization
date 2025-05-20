@@ -5,10 +5,12 @@ from typing import Optional
 import os
 import logging
 import subprocess
+import json
 
 from app.services.calendar_extractor import extract_calendar_data, find_dll
 from app.services.file_extractor import extract_calendar_from_existing_file
 from app.services.file_service import list_app_files, list_data_directory_files
+from app.services.pst_folder_service import list_pst_folders
 
 # Logger konfigurieren
 logging.basicConfig(level=logging.INFO)
@@ -30,13 +32,15 @@ async def get_form_data(
     file: UploadFile = File(...),
     format: str = Form("csv"),
     target_folder: Optional[str] = Form(None),
-    return_file: bool = Form(False)
+    return_file: bool = Form(False),
+    pst_folder: str = Form("Calendar")  # Neuer Parameter für Ordnernamen
 ):
     return {
         "file": file,
         "format": format,
         "target_folder": target_folder,
-        "return_file": return_file
+        "return_file": return_file,
+        "pst_folder": pst_folder
     }
 
 @app.post("/extract-calendar/")
@@ -49,18 +53,20 @@ async def extract_calendar(form_data: dict = Depends(get_form_data)):
         format: Format der Extraktion ('csv' oder 'native')
         target_folder: Optionaler Zielordner (Standard: gleiches Verzeichnis wie Quelldatei)
         return_file: Ob die ZIP-Datei als Download zurückgegeben werden soll
+        pst_folder: Name des Ordners in der PST-Datei, aus dem Kalender extrahiert werden sollen (Standard: "Calendar")
     
     Returns:
         Bei return_file=True: Die ZIP-Datei als Download
         Bei return_file=False: JSON-Antwort mit Pfad zur generierten ZIP-Datei
     """
     try:
-        logger.info(f"Extraktion mit Format {form_data['format']} gestartet")
+        logger.info(f"Extraktion mit Format {form_data['format']} aus Ordner {form_data['pst_folder']} gestartet")
         
         result = await extract_calendar_data(
             form_data["file"], 
             form_data["format"], 
-            form_data["target_folder"]
+            form_data["target_folder"],
+            form_data["pst_folder"]  # Übergebe den Ordnernamen
         )
         
         if form_data["return_file"]:
@@ -97,12 +103,66 @@ async def extract_calendar_file_endpoint(request: Request):
         format: Format der Extraktion ('csv' oder 'native')
         target_folder: Optionaler Zielordner (Standard: gleiches Verzeichnis wie Quelldatei)
         return_file: Ob die ZIP-Datei als Download zurückgegeben werden soll
+        pst_folder: Name des Ordners in der PST-Datei (Standard: "Calendar")
     
     Returns:
         Bei return_file=True: Die ZIP-Datei als Download
         Bei return_file=False: JSON-Antwort mit Pfad zur generierten ZIP-Datei
     """
     return await extract_calendar_from_existing_file(request)
+
+@app.post("/list-pst-folders")
+async def list_folders_endpoint(request: Request):
+    """
+    Listet alle Ordner in einer PST/OST-Datei auf.
+    
+    Body-Parameter:
+        filename: Name der Datei im /data/ost-Verzeichnis
+    
+    Returns:
+        JSON-Antwort mit einer Liste der Ordner in der PST-Datei
+    """
+    try:
+        # JSON-Daten aus der Anfrage lesen
+        body_bytes = await request.body()
+        try:
+            body_data = json.loads(body_bytes.decode('utf-8'))
+        except Exception as e:
+            logger.error(f"Fehler beim Parsen der JSON-Anfrage: {str(e)}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Ungültiges JSON-Format: {str(e)}"
+            )
+        
+        # Prüfe auf erforderliche Felder
+        filename = body_data.get("filename")
+        if not filename:
+            raise HTTPException(
+                status_code=400,
+                detail="Ein Dateiname muss angegeben werden"
+            )
+        
+        # Pfad zur PST-Datei
+        file_path = os.path.join("/data/ost", filename)
+        
+        # Ordner auflisten
+        folders = await list_pst_folders(file_path)
+        
+        return JSONResponse(
+            content={
+                "status": "success",
+                "filename": filename,
+                "folders": folders
+            }
+        )
+    except Exception as e:
+        logger.error(f"Fehler beim Auflisten der Ordner: {str(e)}")
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(
+            status_code=500,
+            detail=f"Fehler beim Auflisten der Ordner: {str(e)}"
+        )
 
 @app.get("/health")
 def health_check():
