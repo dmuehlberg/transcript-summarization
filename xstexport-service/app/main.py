@@ -50,3 +50,19 @@ def health_check():
     Endpoint zum Überprüfen der Anwendungsverfügbarkeit.
     """
     return {"status": "healthy", "version": "1.0.0"}
+
+
+@app.get("/debug/files")
+def list_files():
+    """
+    Zeigt den Inhalt des Anwendungsverzeichnisses für Debugging-Zwecke an.
+    """
+    app_dir = "/app"
+    file_list = []
+    
+    for root, dirs, files in os.walk(app_dir):
+        for file in files:
+            file_path = os.path.join(root, file)
+            file_list.append(file_path)
+    
+    return {"files": file_list}

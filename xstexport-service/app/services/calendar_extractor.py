@@ -15,6 +15,23 @@ class ExtractionResult(BaseModel):
     zip_path: str
     message: str
 
+def find_dll(name: str) -> str:
+    """
+    Sucht nach einer DLL im Anwendungsverzeichnis.
+    
+    Args:
+        name: Name der DLL
+        
+    Returns:
+        Vollständiger Pfad zur DLL
+    """
+    for root, dirs, files in os.walk("/app"):
+        for file in files:
+            if file.lower() == name.lower():
+                return os.path.join(root, file)
+    
+    return f"/app/{name}"  # Fallback zum Standardpfad
+
 async def extract_calendar_data(
     file: UploadFile, 
     format: str = "csv",
@@ -61,11 +78,15 @@ async def extract_calendar_data(
             shutil.copyfileobj(file.file, buffer)
     
     try:
+        # Finde den korrekten Pfad zur DLL
+        dll_path = find_dll("XstPortableExport.dll")
+        logger.info(f"Gefundener Pfad zu XstPortableExport.dll: {dll_path}")
+        
         # XstPortableExport aufrufen
         export_option = "-e" if format == "native" else "-p"
         cmd = [
             "dotnet", 
-            "/app/XstPortableExport.dll", 
+            dll_path, 
             export_option,
             "-f=Calendar", 
             "-t=" + result_dir,
