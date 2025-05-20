@@ -60,24 +60,44 @@ async def extract_calendar_data(
     os.makedirs(result_dir, exist_ok=True)
     
     # Upload-Datei speichern
-    source_filename = file.filename
-    source_path = os.path.join(source_dir, source_filename)
-    
-    # Bestimmen des Ausgabe-Verzeichnisses
-    output_dir = target_folder if target_folder else source_dir
-    
-    # PST/OST-Datei aus source_dir verwenden, falls verfügbar, sonst Upload-Datei verwenden
-    file_path = ""
-    if os.path.exists(source_path):
-        logger.info(f"Verwende vorhandene Datei aus {source_path}")
-        file_path = source_path
-    else:
-        logger.info(f"Datei nicht in {source_dir} gefunden, verwende Upload-Datei")
-        file_path = os.path.join(temp_dir, source_filename)
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-    
     try:
+        source_filename = file.filename
+        if source_filename is None:
+            source_filename = "upload.pst"  # Fallback-Name, falls kein Dateiname angegeben ist
+        
+        source_path = os.path.join(source_dir, source_filename)
+        
+        # Bestimmen des Ausgabe-Verzeichnisses
+        output_dir = target_folder if target_folder else source_dir
+        
+        # PST/OST-Datei aus source_dir verwenden, falls verfügbar, sonst Upload-Datei verwenden
+        file_path = ""
+        if os.path.exists(source_path):
+            logger.info(f"Verwende vorhandene Datei aus {source_path}")
+            file_path = source_path
+        else:
+            logger.info(f"Datei nicht in {source_dir} gefunden, verwende Upload-Datei")
+            file_path = os.path.join(temp_dir, source_filename)
+            with open(file_path, "wb") as buffer:
+                content = await file.read()
+                logger.info(f"Datei gelesen, Länge: {len(content)} Bytes")
+                buffer.write(content)
+            
+            # Datei-Berechtigungen setzen
+            try:
+                os.chmod(file_path, 0o644)
+            except Exception as e:
+                logger.warning(f"Konnte Berechtigungen für {file_path} nicht setzen: {e}")
+        
+        # Prüfen, ob die Datei existiert und Größe > 0
+        if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Datei wurde nicht korrekt hochgeladen oder konnte nicht gespeichert werden: {file_path}"
+            )
+        
+        logger.info(f"Datei gespeichert unter: {file_path}, Größe: {os.path.getsize(file_path)} Bytes")
+        
         # Finde den korrekten Pfad zur DLL (erst XstExporter.Portable.dll versuchen, dann XstPortableExport.dll als Fallback)
         dll_path = find_dll("XstExporter.Portable.dll")
         if "XstExporter.Portable.dll" not in dll_path:
@@ -146,5 +166,5 @@ async def extract_calendar_data(
         raise HTTPException(status_code=500, detail=error_msg)
     finally:
         # Temporäres Verzeichnis aufräumen, aber nur wenn wir nicht die Quelldatei verwenden
-        if file_path != source_path:
+        if 'file_path' in locals() and file_path != source_path:
             cleanup_temp_dir(temp_dir)

@@ -1,19 +1,43 @@
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 import os
+import logging
 
 from app.services.calendar_extractor import extract_calendar_data
 
+# Logger konfigurieren
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 app = FastAPI(title="PST/OST Calendar Extractor API")
 
-@app.post("/extract-calendar/")
-async def extract_calendar(
+# CORS-Middleware für Cross-Origin-Anfragen hinzufügen
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Im Produktivbetrieb einschränken
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Abhängigkeit für Form-Daten
+async def get_form_data(
     file: UploadFile = File(...),
     format: str = Form("csv"),
     target_folder: Optional[str] = Form(None),
-    return_file: bool = Form(False)  # Neuer Parameter, ob die Datei zurückgegeben werden soll
+    return_file: bool = Form(False)
 ):
+    return {
+        "file": file,
+        "format": format,
+        "target_folder": target_folder,
+        "return_file": return_file
+    }
+
+@app.post("/extract-calendar/")
+async def extract_calendar(form_data: dict = Depends(get_form_data)):
     """
     Extrahiert Kalenderdaten aus PST/OST-Dateien.
     
@@ -27,21 +51,36 @@ async def extract_calendar(
         Bei return_file=True: Die ZIP-Datei als Download
         Bei return_file=False: JSON-Antwort mit Pfad zur generierten ZIP-Datei
     """
-    result = await extract_calendar_data(file, format, target_folder)
-    
-    if return_file:
-        return FileResponse(
-            result.zip_path, 
-            media_type="application/zip",
-            filename=os.path.basename(result.zip_path)
+    try:
+        logger.info(f"Extraktion mit Format {form_data['format']} gestartet")
+        
+        result = await extract_calendar_data(
+            form_data["file"], 
+            form_data["format"], 
+            form_data["target_folder"]
         )
-    else:
-        return JSONResponse(
-            content={
-                "status": "success",
-                "message": result.message,
-                "output_file": result.zip_path
-            }
+        
+        if form_data["return_file"]:
+            logger.info(f"Datei wird zurückgegeben: {result.zip_path}")
+            return FileResponse(
+                result.zip_path, 
+                media_type="application/zip",
+                filename=os.path.basename(result.zip_path)
+            )
+        else:
+            logger.info(f"JSON-Antwort wird zurückgegeben: {result.zip_path}")
+            return JSONResponse(
+                content={
+                    "status": "success",
+                    "message": result.message,
+                    "output_file": result.zip_path
+                }
+            )
+    except Exception as e:
+        logger.error(f"Fehler bei der Extraktion: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Fehler bei der Extraktion: {str(e)}"
         )
 
 @app.get("/health")
