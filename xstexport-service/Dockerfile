@@ -1,5 +1,5 @@
-# Neueres .NET Runtime als Basis (6.0 statt 2.1)
-FROM mcr.microsoft.com/dotnet/runtime:6.0
+# .NET Core 2.1 Runtime als Basis (spezifisch für arm64)
+FROM mcr.microsoft.com/dotnet/core/runtime:2.1
 
 # Benötigte Pakete installieren
 RUN apt-get update && apt-get install -y \
@@ -15,7 +15,9 @@ COPY XstReader/ /app/
 
 # Debug-Info erstellen
 RUN find . -type f -o -type d | sort > /app/file_structure.txt && \
-    ls -la /app/ > /app/app_contents.txt
+    ls -la /app/ > /app/app_contents.txt && \
+    # Zeige .NET-Informationen
+    dotnet --info
 
 # Python-Abhängigkeiten installieren
 COPY requirements.txt /app/
