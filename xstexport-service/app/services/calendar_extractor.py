@@ -106,6 +106,15 @@ async def extract_calendar_data(
         
         logger.info(f"Gefundener Pfad zur DLL: {dll_path}")
         
+        # Vor der Ausführung des Befehls, prüfe ob die Datei lesbar ist
+        try:
+            # Prüfe Dateiberechtigungen
+            if not os.access(file_path, os.R_OK):
+                logger.warning(f"Datei {file_path} ist möglicherweise nicht lesbar, versuche Berechtigungen zu korrigieren")
+                os.chmod(file_path, 0o644)
+        except Exception as e:
+            logger.warning(f"Berechtigungsprüfung fehlgeschlagen: {str(e)}")
+        
         # XstExporter.Portable aufrufen
         export_option = "-e" if format == "native" else "-p"
         cmd = [
@@ -117,20 +126,40 @@ async def extract_calendar_data(
             file_path
         ]
         
-        logger.info(f"Führe Befehl aus: {' '.join(cmd)}")
-        process = subprocess.run(
-            cmd, 
-            capture_output=True, 
-            text=True
-        )
+        # Füge Umgebungsvariable für .NET-Debug-Ausgabe hinzu
+        dotnet_env = os.environ.copy()
+        dotnet_env["DOTNET_CLI_UI_LANGUAGE"] = "en"  # Erzwinge englische Fehlermeldungen
+        dotnet_env["DOTNET_SYSTEM_GLOBALIZATION_INVARIANT"] = "true"  # Setze unveränderliche Globalisierung
         
-        if process.returncode != 0:
-            error_msg = f"Extraction failed: {process.stderr}"
-            logger.error(error_msg)
-            raise HTTPException(
-                status_code=500, 
-                detail=error_msg
+        # Führe den dotnet-Befehl mit den Umgebungsvariablen aus
+        logger.info(f"Führe Befehl aus: {' '.join(cmd)}")
+        try:
+            process = subprocess.run(
+                cmd, 
+                capture_output=True,
+                text=False,  # Binärmodus
+                env=dotnet_env,
+                timeout=300  # Füge ein Timeout von 5 Minuten hinzu
             )
+            
+            # Protokolliere detaillierte Debug-Informationen
+            logger.debug(f"Command exit code: {process.returncode}")
+            logger.debug(f"Command stdout length: {len(process.stdout)}")
+            logger.debug(f"Command stderr length: {len(process.stderr)}")
+            
+            if process.returncode != 0:
+                # Sichere Dekodierung von stderr, problematische Zeichen ignorieren
+                stderr_text = process.stderr.decode('utf-8', errors='replace')
+                error_msg = f"Extraktion fehlgeschlagen: {stderr_text}"
+                logger.error(error_msg)
+                raise HTTPException(
+                    status_code=500, 
+                    detail=error_msg
+                )
+        except subprocess.TimeoutExpired:
+            error_msg = "Extraktionsprozess nach 5 Minuten abgelaufen"
+            logger.error(error_msg)
+            raise HTTPException(status_code=500, detail=error_msg)
         
         # Erstelle Basis-Dateiname für die ZIP-Datei (ohne Erweiterung)
         base_filename = os.path.splitext(source_filename)[0]

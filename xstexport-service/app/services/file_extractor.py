@@ -34,8 +34,14 @@ async def extract_calendar_from_existing_file(request: Request):
         HTTPException: Bei Fehlern während der Verarbeitung
     """
     try:
-        # JSON-Daten aus der Anfrage lesen
-        body_data = await request.json()
+        # JSON-Daten aus der Anfrage lesen mit verbesserter Fehlerbehandlung
+        body_bytes = await request.body()
+        try:
+            body_data = json.loads(body_bytes.decode('utf-8'))
+        except UnicodeDecodeError:
+            # Versuche mit einer permissiveren Dekodierung, wenn UTF-8 fehlschlägt
+            body_data = json.loads(body_bytes.decode('utf-8', errors='replace'))
+        
         logger.info(f"Received request data: {body_data}")
         
         filename = body_data.get("filename")

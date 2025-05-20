@@ -4,8 +4,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 import os
 import logging
+import subprocess
 
-from app.services.calendar_extractor import extract_calendar_data
+from app.services.calendar_extractor import extract_calendar_data, find_dll
 from app.services.file_extractor import extract_calendar_from_existing_file
 from app.services.file_service import list_app_files, list_data_directory_files
 
@@ -123,3 +124,37 @@ def list_data_files():
     Zeigt den Inhalt des Datenverzeichnisses für Debugging-Zwecke an.
     """
     return list_data_directory_files()
+
+@app.get("/debug/dotnet")
+def debug_dotnet():
+    """
+    Testet die .NET-Laufzeit und gibt Debug-Informationen zurück.
+    """
+    try:
+        process = subprocess.run(
+            ["dotnet", "--info"],
+            capture_output=True,
+            text=False
+        )
+        
+        dotnet_info = process.stdout.decode('utf-8', errors='replace')
+        dotnet_error = process.stderr.decode('utf-8', errors='replace') if process.stderr else None
+        
+        # Prüfe DLL-Existenz
+        dll_path = find_dll("XstExporter.Portable.dll")
+        dll_exists = os.path.exists(dll_path)
+        
+        return {
+            "dotnet_info": dotnet_info,
+            "dotnet_error": dotnet_error,
+            "exit_code": process.returncode,
+            "dll_path": dll_path,
+            "dll_exists": dll_exists,
+            "dotnet_environment": {
+                "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT": os.environ.get("DOTNET_SYSTEM_GLOBALIZATION_INVARIANT", "Nicht gesetzt")
+            }
+        }
+    except Exception as e:
+        return {
+            "error": str(e)
+        }
