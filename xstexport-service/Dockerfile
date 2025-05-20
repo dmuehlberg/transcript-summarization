@@ -1,11 +1,19 @@
-# .NET Core 2.1 Runtime als Basis (spezifisch für arm64)
-FROM mcr.microsoft.com/dotnet/core/runtime:2.1
+# Neueres Debian als Basis verwenden
+FROM debian:bullseye
 
-# Benötigte Pakete installieren
+# .NET Core 2.1 herunterladen und installieren
 RUN apt-get update && apt-get install -y \
+    wget \
+    curl \
     python3 \
     python3-pip \
-    && rm -rf /var/lib/apt/lists/*
+    unzip \
+    && rm -rf /var/lib/apt/lists/* \
+    && wget -q https://download.visualstudio.microsoft.com/download/pr/e9fec778-d087-4c89-b13e-71a6dda8c1d3/a717e6dcd6421c972afe8671ede0213a/dotnet-runtime-2.1.30-linux-x64.tar.gz \
+    && mkdir -p /usr/share/dotnet \
+    && tar -zxf dotnet-runtime-2.1.30-linux-x64.tar.gz -C /usr/share/dotnet \
+    && rm dotnet-runtime-2.1.30-linux-x64.tar.gz \
+    && ln -s /usr/share/dotnet/dotnet /usr/bin/dotnet
 
 # Arbeitsverzeichnis einrichten
 WORKDIR /app
@@ -17,7 +25,7 @@ COPY XstReader/ /app/
 RUN find . -type f -o -type d | sort > /app/file_structure.txt && \
     ls -la /app/ > /app/app_contents.txt && \
     # Zeige .NET-Informationen
-    dotnet --info
+    dotnet --info > /app/dotnet_info.txt
 
 # Python-Abhängigkeiten installieren
 COPY requirements.txt /app/
