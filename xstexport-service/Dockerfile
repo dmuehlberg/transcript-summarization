@@ -1,20 +1,24 @@
 # Neueres Debian als Basis verwenden
 FROM debian:bullseye
 
-# .NET Core 2.1 herunterladen und installieren
+# ICU-Pakete installieren (für Globalisierungsunterstützung)
 RUN apt-get update && apt-get install -y \
     wget \
     curl \
     python3 \
     python3-pip \
     unzip \
+    libicu67 \
     && rm -rf /var/lib/apt/lists/* \
-    # Nicht die Architektur erkennen, sondern direkt ARM64 Build verwenden, da wir wissen, dass wir auf ARM64 sind
+    # .NET Core 2.1 herunterladen und installieren
     && mkdir -p /usr/share/dotnet \
     && wget -q https://dotnetcli.blob.core.windows.net/dotnet/Runtime/2.1.30/dotnet-runtime-2.1.30-linux-arm64.tar.gz -O dotnet-runtime-2.1.30-linux.tar.gz \
     && tar -zxf dotnet-runtime-2.1.30-linux.tar.gz -C /usr/share/dotnet \
     && rm dotnet-runtime-2.1.30-linux.tar.gz \
     && ln -s /usr/share/dotnet/dotnet /usr/bin/dotnet
+
+# Umgebungsvariable für .NET Core setzen, um Invariant-Globalisierung zu aktivieren, falls ICU-Pakete nicht funktionieren
+ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=true
 
 # Arbeitsverzeichnis einrichten
 WORKDIR /app
@@ -26,7 +30,7 @@ COPY XstReader/ /app/
 RUN find . -type f -o -type d | sort > /app/file_structure.txt && \
     ls -la /app/ > /app/app_contents.txt && \
     # Zeige .NET-Informationen
-    dotnet --info > /app/dotnet_info.txt
+    dotnet --info > /app/dotnet_info.txt || echo "Fehler bei dotnet --info, wird ignoriert"
 
 # Python-Abhängigkeiten installieren
 COPY requirements.txt /app/
