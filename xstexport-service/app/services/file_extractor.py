@@ -89,8 +89,9 @@ async def extract_calendar_from_existing_file(request: Request):
         target_folder = body_data.get("target_folder", None)
         return_file = body_data.get("return_file", False)
         
-        # NEU: Ordnername aus der Anfrage lesen, mit Standardwert "Calendar"
+        # NEU: Extrahiere Ordnername und extract_all Option aus der Anfrage
         pst_folder = body_data.get("pst_folder", "Calendar")
+        extract_all = body_data.get("extract_all", False)
         
         # Prüfen, ob die Datei existiert
         source_path = os.path.join("/data/ost", filename)
@@ -103,14 +104,18 @@ async def extract_calendar_from_existing_file(request: Request):
         # Mock-UploadFile mit dem Dateinamen erstellen
         mock_file = MockUploadFile(filename)
         
-        logger.info(f"Extraktion mit Format {format} für Datei {filename} aus Ordner {pst_folder} gestartet")
+        if extract_all:
+            logger.info(f"Extraktion mit Format {format} für Datei {filename} - Alle Elemente extrahieren")
+        else:
+            logger.info(f"Extraktion mit Format {format} für Datei {filename} aus Ordner {pst_folder} gestartet")
         
-        # Kalenderdaten extrahieren mit angepasstem Ordner
+        # Kalenderdaten extrahieren mit angepasstem Ordner und extract_all Option
         result = await extract_calendar_data(
             mock_file,
             format,
             target_folder,
-            pst_folder  # Übergebe den benutzerdefinierten Ordnernamen
+            pst_folder,
+            extract_all
         )
         
         if return_file:

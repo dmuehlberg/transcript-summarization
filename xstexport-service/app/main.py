@@ -33,20 +33,22 @@ async def get_form_data(
     format: str = Form("csv"),
     target_folder: Optional[str] = Form(None),
     return_file: bool = Form(False),
-    pst_folder: str = Form("Calendar")  # Neuer Parameter für Ordnernamen
+    pst_folder: str = Form("Calendar"),  # Parameter für Ordnernamen
+    extract_all: bool = Form(False)  # Neuer Parameter für "alle Elemente extrahieren"
 ):
     return {
         "file": file,
         "format": format,
         "target_folder": target_folder,
         "return_file": return_file,
-        "pst_folder": pst_folder
+        "pst_folder": pst_folder,
+        "extract_all": extract_all
     }
 
 @app.post("/extract-calendar/")
 async def extract_calendar(form_data: dict = Depends(get_form_data)):
     """
-    Extrahiert Kalenderdaten aus PST/OST-Dateien.
+    Extrahiert Kalenderdaten oder alle Daten aus PST/OST-Dateien.
     
     Args:
         file: Die PST/OST-Datei
@@ -54,19 +56,24 @@ async def extract_calendar(form_data: dict = Depends(get_form_data)):
         target_folder: Optionaler Zielordner (Standard: gleiches Verzeichnis wie Quelldatei)
         return_file: Ob die ZIP-Datei als Download zurückgegeben werden soll
         pst_folder: Name des Ordners in der PST-Datei, aus dem Kalender extrahiert werden sollen (Standard: "Calendar")
+        extract_all: Ob alle Elemente aus der PST-Datei extrahiert werden sollen (Standard: False)
     
     Returns:
         Bei return_file=True: Die ZIP-Datei als Download
         Bei return_file=False: JSON-Antwort mit Pfad zur generierten ZIP-Datei
     """
     try:
-        logger.info(f"Extraktion mit Format {form_data['format']} aus Ordner {form_data['pst_folder']} gestartet")
+        if form_data["extract_all"]:
+            logger.info(f"Extraktion mit Format {form_data['format']} - Alle Elemente extrahieren")
+        else:
+            logger.info(f"Extraktion mit Format {form_data['format']} aus Ordner {form_data['pst_folder']} gestartet")
         
         result = await extract_calendar_data(
             form_data["file"], 
             form_data["format"], 
             form_data["target_folder"],
-            form_data["pst_folder"]  # Übergebe den Ordnernamen
+            form_data["pst_folder"],
+            form_data["extract_all"]
         )
         
         if form_data["return_file"]:
@@ -96,7 +103,7 @@ async def extract_calendar(form_data: dict = Depends(get_form_data)):
 @app.post("/extract-calendar-from-file")
 async def extract_calendar_file_endpoint(request: Request):
     """
-    Extrahiert Kalenderdaten aus einer vorhandenen PST/OST-Datei im Container.
+    Extrahiert Kalenderdaten oder alle Daten aus einer vorhandenen PST/OST-Datei im Container.
     
     Body-Parameter:
         filename: Name der Datei im /data/ost-Verzeichnis
@@ -104,6 +111,7 @@ async def extract_calendar_file_endpoint(request: Request):
         target_folder: Optionaler Zielordner (Standard: gleiches Verzeichnis wie Quelldatei)
         return_file: Ob die ZIP-Datei als Download zurückgegeben werden soll
         pst_folder: Name des Ordners in der PST-Datei (Standard: "Calendar")
+        extract_all: Ob alle Elemente extrahiert werden sollen (Standard: False)
     
     Returns:
         Bei return_file=True: Die ZIP-Datei als Download

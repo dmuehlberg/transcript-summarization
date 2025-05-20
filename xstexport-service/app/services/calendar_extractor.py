@@ -36,16 +36,18 @@ async def extract_calendar_data(
     file: UploadFile, 
     format: str = "csv",
     target_folder: Optional[str] = None,
-    pst_folder: str = "Calendar"  # Neuer Parameter für benutzerdefinierten Ordner
+    pst_folder: str = "Calendar",  # Standardwert für Kompatibilität
+    extract_all: bool = False  # Neue Option zum Extrahieren aller Elemente
 ) -> ExtractionResult:
     """
-    Extrahiert Kalenderdaten aus einer PST/OST-Datei.
+    Extrahiert Kalenderdaten oder alle Daten aus einer PST/OST-Datei.
     
     Args:
         file: Die hochgeladene PST/OST-Datei
         format: Format der Extraktion ('csv' oder 'native')
         target_folder: Optionaler Zielordner
-        pst_folder: Name des Ordners in der PST-Datei (Standard: "Calendar")
+        pst_folder: Name des Ordners in der PST-Datei (wird ignoriert, wenn extract_all=True)
+        extract_all: Ob alle Elemente extrahiert werden sollen
         
     Returns:
         ExtractionResult: Ergebnis mit Pfad zur ZIP-Datei
@@ -119,14 +121,25 @@ async def extract_calendar_data(
         
         # XstExporter.Portable aufrufen
         export_option = "-e" if format == "native" else "-p"
-        cmd = [
-            "dotnet", 
-            dll_path, 
-            export_option,
-            f"-f={pst_folder}",  # Angepasst: Benutzerdefinierten Ordner verwenden
-            "-t=" + result_dir,
-            file_path
-        ]
+        
+        # CMD erzeugen je nach extract_all Option
+        cmd = ["dotnet", dll_path, export_option]
+        
+        if extract_all:
+            # Wenn alle Elemente extrahiert werden sollen, verwenden wir keinen -f Parameter
+            cmd.extend([
+                "-t=" + result_dir,
+                file_path
+            ])
+            extraction_type = "all items"
+        else:
+            # Wenn nur ein bestimmter Ordner extrahiert werden soll
+            cmd.extend([
+                f"-f={pst_folder}",
+                "-t=" + result_dir,
+                file_path
+            ])
+            extraction_type = pst_folder
         
         # Füge Umgebungsvariable für .NET-Debug-Ausgabe hinzu
         dotnet_env = os.environ.copy()
@@ -154,6 +167,18 @@ async def extract_calendar_data(
                 stderr_text = process.stderr.decode('utf-8', errors='replace')
                 error_msg = f"Extraktion fehlgeschlagen: {stderr_text}"
                 logger.error(error_msg)
+                
+                # Wenn der Fehler "Cannot find folder" ist und wir nicht extract_all verwenden,
+                # versuchen wir es erneut mit extract_all=True
+                if not extract_all and "Cannot find folder" in stderr_text:
+                    logger.info(f"Ordner '{pst_folder}' nicht gefunden, versuche alle Elemente zu extrahieren")
+                    return await extract_calendar_data(
+                        file=file,
+                        format=format,
+                        target_folder=target_folder,
+                        extract_all=True
+                    )
+                
                 raise HTTPException(
                     status_code=500, 
                     detail=error_msg
@@ -167,7 +192,11 @@ async def extract_calendar_data(
         base_filename = os.path.splitext(source_filename)[0]
         
         # Ergebnisse als ZIP verpacken und in das Ausgangsverzeichnis schreiben
-        output_zip_name = f"{base_filename}_{pst_folder.lower()}_export.zip"
+        if extract_all:
+            output_zip_name = f"{base_filename}_all_export.zip"
+        else:
+            output_zip_name = f"{base_filename}_{pst_folder.lower()}_export.zip"
+            
         output_zip_path = os.path.join(output_dir, output_zip_name)
         
         # Stellen sicher, dass das Ausgabeverzeichnis existiert
@@ -183,7 +212,7 @@ async def extract_calendar_data(
         
         return ExtractionResult(
             zip_path=output_zip_path,
-            message=f"{pst_folder} data successfully extracted to {output_zip_path}"
+            message=f"{extraction_type} data successfully extracted to {output_zip_path}"
         )
     
     except Exception as e:
