@@ -5,9 +5,11 @@ import shutil
 from typing import Optional, Dict, Any
 from fastapi import UploadFile, HTTPException
 from pydantic import BaseModel
+import logging
 
-from app.models.request_models import CalendarExtractionParams
 from app.utils.file_utils import cleanup_temp_dir
+
+logger = logging.getLogger(__name__)
 
 class ExtractionResult(BaseModel):
     zip_path: str
@@ -15,14 +17,16 @@ class ExtractionResult(BaseModel):
 
 async def extract_calendar_data(
     file: UploadFile, 
-    params: CalendarExtractionParams
+    format: str = "csv",
+    target_folder: Optional[str] = None
 ) -> ExtractionResult:
     """
     Extrahiert Kalenderdaten aus einer PST/OST-Datei.
     
     Args:
         file: Die hochgeladene PST/OST-Datei
-        params: Parameter für die Extraktion
+        format: Format der Extraktion ('csv' oder 'native')
+        target_folder: Optionaler Zielordner
         
     Returns:
         ExtractionResult: Ergebnis mit Pfad zur ZIP-Datei
@@ -30,19 +34,35 @@ async def extract_calendar_data(
     Raises:
         HTTPException: Bei Fehlern während der Extraktion
     """
+    # Bestimmen des Quellverzeichnisses, falls target_folder nicht angegeben ist
+    source_dir = "/data/ost"  # Standard-Verzeichnis im Container
+    
     # Temporäres Verzeichnis für die Verarbeitung erstellen
     temp_dir = tempfile.mkdtemp()
     result_dir = os.path.join(temp_dir, "result")
     os.makedirs(result_dir, exist_ok=True)
     
     # Upload-Datei speichern
-    file_path = os.path.join(temp_dir, file.filename)
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    source_filename = file.filename
+    source_path = os.path.join(source_dir, source_filename)
+    
+    # Bestimmen des Ausgabe-Verzeichnisses
+    output_dir = target_folder if target_folder else source_dir
+    
+    # PST/OST-Datei aus source_dir verwenden, falls verfügbar, sonst Upload-Datei verwenden
+    file_path = ""
+    if os.path.exists(source_path):
+        logger.info(f"Verwende vorhandene Datei aus {source_path}")
+        file_path = source_path
+    else:
+        logger.info(f"Datei nicht in {source_dir} gefunden, verwende Upload-Datei")
+        file_path = os.path.join(temp_dir, source_filename)
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
     
     try:
         # XstPortableExport aufrufen
-        export_option = "-e" if params.format == "native" else "-p"
+        export_option = "-e" if format == "native" else "-p"
         cmd = [
             "dotnet", 
             "/app/XstPortableExport.dll", 
@@ -52,6 +72,7 @@ async def extract_calendar_data(
             file_path
         ]
         
+        logger.info(f"Führe Befehl aus: {' '.join(cmd)}")
         process = subprocess.run(
             cmd, 
             capture_output=True, 
@@ -59,28 +80,46 @@ async def extract_calendar_data(
         )
         
         if process.returncode != 0:
+            error_msg = f"Extraction failed: {process.stderr}"
+            logger.error(error_msg)
             raise HTTPException(
                 status_code=500, 
-                detail=f"Extraction failed: {process.stderr}"
+                detail=error_msg
             )
         
-        # Ergebnisse als ZIP verpacken für den Download
-        output_zip = os.path.join(temp_dir, "calendar_export.zip")
+        # Erstelle Basis-Dateiname für die ZIP-Datei (ohne Erweiterung)
+        base_filename = os.path.splitext(source_filename)[0]
+        
+        # Ergebnisse als ZIP verpacken und in das Ausgangsverzeichnis schreiben
+        output_zip_name = f"{base_filename}_calendar_export.zip"
+        output_zip_path = os.path.join(output_dir, output_zip_name)
+        
+        # Stellen sicher, dass das Ausgabeverzeichnis existiert
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Erstelle das ZIP-Archiv
+        logger.info(f"Erstelle ZIP-Archiv unter {output_zip_path}")
         shutil.make_archive(
-            os.path.splitext(output_zip)[0],  # Basis-Dateiname ohne Erweiterung
+            os.path.splitext(output_zip_path)[0],  # Basis-Dateiname ohne Erweiterung
             'zip',
             result_dir
         )
         
         return ExtractionResult(
-            zip_path=output_zip,
-            message="Calendar data successfully extracted"
+            zip_path=output_zip_path,
+            message=f"Calendar data successfully extracted to {output_zip_path}"
         )
     
     except Exception as e:
         # Bei Fehler das temporäre Verzeichnis aufräumen
         cleanup_temp_dir(temp_dir)
-        # Fehler weiterwerfen
+        # Fehler protokollieren und weiterwerfen
+        error_msg = f"Error during extraction: {str(e)}"
+        logger.error(error_msg)
         if isinstance(e, HTTPException):
             raise e
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=error_msg)
+    finally:
+        # Temporäres Verzeichnis aufräumen, aber nur wenn wir nicht die Quelldatei verwenden
+        if file_path != source_path:
+            cleanup_temp_dir(temp_dir)
