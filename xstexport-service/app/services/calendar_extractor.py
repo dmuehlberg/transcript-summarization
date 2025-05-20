@@ -78,11 +78,15 @@ async def extract_calendar_data(
             shutil.copyfileobj(file.file, buffer)
     
     try:
-        # Finde den korrekten Pfad zur DLL
-        dll_path = find_dll("XstPortableExport.dll")
-        logger.info(f"Gefundener Pfad zu XstPortableExport.dll: {dll_path}")
+        # Finde den korrekten Pfad zur DLL (erst XstExporter.Portable.dll versuchen, dann XstPortableExport.dll als Fallback)
+        dll_path = find_dll("XstExporter.Portable.dll")
+        if "XstExporter.Portable.dll" not in dll_path:
+            # Fallback zur alten DLL-Benennung
+            dll_path = find_dll("XstPortableExport.dll")
         
-        # XstPortableExport aufrufen
+        logger.info(f"Gefundener Pfad zur DLL: {dll_path}")
+        
+        # XstExporter.Portable aufrufen
         export_option = "-e" if format == "native" else "-p"
         cmd = [
             "dotnet", 

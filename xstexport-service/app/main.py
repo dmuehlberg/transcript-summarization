@@ -5,23 +5,17 @@ FROM mcr.microsoft.com/dotnet/runtime:6.0
 RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
-    wget \
-    unzip \
-    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Arbeitsverzeichnis einrichten
 WORKDIR /app
 
-# XstReader herunterladen und entpacken - manuell ohne GitHub API
-RUN wget -q --no-check-certificate "https://github.com/iluvadev/XstReader/releases/download/v2.1.0/XstReader.zip" -O xstreader.zip || \
-    curl -L -o xstreader.zip "https://github.com/iluvadev/XstReader/releases/download/v2.1.0/XstReader.zip" && \
-    unzip -q xstreader.zip && \
-    # Debug
-    find . -type f -o -type d | sort > /app/file_structure.txt && \
-    ls -la /app/ > /app/app_contents.txt && \
-    # Bereinigen
-    rm -f xstreader.zip
+# Lokale XstReader-Dateien kopieren statt herunterladen
+COPY XstReader/ /app/
+
+# Debug-Info erstellen
+RUN find . -type f -o -type d | sort > /app/file_structure.txt && \
+    ls -la /app/ > /app/app_contents.txt
 
 # Python-Abhängigkeiten installieren
 COPY requirements.txt /app/
