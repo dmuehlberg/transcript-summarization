@@ -19,7 +19,7 @@ def get_extraction_params(
 @app.post("/extract-calendar/")
 async def extract_calendar(
     file: UploadFile = File(...),
-    params: CalendarExtractionParams = Depends()
+    params: CalendarExtractionParams = Depends(get_extraction_params)
 ):
     """
     Extrahiert Kalenderdaten aus PST/OST-Dateien und gibt sie als ZIP-Datei zurück.
