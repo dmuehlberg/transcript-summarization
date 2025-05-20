@@ -1,68 +1,40 @@
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
-from fastapi.responses import FileResponse, JSONResponse
-from typing import Optional
-import os
+# Neueres .NET Runtime als Basis (6.0 statt 2.1)
+FROM mcr.microsoft.com/dotnet/runtime:6.0
 
-from app.services.calendar_extractor import extract_calendar_data
+# Benötigte Pakete installieren
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    wget \
+    unzip \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
-app = FastAPI(title="PST/OST Calendar Extractor API")
+# Arbeitsverzeichnis einrichten
+WORKDIR /app
 
-@app.post("/extract-calendar/")
-async def extract_calendar(
-    file: UploadFile = File(...),
-    format: str = Form("csv"),
-    target_folder: Optional[str] = Form(None),
-    return_file: bool = Form(False)  # Neuer Parameter, ob die Datei zurückgegeben werden soll
-):
-    """
-    Extrahiert Kalenderdaten aus PST/OST-Dateien.
-    
-    Args:
-        file: Die PST/OST-Datei
-        format: Format der Extraktion ('csv' oder 'native')
-        target_folder: Optionaler Zielordner (Standard: gleiches Verzeichnis wie Quelldatei)
-        return_file: Ob die ZIP-Datei als Download zurückgegeben werden soll
-    
-    Returns:
-        Bei return_file=True: Die ZIP-Datei als Download
-        Bei return_file=False: JSON-Antwort mit Pfad zur generierten ZIP-Datei
-    """
-    result = await extract_calendar_data(file, format, target_folder)
-    
-    if return_file:
-        return FileResponse(
-            result.zip_path, 
-            media_type="application/zip",
-            filename=os.path.basename(result.zip_path)
-        )
-    else:
-        return JSONResponse(
-            content={
-                "status": "success",
-                "message": result.message,
-                "output_file": result.zip_path
-            }
-        )
+# XstReader herunterladen und entpacken - manuell ohne GitHub API
+RUN wget -q --no-check-certificate "https://github.com/iluvadev/XstReader/releases/download/v2.1.0/XstReader.zip" -O xstreader.zip || \
+    curl -L -o xstreader.zip "https://github.com/iluvadev/XstReader/releases/download/v2.1.0/XstReader.zip" && \
+    unzip -q xstreader.zip && \
+    # Debug
+    find . -type f -o -type d | sort > /app/file_structure.txt && \
+    ls -la /app/ > /app/app_contents.txt && \
+    # Bereinigen
+    rm -f xstreader.zip
 
-@app.get("/health")
-def health_check():
-    """
-    Endpoint zum Überprüfen der Anwendungsverfügbarkeit.
-    """
-    return {"status": "healthy", "version": "1.0.0"}
+# Python-Abhängigkeiten installieren
+COPY requirements.txt /app/
+RUN pip3 install -r requirements.txt
 
+# FastAPI-Anwendung kopieren
+COPY app/ /app/app/
 
-@app.get("/debug/files")
-def list_files():
-    """
-    Zeigt den Inhalt des Anwendungsverzeichnisses für Debugging-Zwecke an.
-    """
-    app_dir = "/app"
-    file_list = []
-    
-    for root, dirs, files in os.walk(app_dir):
-        for file in files:
-            file_path = os.path.join(root, file)
-            file_list.append(file_path)
-    
-    return {"files": file_list}
+# Ausgabeverzeichnis für OST-Dateien erstellen
+RUN mkdir -p /data/ost && chmod 777 /data/ost
+
+# Port öffnen
+EXPOSE 8200
+
+# FastAPI starten
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8200"]
