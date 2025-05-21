@@ -197,6 +197,12 @@ services:
       - DB_USER=${POSTGRES_USER}
       - DB_PASSWORD=${POSTGRES_PASSWORD}
       - DB_NAME=${POSTGRES_DB}
+      - THREADS=56
+      - OMP_NUM_THREADS=56
+      - NUMBA_NUM_THREADS=56
+      - MKL_NUM_THREADS=56
+      - TF_INTRA_OP_PARALLELISM_THREADS=56
+      - TF_INTER_OP_PARALLELISM_THREADS=4
     depends_on:
       postgres:
         condition: service_healthy
