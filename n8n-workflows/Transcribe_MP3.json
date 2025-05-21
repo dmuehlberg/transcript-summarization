@@ -229,6 +229,31 @@
               },
               "renameOutput": true,
               "outputKey": "remote"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "b4456cb5-b856-468a-8ea7-2e0406615114",
+                    "leftValue": "={{ $json.infrastructure }}",
+                    "rightValue": "nvidia_brev",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "nvidia_brev"
             }
           ]
         },
@@ -563,6 +588,30 @@
       ],
       "id": "9600738d-f9d1-449a-b1b5-5d3df9c6a55d",
       "name": "Set Process ID"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "25c5729e-a0c1-4f21-a1a9-61c49a74e9c3",
+              "name": "transcriptionHost",
+              "value": "192.168.0.91",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1120,
+        360
+      ],
+      "id": "7aa0c9db-6afb-446d-96a7-ceaa01895383",
+      "name": "Set Remote Nvidia Brev Transcription Host"
     }
   ],
   "pinData": {
@@ -665,6 +714,13 @@
         [
           {
             "node": "Set Remote Transcription Host",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set Remote Nvidia Brev Transcription Host",
             "type": "main",
             "index": 0
           }
@@ -818,13 +874,24 @@
           }
         ]
       ]
+    },
+    "Set Remote Nvidia Brev Transcription Host": {
+      "main": [
+        [
+          {
+            "node": "Set Final Transcription Host",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": false,
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "04bbc9d0-7684-4231-ad32-174a389d129b",
+  "versionId": "6afcfd8e-cd52-4d25-91c3-6b67d72819d4",
   "meta": {
     "instanceId": "6d4fe15f3d7a2136d5134243b845c1a09442b26a050f667c7ca033e72ef9ef63"
   },
