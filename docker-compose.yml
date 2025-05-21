@@ -181,6 +181,27 @@ services:
         condition: service_healthy
 
 
+  whisperx_gpu:
+    build:
+      context: ./whisperX-FastAPI
+    container_name: whisperx
+    networks: ['demo']
+    ports:
+      - "8000:8000"
+    # volumes:
+    #   - ./whisperx-service/app:/app
+    environment:
+      - DEVICE=cuda
+      - HF_TOKEN=${HF_TOKEN}
+      - DB_HOST=postgres
+      - DB_USER=${POSTGRES_USER}
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
+      - DB_NAME=${POSTGRES_DB}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+
   pypff-service:
     platform: ${TARGETPLATFORM:-linux/amd64}
     build:
