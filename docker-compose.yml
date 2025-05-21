@@ -183,8 +183,8 @@ services:
 
   whisperx_gpu:
     build:
-      context: ./whisperX-FastAPI
-    container_name: whisperx
+      context: ./whisperX-FastAPI-cuda
+    container_name: whisperx-cuda
     networks: ['demo']
     ports:
       - "8000:8000"
