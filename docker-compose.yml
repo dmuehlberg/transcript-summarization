@@ -203,6 +203,7 @@ services:
       - MKL_NUM_THREADS=56
       - TF_INTRA_OP_PARALLELISM_THREADS=56
       - TF_INTER_OP_PARALLELISM_THREADS=4
+      - LOGLEVEL=DEBUG
     depends_on:
       postgres:
         condition: service_healthy
