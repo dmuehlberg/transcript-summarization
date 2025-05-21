@@ -1,0 +1,52 @@
+# Verwenden eines stabileren CUDA-Images mit cuDNN
+FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
+
+ENV PYTHON_VERSION=3.11
+ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/include:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH
+
+# Install dependencies
+RUN export DEBIAN_FRONTEND=noninteractive \
+    && apt-get -y update \
+    && apt-get -y install --no-install-recommends \
+    software-properties-common \
+    && add-apt-repository ppa:deadsnakes/ppa \
+    && apt-get -y update \
+    && apt-get -y install --no-install-recommends \
+    python3.11 \
+    python3-pip \
+    python3.11-venv \
+    git \
+    ffmpeg \
+    libsndfile1 \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -s -f /usr/bin/python${PYTHON_VERSION} /usr/bin/python3 \
+    && ln -s -f /usr/bin/python${PYTHON_VERSION} /usr/bin/python
+
+# Install UV for package management
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+WORKDIR /app
+
+# Copy application code
+COPY app app/
+COPY tests tests/
+COPY app/gunicorn_logging.conf .
+COPY requirements requirements/
+
+# Zeige die verfügbaren cuDNN-Bibliotheken für Diagnose 
+RUN find /usr -name "libcudnn*.so*" 2>/dev/null | sort
+
+# Explizit kompatible PyTorch-Version installieren statt system.txt zu verwenden
+RUN uv pip install --system --no-cache-dir torch==2.1.0+cu121 torchvision==0.16.0+cu121 torchaudio==2.1.0+cu121 -f https://download.pytorch.org/whl/cu121/torch_stable.html \
+    && uv pip install --system --no-cache-dir numba==0.61.0 \
+    && uv pip install --system --no-cache-dir -r requirements/prod.txt \
+    # Clean pip cache and temporary files
+    && rm -rf /root/.cache /tmp/*
+
+# Verifiziere die PyTorch-Installation
+RUN python -c "import torch; print('CUDA available:', torch.cuda.is_available()); print('PyTorch version:', torch.__version__); print('CUDA version:', torch.version.cuda if torch.cuda.is_available() else 'N/A')"
+
+EXPOSE 8000
+
+ENTRYPOINT ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "1", "--timeout", "0", "--log-config", "gunicorn_logging.conf", "app.main:app", "-k", "uvicorn.workers.UvicornWorker"]
