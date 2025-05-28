@@ -131,7 +131,10 @@ curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/
 echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
 apt-get update
 apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+# Docker ohne sudo nutzen können
 usermod -aG docker ubuntu
+systemctl restart docker
 
 # NVIDIA-Treiber und Container-Runtime installieren
 distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
@@ -146,8 +149,26 @@ cd /home/ubuntu
 wget https://raw.githubusercontent.com/dmuehlberg/transcript-summarization/main/container-setup.sh
 chmod +x container-setup.sh
 
-# Setup-Skript ausführen
-./container-setup.sh
+# Erstelle ein Skript, das das Setup mit den richtigen Berechtigungen ausführt
+cat > /home/ubuntu/run_setup.sh << 'SETUPSCRIPT'
+#!/bin/bash
+cd /home/ubuntu
+# Prüfen, ob Benutzer Docker-Rechte hat
+if groups | grep -q docker; then
+  echo "Docker-Gruppe ist korrekt konfiguriert, führe Setup aus..."
+  ./container-setup.sh
+else
+  echo "Docker-Gruppe ist nicht konfiguriert, führe Setup mit sudo aus..."
+  sudo ./container-setup.sh
+fi
+SETUPSCRIPT
+
+chmod +x /home/ubuntu/run_setup.sh
+chown ubuntu:ubuntu /home/ubuntu/run_setup.sh
+chown ubuntu:ubuntu /home/ubuntu/container-setup.sh
+
+# Setup-Skript als ubuntu-Benutzer ausführen
+sudo -u ubuntu /bin/bash -c '/home/ubuntu/run_setup.sh'
 
 echo "WhisperX-Installation abgeschlossen."
 echo "API sollte unter http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4):8000 verfügbar sein."
