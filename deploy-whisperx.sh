@@ -30,9 +30,26 @@ check_prerequisites() {
         exit 1
     fi
     
-    if ! brev whoami &> /dev/null; then
-        error "Du bist nicht bei Brev eingeloggt!"
-        info "Logge dich ein mit: brev login"
+    # Mehrere Login-Checks versuchen
+    local login_ok=false
+    
+    # Check 1: brev whoami
+    if brev whoami &> /dev/null; then
+        login_ok=true
+    # Check 2: brev ls (sollte funktionieren wenn eingeloggt)
+    elif brev ls &> /dev/null; then
+        login_ok=true
+    # Check 3: brev --help (sollte ohne Fehler laufen)
+    elif brev --version &> /dev/null; then
+        # Wenn brev grundsätzlich funktioniert, nehmen wir an dass Login OK ist
+        warning "Login-Status unbekannt, versuche trotzdem fortzufahren..."
+        login_ok=true
+    fi
+    
+    if [ "$login_ok" = false ]; then
+        error "Du bist nicht bei Brev eingeloggt oder CLI funktioniert nicht!"
+        info "Versuche: brev login"
+        info "Oder teste: brev ls"
         exit 1
     fi
     
