@@ -93,6 +93,37 @@ create_new_instance() {
   info "   - GPU: $CHOSEN_GPU"
   info "   - Speicher: ${STORAGE_SIZE}GB"
 
+  # Setup-Skript lokal vorbereiten
+  local temp_dir="/tmp/brev-whisperx-$instance_name"
+  mkdir -p "$temp_dir"
+  echo "$SETUP_SCRIPT" | sed "s|GIT_REPO_PLACEHOLDER|$GIT_REPO|g" > "$temp_dir/setup.sh"
+  chmod +x "$temp_dir/setup.sh"
+
+  # Instanz erstellen
+  if brev create "$instance_name" --gpu "$CHOSEN_GPU"; then
+    log "✅ Instanz erfolgreich erstellt!"
+    log "⏳ Warte bis Instanz startet..."
+    # Warten bis der Status RUNNING angezeigt wird
+    until brev ls | grep -q "${instance_name}.*RUNNING"; do
+      sleep 5
+    done
+    log "🚀 Führe Setup-Skript auf Instanz aus..."
+    cat "$temp_dir/setup.sh" | brev shell "$instance_name" -- bash -s
+    rm -rf "$temp_dir"
+
+    # Status anzeigen
+    show_instance_status "$instance_name"
+
+    # Optional SSH-Verbindung
+    read -p "SSH-Verbindung zur Instanz? (y/N): " -n1 -r; echo
+    [[ $REPLY =~ ^[Yy]$ ]] && ssh_to_instance "$instance_name"
+  else
+    error "Instanz-Erstellung fehlgeschlagen!"
+    warning "Ungültiger GPU-Typ oder Quota-Probleme"
+    rm -rf "$temp_dir"
+  fi
+}GB"
+
   # Setup-Script vorbereiten
   local temp_dir="/tmp/brev-whisperx-$instance_name"
   mkdir -p "$temp_dir"
