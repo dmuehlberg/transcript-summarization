@@ -126,19 +126,41 @@ apt-get update && apt-get upgrade -y
 # Grundlegende Tools installieren
 apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release git jq wget
 
-# Docker installieren
+# Vollständige Neuinstallation von Docker
+echo "Vollständige Neuinstallation von Docker..."
+apt-get remove -y docker docker-engine docker.io containerd runc || true
+rm -rf /var/lib/docker /var/lib/containerd || true
+
+# Docker-Abhängigkeiten installieren
+apt-get update
+apt-get install -y \
+    apt-transport-https \
+    ca-certificates \
+    curl \
+    gnupg \
+    lsb-release
+
+# Docker Repository hinzufügen
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
 echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+# Docker installieren
 apt-get update
 apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
-# Sicherstellen, dass Docker-Dienst aktiv ist
+# Stellen Sie sicher, dass Docker-Socket Berechtigungen hat
+chmod 666 /var/run/docker.sock
 systemctl enable docker
 systemctl start docker
-systemctl status docker
+sleep 2
 
-# Docker ohne sudo nutzen können
+# Docker-Berechtigungen prüfen
+echo "Docker-Socket-Berechtigungen:"
+ls -la /var/run/docker.sock
+
+# Benutzer zur Docker-Gruppe hinzufügen
 usermod -aG docker ubuntu
+newgrp docker || true
 
 # NVIDIA-Treiber und Container-Runtime installieren
 distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
@@ -146,56 +168,56 @@ curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | apt-key add -
 curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | tee /etc/apt/sources.list.d/nvidia-docker.list
 apt-get update
 apt-get install -y nvidia-driver-525 nvidia-docker2
-
-# Docker neu starten um nvidia-docker zu aktivieren
 systemctl restart docker
+sleep 5
 
-# Das Setup-Skript herunterladen und ausführen
+# Das Setup-Skript herunterladen
 cd /home/ubuntu
 wget https://raw.githubusercontent.com/dmuehlberg/transcript-summarization/main/container-setup.sh
 chmod +x container-setup.sh
+chown ubuntu:ubuntu container-setup.sh
 
-# Erstelle ein Docker-Test-Skript
-cat > /home/ubuntu/test_docker.sh << 'TESTSCRIPT'
-#!/bin/bash
-echo "Testing Docker installation..."
-if docker info > /dev/null 2>&1; then
-  echo "Docker is running correctly"
-else
-  echo "Docker is NOT running correctly"
-  echo "Trying to start Docker service..."
-  sudo systemctl start docker
-  sleep 2
-  if docker info > /dev/null 2>&1; then
-    echo "Docker is now running correctly"
-  else
-    echo "Docker still not running correctly. Please check the logs."
-    sudo systemctl status docker
-  fi
-fi
-TESTSCRIPT
+chmod +x /home/ubuntu/modify_env.sh
+chown ubuntu:ubuntu /home/ubuntu/modify_env.sh
 
-chmod +x /home/ubuntu/test_docker.sh
-chown ubuntu:ubuntu /home/ubuntu/test_docker.sh
-
-# Erstelle ein Setup-Ausführungsskript
+# Erstelle ein Wrapper-Skript, das das Container-Setup ausführt
 cat > /home/ubuntu/run_setup.sh << 'SETUPSCRIPT'
 #!/bin/bash
-cd /home/ubuntu
-echo "Running Docker test..."
-./test_docker.sh
+set -e
 
-echo "Running container setup script..."
-# Führe das Setup als root aus, um sicherzustellen, dass es keine Berechtigungsprobleme gibt
-sudo ./container-setup.sh
+cd /home/ubuntu
+
+# Docker-Diagnose
+echo "Docker-Diagnose ausführen..."
+docker --version
+docker info || sudo docker info
+docker ps || sudo docker ps
+
+# Docker-Socket-Berechtigungen anpassen, falls nötig
+if [ ! -w /var/run/docker.sock ]; then
+  echo "Berechtigungen für Docker-Socket anpassen..."
+  sudo chmod 666 /var/run/docker.sock
+fi
+
+# Container-Setup ausführen
+echo "Führe container-setup.sh aus..."
+./container-setup.sh
+
+# Nach der Installation den HF_TOKEN in .env aktualisieren
+./modify_env.sh
+
+echo "Setup abgeschlossen!"
 SETUPSCRIPT
 
 chmod +x /home/ubuntu/run_setup.sh
 chown ubuntu:ubuntu /home/ubuntu/run_setup.sh
-chown ubuntu:ubuntu /home/ubuntu/container-setup.sh
 
-# Setup-Skript als root ausführen, um Berechtigungsprobleme zu vermeiden
-/home/ubuntu/run_setup.sh
+# Setup als ubuntu-Benutzer ausführen
+echo "Führe Setup-Skript als ubuntu-Benutzer aus..."
+sudo -i -u ubuntu bash -c "cd /home/ubuntu && ./run_setup.sh" || {
+  echo "Setup als ubuntu-Benutzer fehlgeschlagen, versuche als root..."
+  cd /home/ubuntu && ./run_setup.sh
+}
 
 echo "WhisperX-Installation abgeschlossen."
 echo "API sollte unter http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4):8000 verfügbar sein."
