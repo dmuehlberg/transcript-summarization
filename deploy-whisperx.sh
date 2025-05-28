@@ -46,7 +46,7 @@ sudo apt-get update -y
 sudo apt-get install -y git curl wget jq
 
 # Docker installieren
-if ! command -v docker &> /dev/null; then
+if ! command -v docker &>/dev/null; then
   log "Installiere Docker..."
   curl -fsSL https://get.docker.com -o get-docker.sh
   sudo sh get-docker.sh
@@ -55,7 +55,7 @@ if ! command -v docker &> /dev/null; then
 fi
 
 # Docker Compose installieren
-if ! command -v docker-compose &> /dev/null; then
+if ! command -v docker-compose &>/dev/null; then
   log "Installiere Docker Compose..."
   sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
   sudo chmod +x /usr/local/bin/docker-compose
@@ -141,12 +141,12 @@ choose_gpu_type() {
 # Prüfe Voraussetzungen für Brev CLI
 check_prerequisites() {
   log "Überprüfe Voraussetzungen..."
-  if ! command -v brev &> /dev/null; then
+  if ! command -v brev &>/dev/null; then
     error "Brev CLI ist nicht installiert!"
     info "Installiere mit: curl -fsSL https://raw.githubusercontent.com/brevdev/brev-cli/main/install.sh | bash"
     exit 1
   fi
-  if ! brev ls &> /dev/null; then
+  if ! brev ls &>/dev/null; then
     error "Nicht eingeloggt bei Brev CLI. Führe 'brev login' aus."
     exit 1
   fi
@@ -181,13 +181,12 @@ create_new_instance() {
   info "   - GPU: $CHOSEN_GPU"
   info "   - Speicher: ${STORAGE_SIZE}GB"
 
-  # Instanz erstellen
   if brev create "$instance_name" --gpu "$CHOSEN_GPU"; then
     log "✅ Instanz erfolgreich erstellt!"
     log "⏳ Warte bis RUNNING..."
     until brev ls | grep -q "${instance_name}.*RUNNING"; do sleep 5; done
     log "🚀 Starte Setup-Skript auf Instanz..."
-    cat <(echo "$SETUP_SCRIPT") | brev shell "$instance_name" -- bash -s
+    printf "%s" "$SETUP_SCRIPT" | brev shell "$instance_name" -- bash -s
     log "✅ Setup abgeschlossen auf Instanz"
   else
     error "Instanz-Erstellung fehlgeschlagen!"
@@ -195,7 +194,8 @@ create_new_instance() {
   fi
 }
 
-# Liste Instanzenlist_instances() {
+# Liste Instanzen
+list_instances() {
   log "Alle Instanzen:"; brev ls
 }
 
@@ -235,7 +235,7 @@ show_config_info() {
   info " REGION=$REGION"
 }
 
-# Show Instance Status
+# Status anzeigen
 show_instance_status() {
   brev describe "$1"
 }
@@ -248,7 +248,7 @@ main() {
     case $choice in
       1) create_new_instance ;; 2) list_instances ;; 3) get_hostname_for_n8n ;; 4) ssh_to_instance ;;
       5) stop_instance ;; 6) delete_instance ;; 7) show_config_info ;; 8) exit 0 ;;
-      *) warning "Ungültige Auswahl." ;;
+      *) warning "Ungültige Auswahl." ;; 
     esac
   done
 }
