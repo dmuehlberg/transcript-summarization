@@ -139,6 +139,7 @@ curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | apt-key add -
 curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | tee /etc/apt/sources.list.d/nvidia-docker.list
 apt-get update
 apt-get install -y nvidia-driver-525 nvidia-docker2
+usermod -aG docker ubuntu
 systemctl restart docker
 
 # Das Setup-Skript herunterladen und ausführen
