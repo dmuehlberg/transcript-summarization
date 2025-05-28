@@ -139,10 +139,10 @@ check_or_create_security_group() {
         # Die Sicherheitsgruppe existiert nicht, also erstellen wir sie
         log "Erstelle neue Sicherheitsgruppe '$sg_name'..."
         
-        # Erstellen der Sicherheitsgruppe
+        # Erstellen der Sicherheitsgruppe (mit ASCII-only Beschreibung)
         sg_id=$(aws ec2 create-security-group --region $REGION \
             --group-name $sg_name \
-            --description "Sicherheitsgruppe für WhisperX-Server" \
+            --description "Security Group for WhisperX Server" \
             --query "GroupId" --output text)
         
         if [[ $? -ne 0 || -z "$sg_id" ]]; then
@@ -209,7 +209,7 @@ create_instance() {
     log "Verwende AMI: $ami_id"
     
     # User-Data-Skript zur automatischen Installation bei Instanzstart
-    local user_data=$(cat <<EOF
+    local user_data=$(cat <<'EOF'
 #!/bin/bash
 exec > >(tee /var/log/user-data.log) 2>&1
 echo "Start der Installationsroutine..."
@@ -229,7 +229,7 @@ apt-get install -y \
 
 # Docker-Installation
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu \$(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
 apt-get update
 apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
@@ -237,11 +237,9 @@ apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin do
 usermod -aG docker ubuntu
 
 # NVIDIA-Treiber und Container-Runtime
-curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | \
-  apt-key add -
 distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
-curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | \
-  tee /etc/apt/sources.list.d/nvidia-docker.list
+curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | apt-key add -
+curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | tee /etc/apt/sources.list.d/nvidia-docker.list
 apt-get update
 apt-get install -y nvidia-docker2
 systemctl restart docker
