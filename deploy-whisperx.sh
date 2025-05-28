@@ -31,6 +31,94 @@ error() { echo -e "${RED}[ERROR] $1${NC}" >&2; }
 warning(){ echo -e "${YELLOW}[WARNING] $1${NC}"; }
 info()  { echo -e "${BLUE}[INFO] $1${NC}"; }
 
+# Setup-Script als String (wird auf der Instanz ausgeführt)
+SETUP_SCRIPT='#!/bin/bash
+
+set -e
+
+log() { echo "[$(date +"%H:%M:%S")] $1"; }
+
+log "🚀 Starte WhisperX Setup..."
+
+# System Updates
+log "Aktualisiere System..."
+sudo apt-get update -y
+sudo apt-get install -y git curl wget jq
+
+# Docker installieren
+if ! command -v docker &> /dev/null; then
+  log "Installiere Docker..."
+  curl -fsSL https://get.docker.com -o get-docker.sh
+  sudo sh get-docker.sh
+  sudo usermod -aG docker $USER
+  newgrp docker
+fi
+
+# Docker Compose installieren
+if ! command -v docker-compose &> /dev/null; then
+  log "Installiere Docker Compose..."
+  sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+  sudo chmod +x /usr/local/bin/docker-compose
+fi
+
+# NVIDIA Container Toolkit
+log "Installiere NVIDIA Container Toolkit..."
+distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
+curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | sudo apt-key add -
+curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | sudo tee /etc/apt/sources.list.d/nvidia-docker.list
+sudo apt-get update && sudo apt-get install -y nvidia-docker2
+sudo systemctl restart docker
+
+# Repository klonen
+log "Klone WhisperX Repository..."
+cd /home/ubuntu
+if [ ! -d "transcript-summarization" ]; then
+  git clone GIT_REPO_PLACEHOLDER
+fi
+cd transcript-summarization
+
+# .env Datei erstellen
+log "Erstelle .env Konfiguration..."
+cat > .env << EOF
+HF_TOKEN=your_huggingface_token_here
+WHISPER_MODEL=base
+DEFAULT_LANG=en
+DEVICE=cuda
+COMPUTE_TYPE=float16
+LOG_LEVEL=INFO
+ENVIRONMENT=production
+DEV=false
+FILTER_WARNING=true
+DB_URL=sqlite:///records.db
+EOF
+
+# Docker Build starten
+log "Starte Docker Build..."
+export DOCKER_CLIENT_TIMEOUT=120
+export COMPOSE_HTTP_TIMEOUT=120
+nohup bash -c "docker compose build && echo \"✅ Docker Build abgeschlossen - $(date)\" >> /home/ubuntu/build.log" > /home/ubuntu/docker-build.log 2>&1 &
+
+# Start-Script erstellen
+cat > /home/ubuntu/start-whisperx.sh << 'STARTSCRIPT'
+#!/bin/bash
+cd /home/ubuntu/transcript-summarization
+if docker images | grep -q transcript-summarization; then
+  echo "✅ Docker Image gefunden, starte Container..."
+  docker compose up -d
+  echo "🚀 WhisperX läuft auf Port 8000!"
+  echo "📖 API Docs: http://localhost:8000/docs"
+  docker compose logs -f
+else
+  echo "⏳ Docker Build läuft noch. Status prüfen:"
+  tail -f /home/ubuntu/docker-build.log
+fi
+STARTSCRIPT
+chmod +x /home/ubuntu/start-whisperx.sh
+
+log "✅ Setup abgeschlossen!"
+log "📝 Siehe ~/start-whisperx.sh und README für Details"
+'
+
 # Liste unterstützter GPU-Typen
 SUPPORTED_GPUS=("T4" "A10G" "A100" "L40S")
 
@@ -65,7 +153,7 @@ check_prerequisites() {
   log "Alle Voraussetzungen erfüllt ✓"
 }
 
-# Zeige Menü
+# Hauptmenü anzeigen
 show_menu() {
   echo
   log "🚀 WhisperX Deployment Tool"
@@ -84,7 +172,7 @@ show_menu() {
   read -p "Wähle eine Option (1-8): " choice
 }
 
-# Erstelle neue Instanz mit GPU-Auswahl
+# Erstelle neue Instanz mit GPU-Auswahl und Setup-Skript
 create_new_instance() {
   choose_gpu_type
   local instance_name="whisperx-$(date +%Y%m%d-%H%M%S)"
@@ -93,103 +181,61 @@ create_new_instance() {
   info "   - GPU: $CHOSEN_GPU"
   info "   - Speicher: ${STORAGE_SIZE}GB"
 
-  # Setup-Skript lokal vorbereiten
-  local temp_dir="/tmp/brev-whisperx-$instance_name"
-  mkdir -p "$temp_dir"
-  echo "$SETUP_SCRIPT" | sed "s|GIT_REPO_PLACEHOLDER|$GIT_REPO|g" > "$temp_dir/setup.sh"
-  chmod +x "$temp_dir/setup.sh"
-
   # Instanz erstellen
   if brev create "$instance_name" --gpu "$CHOSEN_GPU"; then
     log "✅ Instanz erfolgreich erstellt!"
-    log "⏳ Warte bis Instanz startet..."
-    # Warten bis der Status RUNNING angezeigt wird
-    until brev ls | grep -q "${instance_name}.*RUNNING"; do
-      sleep 5
-    done
-    log "🚀 Führe Setup-Skript auf Instanz aus..."
-    cat "$temp_dir/setup.sh" | brev shell "$instance_name" -- bash -s
-    rm -rf "$temp_dir"
-
-    # Status anzeigen
-    show_instance_status "$instance_name"
-
-    # Optional SSH-Verbindung
-    read -p "SSH-Verbindung zur Instanz? (y/N): " -n1 -r; echo
-    [[ $REPLY =~ ^[Yy]$ ]] && ssh_to_instance "$instance_name"
+    log "⏳ Warte bis RUNNING..."
+    until brev ls | grep -q "${instance_name}.*RUNNING"; do sleep 5; done
+    log "🚀 Starte Setup-Skript auf Instanz..."
+    cat <(echo "$SETUP_SCRIPT") | brev shell "$instance_name" -- bash -s
+    log "✅ Setup abgeschlossen auf Instanz"
   else
     error "Instanz-Erstellung fehlgeschlagen!"
     warning "Ungültiger GPU-Typ oder Quota-Probleme"
-    rm -rf "$temp_dir"
-  fi
-}GB"
-
-  # Setup-Script vorbereiten
-  local temp_dir="/tmp/brev-whisperx-$instance_name"
-  mkdir -p "$temp_dir"
-  echo "$SETUP_SCRIPT" | sed "s|GIT_REPO_PLACEHOLDER|$GIT_REPO|g" > "$temp_dir/setup.sh"
-  chmod +x "$temp_dir/setup.sh"
-
-  # Instanz erstellen
-  if brev create "$instance_name" \
-      --gpu "$CHOSEN_GPU" \
-      --setup-script "$temp_dir/setup.sh" 2>&1; then
-    log "✅ Instanz erfolgreich erstellt!"
-    rm -rf "$temp_dir"
-    log "⏳ Warte auf Instanz-Start..."
-    sleep 30
-    show_instance_status "$instance_name"
-    read -p "SSH-Verbindung zur Instanz? (y/N): " -n1 -r; echo
-    [[ $REPLY =~ ^[Yy]$ ]] && ssh_to_instance "$instance_name"
-  else
-    error "Instanz-Erstellung fehlgeschlagen!"
-    warning "Ungültiger GPU-Typ oder Quota-Probleme"
-    rm -rf "$temp_dir"
   fi
 }
 
-# Liste Instanzen
-list_instances() {
+# Liste Instanzenlist_instances() {
   log "Alle Instanzen:"; brev ls
 }
 
 # Hostname abrufen
 get_hostname_for_n8n() {
-  brief=$(brev ls --format table)
-  echo "$brief"
+  log "Hostname für n8n abfragen..."
+  brev ls --format table
   read -p "Instanzname: " inst
   hostname=$(brev describe "$inst" | grep -o '[a-zA-Z0-9.-]*\.brev\.sh')
   info "Hostname: $hostname"
 }
 
-# SSH in Instanz
+# SSH zur Instanz
 ssh_to_instance() {
-  read -p "Instanzname für SSH: " inst
+  read -p "Instanzname: " inst
   log "SSH zu $inst..."; brev ssh "$inst"
 }
 
-# Instanz stoppen
+# Stoppe Instanz
 stop_instance() {
   read -p "Instanzname zum Stoppen: " inst
   log "Stoppe $inst..."; brev stop "$inst"
 }
 
-# Instanz löschen
+# Lösche Instanz
 delete_instance() {
   read -p "Instanzname zum Löschen: " inst
-  read -p "Bestätige DELETE: " conf
+  read -p "Bestätige mit DELETE: " conf
   [[ $conf == "DELETE" ]] && brev delete "$inst"
 }
 
-# Konfiguration anzeigen
+# Konfigurations-Info anzeigen
 show_config_info() {
   info "Konfiguration:"
-  info "  STORAGE_SIZE=$STORAGE_SIZE"
-  info "  GIT_REPO=$GIT_REPO"
-  info "  REGION=$REGION"
+  info " STORAGE_SIZE=$STORAGE_SIZE"
+  info " GIT_REPO=$GIT_REPO"
+  info " REGION=$REGION"
 }
 
-# Status anzeigen
+# Show Instance Status
 show_instance_status() {
   brev describe "$1"
 }
@@ -207,5 +253,5 @@ main() {
   done
 }
 
-# Start
+trap 'error "Script wurde unterbrochen"; exit 1' INT TERM
 main
