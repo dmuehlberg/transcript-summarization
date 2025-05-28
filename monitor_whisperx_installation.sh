@@ -1,4 +1,5 @@
 #!/bin/bash
+# Korrigiertes Skript zum Deployment von WhisperX auf AWS mit GPU-Unterstützung
 
 # Farben für bessere Lesbarkeit
 GREEN='\033[0;32m'
@@ -14,140 +15,192 @@ info() { echo -e "${BLUE}[INFO] $1${NC}"; }
 error() { echo -e "${RED}[ERROR] $1${NC}"; }
 
 # Standardwerte
-DEFAULT_REGION="eu-central-1"
-DEFAULT_NAME="whisperx-server"
-SSH_KEY="whisperx-key.pem"
-
-# Hilfefunktion
-show_help() {
-    echo "Usage: $0 [options]"
-    echo ""
-    echo "Dieses Skript überwacht die Installation von WhisperX auf einer EC2-Instanz."
-    echo ""
-    echo "Optionen:"
-    echo "  -h, --help                      Zeigt diese Hilfe an"
-    echo "  -n, --name NAME                 Name der EC2-Instanz (default: $DEFAULT_NAME)"
-    echo "  -r, --region REGION             AWS-Region (default: $DEFAULT_REGION)"
-    echo "  -k, --key KEY                   Pfad zum SSH-Schlüssel (default: $SSH_KEY)"
-    echo "  -i, --ip IP                     IP-Adresse der Instanz (optional)"
-    exit 0
-}
+REGION="eu-central-1"
+INSTANCE_NAME="whisperx-server"
+GPU_TYPE="t4"
+KEY_NAME="whisperx-key"
 
 # Parameter verarbeiten
-INSTANCE_NAME=$DEFAULT_NAME
-REGION=$DEFAULT_REGION
-IP_ADDRESS=""
-
 while [[ "$#" -gt 0 ]]; do
     case $1 in
-        -h|--help) show_help ;;
-        -n|--name) INSTANCE_NAME="$2"; shift ;;
         -r|--region) REGION="$2"; shift ;;
-        -k|--key) SSH_KEY="$2"; shift ;;
-        -i|--ip) IP_ADDRESS="$2"; shift ;;
-        *) error "Unbekannte Option: $1"; show_help ;;
+        -t|--type) GPU_TYPE="$2"; shift ;;
+        -n|--name) INSTANCE_NAME="$2"; shift ;;
+        -k|--key) KEY_NAME="$2"; shift ;;
+        *) shift ;;
     esac
     shift
 done
 
-# Prüfen ob AWS CLI installiert ist
-if ! command -v aws &> /dev/null; then
-    error "AWS CLI ist nicht installiert. Bitte installiere es zuerst."
-    error "Installationsanleitung: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html"
+# GPU-Typ überprüfen und Instance-Typ setzen
+if [[ "$GPU_TYPE" == "t4" ]]; then
+    INSTANCE_TYPE="g4dn.xlarge"
+    log "GPU-Typ: T4 (g4dn.xlarge)"
+elif [[ "$GPU_TYPE" == "a10g" ]]; then
+    INSTANCE_TYPE="g5.xlarge"
+    log "GPU-Typ: A10G (g5.xlarge)"
+else
+    error "Unbekannter GPU-Typ: $GPU_TYPE. Unterstützte Typen: t4, a10g"
     exit 1
 fi
 
-# Prüfen ob SSH-Schlüssel existiert
-if [[ ! -f "$SSH_KEY" ]]; then
-    error "SSH-Schlüssel '$SSH_KEY' nicht gefunden."
+log "Starte EC2-Instanz in Region: $REGION, Instance-Typ: $INSTANCE_TYPE"
+
+# 1. Schlüsselpaar erstellen, falls es noch nicht existiert
+log "Prüfe auf vorhandenes Schlüsselpaar..."
+if aws ec2 describe-key-pairs --region $REGION --key-names $KEY_NAME &> /dev/null; then
+    log "Schlüsselpaar '$KEY_NAME' existiert bereits."
+    
+    # Prüfen, ob die Datei lokal existiert
+    if [[ ! -f "$KEY_NAME.pem" ]]; then
+        warn "Die lokale Schlüsseldatei '$KEY_NAME.pem' fehlt!"
+        warn "Lösche das vorhandene Schlüsselpaar und erstelle ein neues..."
+        aws ec2 delete-key-pair --region $REGION --key-name $KEY_NAME
+        
+        # Neues Schlüsselpaar erstellen
+        log "Erstelle neues Schlüsselpaar '$KEY_NAME'..."
+        aws ec2 create-key-pair --region $REGION --key-name $KEY_NAME --query 'KeyMaterial' --output text > $KEY_NAME.pem
+        chmod 400 $KEY_NAME.pem
+        log "Schlüsselpaar erstellt und in '$KEY_NAME.pem' gespeichert."
+    fi
+else
+    log "Erstelle neues Schlüsselpaar '$KEY_NAME'..."
+    aws ec2 create-key-pair --region $REGION --key-name $KEY_NAME --query 'KeyMaterial' --output text > $KEY_NAME.pem
+    chmod 400 $KEY_NAME.pem
+    log "Schlüsselpaar erstellt und in '$KEY_NAME.pem' gespeichert."
+fi
+
+# 2. Sicherheitsgruppe erstellen, falls sie noch nicht existiert
+SG_NAME="whisperx-sg"
+log "Prüfe auf vorhandene Sicherheitsgruppe..."
+SG_ID=$(aws ec2 describe-security-groups --region $REGION --filters "Name=group-name,Values=$SG_NAME" --query "SecurityGroups[0].GroupId" --output text 2>/dev/null)
+
+if [[ "$SG_ID" != "None" && "$SG_ID" != "" ]]; then
+    log "Sicherheitsgruppe '$SG_NAME' existiert bereits mit ID: $SG_ID"
+else
+    log "Erstelle neue Sicherheitsgruppe '$SG_NAME'..."
+    SG_ID=$(aws ec2 create-security-group --region $REGION \
+        --group-name $SG_NAME \
+        --description "Security Group for WhisperX Server" \
+        --query "GroupId" --output text)
+    
+    log "Füge Sicherheitsregeln hinzu..."
+    # SSH erlauben
+    aws ec2 authorize-security-group-ingress --region $REGION \
+        --group-id $SG_ID \
+        --protocol tcp \
+        --port 22 \
+        --cidr 0.0.0.0/0 > /dev/null
+    
+    # WhisperX API auf Port 8000 erlauben
+    aws ec2 authorize-security-group-ingress --region $REGION \
+        --group-id $SG_ID \
+        --protocol tcp \
+        --port 8000 \
+        --cidr 0.0.0.0/0 > /dev/null
+    
+    log "Sicherheitsgruppe erstellt mit ID: $SG_ID"
+fi
+
+# 3. Neueste Ubuntu AMI finden
+log "Suche nach der neuesten Ubuntu AMI..."
+AMI_ID=$(aws ec2 describe-images --region $REGION \
+    --owners 099720109477 \
+    --filters "Name=name,Values=ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*" \
+    "Name=state,Values=available" \
+    --query "sort_by(Images, &CreationDate)[-1].ImageId" \
+    --output text)
+
+log "Verwende AMI: $AMI_ID"
+
+# 4. User-Data-Skript für die automatische Installation erstellen
+log "Erstelle User-Data-Skript..."
+USER_DATA=$(cat <<'EOF'
+#!/bin/bash
+exec > >(tee /var/log/user-data.log) 2>&1
+echo "Starte WhisperX-Installation..."
+
+# System-Updates
+apt-get update && apt-get upgrade -y
+
+# Grundlegende Tools installieren
+apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release git jq wget
+
+# Docker installieren
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+apt-get update
+apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+usermod -aG docker ubuntu
+
+# NVIDIA-Treiber und Container-Runtime installieren
+distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
+curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | apt-key add -
+curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | tee /etc/apt/sources.list.d/nvidia-docker.list
+apt-get update
+apt-get install -y nvidia-driver-525 nvidia-docker2
+systemctl restart docker
+
+# Das Setup-Skript herunterladen und ausführen
+cd /home/ubuntu
+wget https://raw.githubusercontent.com/dmuehlberg/transcript-summarization/main/container-setup.sh
+chmod +x container-setup.sh
+
+# .env-Datei für automatische Installation vorbereiten
+mkdir -p transcript-summarization
+cat > transcript-summarization/.env << ENVFILE
+HF_TOKEN=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
+WHISPER_MODEL=base
+DEFAULT_LANG=en
+DEVICE=cuda
+COMPUTE_TYPE=float16
+LOG_LEVEL=INFO
+ENVIRONMENT=production
+ENVFILE
+
+# Setup-Skript ausführen
+./container-setup.sh
+
+echo "WhisperX-Installation abgeschlossen."
+echo "API sollte unter http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4):8000 verfügbar sein."
+EOF
+)
+
+# 5. EC2-Instanz erstellen
+log "Erstelle EC2-Instanz..."
+INSTANCE_ID=$(aws ec2 run-instances --region $REGION \
+    --image-id $AMI_ID \
+    --instance-type $INSTANCE_TYPE \
+    --key-name $KEY_NAME \
+    --security-group-ids $SG_ID \
+    --block-device-mappings "[{\"DeviceName\":\"/dev/sda1\",\"Ebs\":{\"VolumeSize\":50,\"VolumeType\":\"gp3\"}}]" \
+    --user-data "$USER_DATA" \
+    --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$INSTANCE_NAME}]" \
+    --query "Instances[0].InstanceId" \
+    --output text)
+
+if [[ $? -ne 0 || -z "$INSTANCE_ID" ]]; then
+    error "Fehler beim Erstellen der EC2-Instanz."
     exit 1
 fi
 
-# IP-Adresse abrufen, wenn nicht angegeben
-if [[ -z "$IP_ADDRESS" ]]; then
-    log "Suche nach EC2-Instanz mit Namen '$INSTANCE_NAME'..."
-    
-    # Instanz-Details anhand des Namens abrufen
-    IP_ADDRESS=$(aws ec2 describe-instances --region $REGION \
-        --filters "Name=tag:Name,Values=$INSTANCE_NAME" "Name=instance-state-name,Values=running" \
-        --query "Reservations[0].Instances[0].PublicIpAddress" \
-        --output text)
-    
-    if [[ -z "$IP_ADDRESS" || "$IP_ADDRESS" == "None" ]]; then
-        error "Keine laufende EC2-Instanz mit Namen '$INSTANCE_NAME' gefunden oder Instanz hat keine öffentliche IP-Adresse."
-        exit 1
-    fi
-    
-    log "EC2-Instanz gefunden mit IP: $IP_ADDRESS"
-fi
+log "EC2-Instanz wird erstellt mit ID: $INSTANCE_ID"
+log "Warte auf Instanzstart..."
 
-# SSH-Verbindung testen
-log "Teste SSH-Verbindung zu $IP_ADDRESS..."
+# 6. Warten, bis die Instanz läuft
+aws ec2 wait instance-running --region $REGION --instance-ids $INSTANCE_ID
 
-# Warte auf SSH-Verfügbarkeit (max. 3 Minuten)
-for i in {1..36}; do
-    if ssh -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=5 -i "$SSH_KEY" ubuntu@$IP_ADDRESS exit &>/dev/null; then
-        log "SSH-Verbindung hergestellt."
-        break
-    fi
-    
-    if [[ $i -eq 36 ]]; then
-        warn "Konnte keine SSH-Verbindung herstellen nach 3 Minuten."
-        warn "Die Instanz startet möglicherweise noch. Bitte versuche es später erneut."
-        exit 1
-    fi
-    
-    echo -n "."
-    sleep 5
-done
+# 7. Public IP-Adresse abrufen
+PUBLIC_IP=$(aws ec2 describe-instances --region $REGION \
+    --instance-ids $INSTANCE_ID \
+    --query "Reservations[0].Instances[0].PublicIpAddress" \
+    --output text)
 
-# Installation überwachen
-log "Überwache WhisperX-Installation..."
-
-# Mit SSH verbinden und Installation überwachen
-ssh -o StrictHostKeyChecking=no -i "$SSH_KEY" ubuntu@$IP_ADDRESS "sudo tail -f /var/log/user-data.log"
-
-# Statusprüfung
-status_check() {
-    log "Prüfe WhisperX-Dienststatus..."
-    
-    # Container-Status überprüfen
-    container_status=$(ssh -o StrictHostKeyChecking=no -i "$SSH_KEY" ubuntu@$IP_ADDRESS "sudo docker ps -a --format '{{.Names}}: {{.Status}}' | grep -i whisperx" 2>/dev/null)
-    
-    if [[ -z "$container_status" ]]; then
-        warn "Keine WhisperX-Container gefunden."
-    else
-        log "Container-Status:"
-        echo "$container_status"
-    fi
-    
-    # GPU-Status überprüfen
-    log "GPU-Status:"
-    gpu_status=$(ssh -o StrictHostKeyChecking=no -i "$SSH_KEY" ubuntu@$IP_ADDRESS "nvidia-smi --query-gpu=gpu_name,memory.used,memory.total,temperature.gpu --format=csv,noheader" 2>/dev/null)
-    
-    if [[ -z "$gpu_status" ]]; then
-        warn "Konnte GPU-Status nicht abrufen."
-    else
-        echo "$gpu_status"
-    fi
-    
-    # API-Erreichbarkeit testen
-    log "Teste WhisperX API-Erreichbarkeit..."
-    api_status=$(curl -s -o /dev/null -w "%{http_code}" http://$IP_ADDRESS:8000/health 2>/dev/null)
-    
-    if [[ "$api_status" == "200" ]]; then
-        log "WhisperX API ist erreichbar unter http://$IP_ADDRESS:8000"
-    else
-        warn "WhisperX API ist noch nicht erreichbar (Status: $api_status)"
-        warn "Die Installation könnte noch laufen oder es gibt ein Problem."
-    fi
-}
-
-# Status nach der Installation prüfen
-status_check
-
-log "Monitoring abgeschlossen."
-log "Du kannst dich jederzeit mit folgendem Befehl verbinden:"
-log "  ssh -i $SSH_KEY ubuntu@$IP_ADDRESS"
-log "WhisperX API URL: http://$IP_ADDRESS:8000"
-log "WhisperX API Dokumentation: http://$IP_ADDRESS:8000/docs"
+log "EC2-Instanz erfolgreich erstellt!"
+log "Instance ID: $INSTANCE_ID"
+log "Public IP: $PUBLIC_IP"
+log "SSH-Zugriff: ssh -i $KEY_NAME.pem ubuntu@$PUBLIC_IP"
+log "WhisperX API wird unter http://$PUBLIC_IP:8000 verfügbar sein."
+log "Die Installation läuft im Hintergrund und kann einige Minuten dauern."
+log "Um den Fortschritt zu prüfen, verbinde dich per SSH und führe aus:"
+log "  tail -f /var/log/user-data.log"
