@@ -107,7 +107,9 @@ else
         # Delete local key file
         if [[ -f "whisperx-key.pem" ]]; then
             log "Deleting local key file 'whisperx-key.pem'..."
-            rm whisperx-key.pem
+            # Change permissions to allow deletion without confirmation
+            chmod 600 whisperx-key.pem
+            rm -f whisperx-key.pem  # -f flag forces removal without confirmation
             log "Local key file successfully deleted."
         fi
     fi
