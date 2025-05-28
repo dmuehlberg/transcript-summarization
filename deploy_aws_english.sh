@@ -132,9 +132,13 @@ echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] 
 apt-get update
 apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
+# Sicherstellen, dass Docker-Dienst aktiv ist
+systemctl enable docker
+systemctl start docker
+systemctl status docker
+
 # Docker ohne sudo nutzen können
 usermod -aG docker ubuntu
-systemctl restart docker
 
 # NVIDIA-Treiber und Container-Runtime installieren
 distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
@@ -142,6 +146,8 @@ curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | apt-key add -
 curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | tee /etc/apt/sources.list.d/nvidia-docker.list
 apt-get update
 apt-get install -y nvidia-driver-525 nvidia-docker2
+
+# Docker neu starten um nvidia-docker zu aktivieren
 systemctl restart docker
 
 # Das Setup-Skript herunterladen und ausführen
@@ -149,26 +155,47 @@ cd /home/ubuntu
 wget https://raw.githubusercontent.com/dmuehlberg/transcript-summarization/main/container-setup.sh
 chmod +x container-setup.sh
 
-# Erstelle ein Skript, das das Setup mit den richtigen Berechtigungen ausführt
+# Erstelle ein Docker-Test-Skript
+cat > /home/ubuntu/test_docker.sh << 'TESTSCRIPT'
+#!/bin/bash
+echo "Testing Docker installation..."
+if docker info > /dev/null 2>&1; then
+  echo "Docker is running correctly"
+else
+  echo "Docker is NOT running correctly"
+  echo "Trying to start Docker service..."
+  sudo systemctl start docker
+  sleep 2
+  if docker info > /dev/null 2>&1; then
+    echo "Docker is now running correctly"
+  else
+    echo "Docker still not running correctly. Please check the logs."
+    sudo systemctl status docker
+  fi
+fi
+TESTSCRIPT
+
+chmod +x /home/ubuntu/test_docker.sh
+chown ubuntu:ubuntu /home/ubuntu/test_docker.sh
+
+# Erstelle ein Setup-Ausführungsskript
 cat > /home/ubuntu/run_setup.sh << 'SETUPSCRIPT'
 #!/bin/bash
 cd /home/ubuntu
-# Prüfen, ob Benutzer Docker-Rechte hat
-if groups | grep -q docker; then
-  echo "Docker-Gruppe ist korrekt konfiguriert, führe Setup aus..."
-  ./container-setup.sh
-else
-  echo "Docker-Gruppe ist nicht konfiguriert, führe Setup mit sudo aus..."
-  sudo ./container-setup.sh
-fi
+echo "Running Docker test..."
+./test_docker.sh
+
+echo "Running container setup script..."
+# Führe das Setup als root aus, um sicherzustellen, dass es keine Berechtigungsprobleme gibt
+sudo ./container-setup.sh
 SETUPSCRIPT
 
 chmod +x /home/ubuntu/run_setup.sh
 chown ubuntu:ubuntu /home/ubuntu/run_setup.sh
 chown ubuntu:ubuntu /home/ubuntu/container-setup.sh
 
-# Setup-Skript als ubuntu-Benutzer ausführen
-sudo -u ubuntu /bin/bash -c '/home/ubuntu/run_setup.sh'
+# Setup-Skript als root ausführen, um Berechtigungsprobleme zu vermeiden
+/home/ubuntu/run_setup.sh
 
 echo "WhisperX-Installation abgeschlossen."
 echo "API sollte unter http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4):8000 verfügbar sein."
