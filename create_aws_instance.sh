@@ -1,6 +1,6 @@
 #!/bin/bash
 # Angepasstes Skript zum Deployment von WhisperX auf AWS mit GPU-Unterstützung
-# Verwendet das NVIDIA GPU Cloud VMI Base Image
+# Verwendet das NVIDIA GPU Cloud VMI Base Image und installiert CUDA 12.1 Treiber
 
 # Farben für bessere Lesbarkeit
 GREEN='\033[0;32m'
@@ -128,13 +128,30 @@ log "Erstelle User-Data-Skript..."
 USER_DATA=$(cat <<'EOF'
 #!/bin/bash
 exec > >(tee /var/log/user-data.log) 2>&1
-echo "Starte WhisperX-Installation auf NVIDIA GPU Cloud Image..."
+echo "Starte WhisperX-Installation mit CUDA 12.1 auf NVIDIA GPU Cloud Image..."
 
 # System-Updates
 apt-get update && apt-get upgrade -y
 
 # Grundlegende Tools installieren (falls noch nicht vorhanden)
 apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release git jq wget
+
+# Aktuellen NVIDIA-Treiber entfernen
+echo "Entferne aktuelle NVIDIA-Treiber und CUDA-Installation..."
+apt-get purge -y '*nvidia*' '*cuda*'
+apt-get autoremove -y
+
+# CUDA 12.1 installieren
+echo "Installiere CUDA 12.1..."
+wget https://developer.download.nvidia.com/compute/cuda/12.1.1/local_installers/cuda_12.1.1_530.30.02_linux.run
+sh cuda_12.1.1_530.30.02_linux.run --silent --toolkit --driver --override
+echo 'export PATH=/usr/local/cuda-12.1/bin${PATH:+:${PATH}}' >> /etc/profile.d/cuda.sh
+echo 'export LD_LIBRARY_PATH=/usr/local/cuda-12.1/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}' >> /etc/profile.d/cuda.sh
+source /etc/profile.d/cuda.sh
+
+# NVIDIA-Status prüfen
+echo "NVIDIA-Status nach Installation:"
+nvidia-smi
 
 # Docker sollte bereits installiert sein, aber stellen wir sicher, dass es läuft
 systemctl status docker || {
@@ -147,10 +164,6 @@ systemctl status docker || {
 # Docker-Socket-Berechtigungen prüfen
 chmod 666 /var/run/docker.sock
 usermod -aG docker ubuntu
-
-# NVIDIA-Status prüfen
-echo "NVIDIA-Status:"
-nvidia-smi
 
 # Das Setup-Skript herunterladen
 cd /home/ubuntu
