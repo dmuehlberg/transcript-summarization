@@ -109,7 +109,7 @@ log "Suche nach dem Deep Learning OSS Nvidia Driver AMI GPU PyTorch 2.4 (Ubuntu 
 # AWS Deep Learning AMI suchen
 AMI_ID=$(aws ec2 describe-images --region $REGION \
     --owners amazon \
-    --filters "Name=name,Values=*Deep Learning OSS Nvidia Driver AMI GPU PyTorch 2.4.1*Ubuntu 22.04*20250425*" \
+    --filters "Name=name,Values=*Deep Learning OSS Nvidia Driver AMI GPU PyTorch 2.4.1*Ubuntu 22.04*20240925*" \
     "Name=state,Values=available" \
     --query "sort_by(Images, &CreationDate)[-1].ImageId" \
     --output text)
