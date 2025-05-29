@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Manuelles WhisperX Container Setup
+# WhisperX Container Setup
 # Für den Fall, dass du direkt auf einem Server arbeitest
 
 set -e
@@ -15,7 +15,7 @@ warning() { echo -e "${YELLOW}[WARNING] $1${NC}"; }
 info() { echo -e "${BLUE}[INFO] $1${NC}"; }
 
 main() {
-    log "🚀 WhisperX Container Setup gestartet"
+    log "WhisperX Container Setup gestartet"
     
     # Repository klonen/aktualisieren
     if [ -d "transcript-summarization" ]; then
@@ -63,7 +63,7 @@ EOF
     
     sleep 5
     
-    log "✅ Setup abgeschlossen!"
+    log "Setup abgeschlossen!"
     info "API: http://localhost:8000/docs"
     info "Status: docker compose ps"
     info "Logs: docker compose logs -f"
