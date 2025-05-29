@@ -1,6 +1,6 @@
 #!/bin/bash
 # Angepasstes Skript zum Deployment von WhisperX auf AWS mit GPU-Unterstützung
-# Verwendet das AWS Deep Learning OSS Nvidia Driver AMI GPU PyTorch 2.6 (Ubuntu 22.04)
+# Verwendet das AWS Deep Learning OSS Nvidia Driver AMI GPU PyTorch 2.4 (Ubuntu 22.04)
 
 # Farben für bessere Lesbarkeit
 GREEN='\033[0;32m'
@@ -104,12 +104,12 @@ else
 fi
 
 # 3. Deep Learning AMI finden
-log "Suche nach dem Deep Learning OSS Nvidia Driver AMI GPU PyTorch 2.6 (Ubuntu 22.04)..."
+log "Suche nach dem Deep Learning OSS Nvidia Driver AMI GPU PyTorch 2.4 (Ubuntu 22.04)..."
 
 # AWS Deep Learning AMI suchen
 AMI_ID=$(aws ec2 describe-images --region $REGION \
     --owners amazon \
-    --filters "Name=name,Values=*Deep Learning OSS Nvidia Driver AMI GPU PyTorch 2.6*Ubuntu 22.04*" \
+    --filters "Name=name,Values=*Deep Learning OSS Nvidia Driver AMI GPU PyTorch 2.4*Ubuntu 22.04*" \
     "Name=state,Values=available" \
     --query "sort_by(Images, &CreationDate)[-1].ImageId" \
     --output text)
