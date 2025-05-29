@@ -1,6 +1,6 @@
 #!/bin/bash
-# Angepasstes Skript zum Deployment von WhisperX auf AWS mit GPU-Unterstützung
-# Verwendet das AWS Deep Learning OSS Nvidia Driver AMI GPU PyTorch 2.4 (Ubuntu 22.04)
+# Optimiertes Skript zum Deployment von WhisperX auf AWS mit GPU-Unterstützung
+# Verwendet Ubuntu Server 22.04 LTS mit manueller CUDA 12.1.1 und Docker-Installation
 
 # Farben für bessere Lesbarkeit
 GREEN='\033[0;32m'
@@ -103,34 +103,22 @@ else
     log "Sicherheitsgruppe erstellt mit ID: $SG_ID"
 fi
 
-# 3. Deep Learning AMI finden
+# 3. Standard Ubuntu Server 22.04 LTS AMI finden
 log "Suche nach dem Ubuntu Server 22.04 LTS (HVM), SSD Volume Type AMI..."
 
-# AWS Deep Learning AMI suchen
 AMI_ID=$(aws ec2 describe-images --region $REGION \
-    --owners amazon \
-    --filters "Name=name,Values=*Ubuntu Server 22.04 LTS*HVM*SSD Volume Type*" \
+    --owners 099720109477 \
+    --filters "Name=name,Values=ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*" \
     "Name=state,Values=available" \
     --query "sort_by(Images, &CreationDate)[-1].ImageId" \
     --output text)
 
 if [[ -z "$AMI_ID" || "$AMI_ID" == "None" ]]; then
-    warn "Konnte Ubuntu Server 22.04 LTS (HVM), SSD Volume Type AMI nicht finden. Versuche allgemeine Suche nach Deep Learning AMI..."
-    
-    AMI_ID=$(aws ec2 describe-images --region $REGION \
-        --owners amazon \
-        --filters "Name=name,Values=*Deep Learning OSS Nvidia Driver AMI*Ubuntu*" \
-        "Name=state,Values=available" \
-        --query "sort_by(Images, &CreationDate)[-1].ImageId" \
-        --output text)
-    
-    if [[ -z "$AMI_ID" || "$AMI_ID" == "None" ]]; then
-        error "Konnte kein passendes Deep Learning AMI finden. Bitte überprüfe, ob die AMIs in der Region $REGION verfügbar sind."
-        exit 1
-    fi
+    error "Konnte Ubuntu Server 22.04 LTS AMI nicht finden. Bitte überprüfe, ob die AMIs in der Region $REGION verfügbar sind."
+    exit 1
 fi
 
-log "Verwende Deep Learning AMI: $AMI_ID"
+log "Verwende Ubuntu Server 22.04 LTS AMI: $AMI_ID"
 
 # AMI-Details anzeigen
 AMI_NAME=$(aws ec2 describe-images --region $REGION \
@@ -144,92 +132,167 @@ log "Erstelle User-Data-Skript..."
 USER_DATA=$(cat <<'EOF'
 #!/bin/bash
 exec > >(tee /var/log/user-data.log) 2>&1
-echo "Starte WhisperX-Installation auf Deep Learning AMI..."
+echo "Starte WhisperX-Installation auf Ubuntu 22.04..."
 
-# System-Updates
-# apt-get update && apt-get upgrade -y
+# System aktualisieren
+echo "System wird aktualisiert..."
+apt-get update
+DEBIAN_FRONTEND=noninteractive apt-get upgrade -y
 
-# Grundlegende Tools installieren (falls noch nicht vorhanden)
-apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release git jq wget
+# Grundlegende Tools installieren
+apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release git jq wget python3-pip
 
-# CUDA-Version überprüfen
-echo "Verfügbare CUDA-Versionen:"
-ls -l /usr/local | grep cuda
+# Docker-Repository hinzufügen und Docker installieren
+echo "Docker wird installiert..."
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+chmod a+r /etc/apt/keyrings/docker.gpg
 
-# NVIDIA-Status prüfen
-echo "NVIDIA-Status:"
-nvidia-smi
+echo \
+  "deb [arch="$(dpkg --print-architecture)" signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+  "$(. /etc/os-release && echo "$VERSION_CODENAME")" stable" | \
+  tee /etc/apt/sources.list.d/docker.list > /dev/null
 
-# CUDA 12.1 als Standard setzen (falls verfügbar)
-if [ -d "/usr/local/cuda-12.1" ]; then
-    echo "Setze CUDA 12.1 als Standard..."
-    if [ -L "/usr/local/cuda" ]; then
-        sudo rm /usr/local/cuda
-    fi
-    sudo ln -s /usr/local/cuda-12.1 /usr/local/cuda
-    echo 'export PATH=/usr/local/cuda/bin${PATH:+:${PATH}}' | sudo tee /etc/profile.d/cuda.sh
-    echo 'export LD_LIBRARY_PATH=/usr/local/cuda/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}' | sudo tee -a /etc/profile.d/cuda.sh
-    source /etc/profile.d/cuda.sh
-    echo "CUDA-Version nach Umstellung:"
-    nvcc --version
-fi
+apt-get update
+apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
-# Docker sollte bereits installiert sein, aber stellen wir sicher, dass es läuft
-systemctl status docker || {
-  echo "Docker ist nicht installiert oder läuft nicht, installiere es..."
-  apt-get install -y docker.io
-  systemctl enable docker
-  systemctl start docker
-}
-
-# Docker-Socket-Berechtigungen prüfen
+# Docker-Socket-Berechtigungen setzen
 chmod 666 /var/run/docker.sock
 usermod -aG docker ubuntu
 
-# Das Setup-Skript herunterladen
-cd /home/ubuntu
-wget https://raw.githubusercontent.com/dmuehlberg/transcript-summarization/main/container-setup.sh
-chmod +x container-setup.sh
-chown ubuntu:ubuntu container-setup.sh
+# NVIDIA-Treiber für GPU installieren
+echo "NVIDIA-Treiber werden installiert..."
+apt-get install -y linux-headers-$(uname -r)
+apt-get install -y build-essential
 
-# Erstelle ein Wrapper-Skript für das Container-Setup
-cat > /home/ubuntu/run_setup.sh << 'SETUPSCRIPT'
+# NVIDIA CUDA Repository hinzufügen
+wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
+dpkg -i cuda-keyring_1.1-1_all.deb
+apt-get update
+
+# CUDA 12.1 und NVIDIA-Treiber installieren
+apt-get install -y cuda-12-1 cuda-drivers
+
+# NVIDIA Container Toolkit installieren
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+  sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+  tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+
+apt-get update
+apt-get install -y nvidia-container-toolkit
+nvidia-ctk runtime configure --runtime=docker
+systemctl restart docker
+
+# CUDA-Umgebungsvariablen setzen
+echo 'export PATH=/usr/local/cuda-12.1/bin${PATH:+:${PATH}}' > /etc/profile.d/cuda.sh
+echo 'export LD_LIBRARY_PATH=/usr/local/cuda-12.1/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}' >> /etc/profile.d/cuda.sh
+chmod +x /etc/profile.d/cuda.sh
+source /etc/profile.d/cuda.sh
+
+# Python und weitere Abhängigkeiten für WhisperX
+apt-get install -y python3.11 python3.11-venv python3-pip python3.11-dev ffmpeg libsndfile1
+
+# Python-Alternative setzen
+update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
+update-alternatives --set python3 /usr/bin/python3.11
+
+# Docker-Compose installieren
+pip3 install docker-compose
+
+# Das WhisperX Repository klonen
+cd /home/ubuntu
+git clone https://github.com/dmuehlberg/transcript-summarization.git
+chown -R ubuntu:ubuntu transcript-summarization
+
+# Das Setup-Skript herunterladen (falls es nicht im Repository ist)
+cd /home/ubuntu
+if [ ! -f "/home/ubuntu/transcript-summarization/container-setup.sh" ]; then
+  wget https://raw.githubusercontent.com/dmuehlberg/transcript-summarization/main/container-setup.sh -O /home/ubuntu/container-setup.sh
+  chmod +x /home/ubuntu/container-setup.sh
+  chown ubuntu:ubuntu /home/ubuntu/container-setup.sh
+fi
+
+# Standard-ENV-Datei erstellen, falls nicht vorhanden
+if [ ! -f "/home/ubuntu/transcript-summarization/.env" ]; then
+  cat > /home/ubuntu/transcript-summarization/.env << 'ENVFILE'
+HF_TOKEN=your_huggingface_token_here
+WHISPER_MODEL=base
+DEFAULT_LANG=en
+DEVICE=cuda
+COMPUTE_TYPE=float16
+LOG_LEVEL=INFO
+ENVIRONMENT=production
+ENVFILE
+  chown ubuntu:ubuntu /home/ubuntu/transcript-summarization/.env
+fi
+
+# NVIDIA-Status überprüfen
+echo "NVIDIA-Treiber-Status überprüfen..."
+nvidia-smi || echo "NVIDIA-Treiber sind noch nicht geladen, was normal ist. Nach einem Neustart sollten sie verfügbar sein."
+
+# Start-Skript erstellen, das nach dem Neustart ausgeführt werden soll
+cat > /home/ubuntu/start_whisperx.sh << 'STARTSCRIPT'
 #!/bin/bash
 set -e
 
-cd /home/ubuntu
+# Logfile
+LOG_FILE="/home/ubuntu/whisperx_startup.log"
+exec > >(tee -a "$LOG_FILE") 2>&1
 
-# Docker-Diagnose
-echo "Docker-Diagnose ausführen..."
-docker --version
-docker info || sudo docker info
-docker ps || sudo docker ps
+echo "$(date): Starte WhisperX Setup nach Reboot..."
 
-# Docker-Socket-Berechtigungen anpassen, falls nötig
+# Prüfe, ob NVIDIA-Treiber geladen sind
+if ! nvidia-smi &>/dev/null; then
+  echo "FEHLER: NVIDIA-Treiber sind nicht geladen. Bitte überprüfen!"
+  exit 1
+fi
+
+# In das Repository-Verzeichnis wechseln
+cd /home/ubuntu/transcript-summarization
+
+# Docker-Socket-Berechtigungen prüfen
 if [ ! -w /var/run/docker.sock ]; then
   echo "Berechtigungen für Docker-Socket anpassen..."
   sudo chmod 666 /var/run/docker.sock
 fi
 
-# Container-Setup ausführen
-# echo "Führe container-setup.sh aus..."
-# ./container-setup.sh
-
-echo "Setup abgeschlossen!"
-SETUPSCRIPT
-
-chmod +x /home/ubuntu/run_setup.sh
-chown ubuntu:ubuntu /home/ubuntu/run_setup.sh
-
-# Setup als ubuntu-Benutzer ausführen
-echo "Führe Setup-Skript als ubuntu-Benutzer aus..."
-sudo -i -u ubuntu bash -c "cd /home/ubuntu && ./run_setup.sh" || {
-  echo "Setup als ubuntu-Benutzer fehlgeschlagen, versuche als root..."
-  cd /home/ubuntu && ./run_setup.sh
+# NVIDIA Docker-Test ausführen
+echo "Teste NVIDIA Docker..."
+docker run --rm --gpus all nvidia/cuda:12.1.1-base-ubuntu22.04 nvidia-smi || {
+  echo "FEHLER: NVIDIA Docker-Test fehlgeschlagen!"
+  exit 1
 }
 
-echo "WhisperX-Installation abgeschlossen."
-echo "API sollte unter http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4):8000 verfügbar sein."
+# Container bauen und starten
+echo "Stoppe alte Container, falls vorhanden..."
+docker compose down 2>/dev/null || true
+
+echo "Baue Container (kann 5-10 Minuten dauern)..."
+docker compose build whisperx_cuda
+
+echo "Starte Container..."
+docker compose up -d whisperx_cuda
+
+echo "WhisperX-Setup abgeschlossen um $(date)"
+echo "API sollte unter http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4):8000/docs verfügbar sein"
+STARTSCRIPT
+
+chmod +x /home/ubuntu/start_whisperx.sh
+chown ubuntu:ubuntu /home/ubuntu/start_whisperx.sh
+
+# Crontab-Eintrag für den Neustart hinzufügen
+(crontab -l 2>/dev/null || echo "") | { cat; echo "@reboot /home/ubuntu/start_whisperx.sh"; } | crontab -
+
+# Reboot nach der Installation, um die Treiber zu laden
+echo "Installation abgeschlossen. System wird in 10 Sekunden neu gestartet..."
+echo "Nach dem Neustart wird WhisperX automatisch gestartet."
+echo "Verbinde dich nach dem Neustart per SSH und überprüfe: tail -f /home/ubuntu/whisperx_startup.log"
+
+# Reboot planen
+nohup bash -c "sleep 10 && reboot" &
+
+echo "Setup-Skript beendet. Warte auf Neustart..."
 EOF
 )
 
@@ -267,7 +330,8 @@ log "EC2-Instanz erfolgreich erstellt!"
 log "Instance ID: $INSTANCE_ID"
 log "Public IP: $PUBLIC_IP"
 log "SSH-Zugriff: ssh -i $KEY_NAME.pem ubuntu@$PUBLIC_IP"
-log "WhisperX API wird unter http://$PUBLIC_IP:8000 verfügbar sein."
-log "Die Installation läuft im Hintergrund und kann einige Minuten dauern."
-log "Um den Fortschritt zu prüfen, verbinde dich per SSH und führe aus:"
-log "  tail -f /var/log/user-data.log"
+log "WhisperX API wird nach dem Neustart unter http://$PUBLIC_IP:8000 verfügbar sein."
+log "Die Installation läuft im Hintergrund und kann bis zu 15 Minuten dauern, gefolgt von einem Neustart."
+log "Verbinde dich nach ca. 20 Minuten per SSH und überprüfe:"
+log "  tail -f /home/ubuntu/whisperx_startup.log"
+log "  docker ps    # Um zu sehen, ob der Container läuft"
