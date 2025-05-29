@@ -203,9 +203,6 @@ fi
 echo "Führe container-setup.sh aus..."
 ./container-setup.sh
 
-# Nach der Installation den HF_TOKEN in .env aktualisieren
-./modify_env.sh
-
 echo "Setup abgeschlossen!"
 SETUPSCRIPT
 
