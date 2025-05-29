@@ -1,6 +1,6 @@
 #!/bin/bash
 # Angepasstes Skript zum Deployment von WhisperX auf AWS mit GPU-Unterstützung
-# Verwendet das NVIDIA GPU Cloud VMI Base Image und installiert CUDA 12.1 Treiber
+# Verwendet das AWS Deep Learning OSS Nvidia Driver AMI GPU PyTorch 2.6 (Ubuntu 22.04)
 
 # Farben für bessere Lesbarkeit
 GREEN='\033[0;32m'
@@ -103,55 +103,76 @@ else
     log "Sicherheitsgruppe erstellt mit ID: $SG_ID"
 fi
 
-# 3. NVIDIA GPU Cloud VMI Base Image finden
-log "Suche nach dem NVIDIA GPU Cloud VMI Base Image..."
+# 3. Deep Learning AMI finden
+log "Suche nach dem Deep Learning OSS Nvidia Driver AMI GPU PyTorch 2.6 (Ubuntu 22.04)..."
 
-# NVIDIA GPU Cloud AMI suchen (AWS Marketplace AMI)
-# Kann je nach Version und Region unterschiedlich sein, daher suchen wir nach einem Muster
+# AWS Deep Learning AMI suchen
 AMI_ID=$(aws ec2 describe-images --region $REGION \
-    --owners aws-marketplace \
-    --filters "Name=name,Values=*NVIDIA GPU Cloud VMI Base*" \
+    --owners amazon \
+    --filters "Name=name,Values=*Deep Learning OSS Nvidia Driver AMI GPU PyTorch 2.6*Ubuntu 22.04*" \
     "Name=state,Values=available" \
     --query "sort_by(Images, &CreationDate)[-1].ImageId" \
     --output text)
 
 if [[ -z "$AMI_ID" || "$AMI_ID" == "None" ]]; then
-    error "NVIDIA GPU Cloud VMI Base Image konnte nicht gefunden werden. Bitte überprüfen Sie, ob Sie Zugriff auf das AMI haben."
-    error "Stelle sicher, dass du das AMI abonniert hast: https://aws.amazon.com/marketplace/pp/prodview-64e4rx3k2bpp4"
-    exit 1
+    warn "Konnte Deep Learning OSS Nvidia Driver AMI nicht finden. Versuche allgemeine Suche nach Deep Learning AMI..."
+    
+    AMI_ID=$(aws ec2 describe-images --region $REGION \
+        --owners amazon \
+        --filters "Name=name,Values=*Deep Learning OSS Nvidia Driver AMI*Ubuntu*" \
+        "Name=state,Values=available" \
+        --query "sort_by(Images, &CreationDate)[-1].ImageId" \
+        --output text)
+    
+    if [[ -z "$AMI_ID" || "$AMI_ID" == "None" ]]; then
+        error "Konnte kein passendes Deep Learning AMI finden. Bitte überprüfe, ob die AMIs in der Region $REGION verfügbar sind."
+        exit 1
+    fi
 fi
 
-log "Verwende NVIDIA AMI: $AMI_ID"
+log "Verwende Deep Learning AMI: $AMI_ID"
+
+# AMI-Details anzeigen
+AMI_NAME=$(aws ec2 describe-images --region $REGION \
+    --image-ids $AMI_ID \
+    --query "Images[0].Name" \
+    --output text)
+log "AMI Name: $AMI_NAME"
 
 # 4. User-Data-Skript für die automatische Installation erstellen
 log "Erstelle User-Data-Skript..."
 USER_DATA=$(cat <<'EOF'
 #!/bin/bash
 exec > >(tee /var/log/user-data.log) 2>&1
-echo "Starte WhisperX-Installation mit CUDA 12.1 auf NVIDIA GPU Cloud Image..."
+echo "Starte WhisperX-Installation auf Deep Learning AMI..."
 
 # System-Updates
-apt-get update && apt-get upgrade -y
+# apt-get update && apt-get upgrade -y
 
 # Grundlegende Tools installieren (falls noch nicht vorhanden)
 apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release git jq wget
 
-# Aktuellen NVIDIA-Treiber entfernen
-echo "Entferne aktuelle NVIDIA-Treiber und CUDA-Installation..."
-apt-get purge -y '*nvidia*' '*cuda*'
-apt-get autoremove -y
-
-# CUDA 12.1 installieren
-echo "Installiere CUDA 12.1..."
-wget https://developer.download.nvidia.com/compute/cuda/12.1.1/local_installers/cuda_12.1.1_530.30.02_linux.run
-sh cuda_12.1.1_530.30.02_linux.run --silent --toolkit --driver --override
-echo 'export PATH=/usr/local/cuda-12.1/bin${PATH:+:${PATH}}' >> /etc/profile.d/cuda.sh
-echo 'export LD_LIBRARY_PATH=/usr/local/cuda-12.1/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}' >> /etc/profile.d/cuda.sh
-source /etc/profile.d/cuda.sh
+# CUDA-Version überprüfen
+echo "Verfügbare CUDA-Versionen:"
+ls -l /usr/local | grep cuda
 
 # NVIDIA-Status prüfen
-echo "NVIDIA-Status nach Installation:"
+echo "NVIDIA-Status:"
 nvidia-smi
+
+# CUDA 12.1 als Standard setzen (falls verfügbar)
+if [ -d "/usr/local/cuda-12.1" ]; then
+    echo "Setze CUDA 12.1 als Standard..."
+    if [ -L "/usr/local/cuda" ]; then
+        sudo rm /usr/local/cuda
+    fi
+    sudo ln -s /usr/local/cuda-12.1 /usr/local/cuda
+    echo 'export PATH=/usr/local/cuda/bin${PATH:+:${PATH}}' | sudo tee /etc/profile.d/cuda.sh
+    echo 'export LD_LIBRARY_PATH=/usr/local/cuda/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}' | sudo tee -a /etc/profile.d/cuda.sh
+    source /etc/profile.d/cuda.sh
+    echo "CUDA-Version nach Umstellung:"
+    nvcc --version
+fi
 
 # Docker sollte bereits installiert sein, aber stellen wir sicher, dass es läuft
 systemctl status docker || {
@@ -191,8 +212,8 @@ if [ ! -w /var/run/docker.sock ]; then
 fi
 
 # Container-Setup ausführen
-echo "Führe container-setup.sh aus..."
-./container-setup.sh
+# echo "Führe container-setup.sh aus..."
+# ./container-setup.sh
 
 echo "Setup abgeschlossen!"
 SETUPSCRIPT
