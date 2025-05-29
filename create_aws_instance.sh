@@ -107,8 +107,8 @@ fi
 log "Suche nach dem Ubuntu Server 22.04 LTS (HVM), SSD Volume Type AMI..."
 
 AMI_ID=$(aws ec2 describe-images --region $REGION \
-    --owners 099720109477 \
-    --filters "Name=name,Values=ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*" \
+    --owners amazon \
+    --filters "Name=name,Values=*Ubuntu Server 22.04 LTS*HVM*SSD Volume Type*" \
     "Name=state,Values=available" \
     --query "sort_by(Images, &CreationDate)[-1].ImageId" \
     --output text)
