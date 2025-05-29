@@ -103,29 +103,21 @@ else
     log "Sicherheitsgruppe erstellt mit ID: $SG_ID"
 fi
 
-# 3. Standard Ubuntu Server 22.04 LTS AMI finden
-log "Suche nach dem Ubuntu Server 22.04 LTS (HVM), SSD Volume Type AMI..."
-
-AMI_ID=$(aws ec2 describe-images --region $REGION \
-    --owners amazon \
-    --filters "Name=name,Values=*Ubuntu Server 22.04 LTS*HVM*SSD Volume Type*" \
-    "Name=state,Values=available" \
-    --query "sort_by(Images, &CreationDate)[-1].ImageId" \
-    --output text)
-
-if [[ -z "$AMI_ID" || "$AMI_ID" == "None" ]]; then
-    error "Konnte Ubuntu Server 22.04 LTS AMI nicht finden. Bitte überprüfe, ob die AMIs in der Region $REGION verfügbar sind."
-    exit 1
-fi
-
+# 3. Direkte Verwendung der bekannten AMI-ID
+log "Verwende die angegebene AMI-ID für Ubuntu Server 22.04 LTS..."
+AMI_ID="ami-04a5bacc58328233d"
 log "Verwende Ubuntu Server 22.04 LTS AMI: $AMI_ID"
 
-# AMI-Details anzeigen
+# Optional: AMI-Details anzeigen (wenn gewünscht)
 AMI_NAME=$(aws ec2 describe-images --region $REGION \
     --image-ids $AMI_ID \
     --query "Images[0].Name" \
     --output text)
-log "AMI Name: $AMI_NAME"
+if [[ -n "$AMI_NAME" && "$AMI_NAME" != "None" ]]; then
+    log "AMI Name: $AMI_NAME"
+else
+    log "AMI Details konnten nicht abgerufen werden, fahre mit bekannter ID fort."
+fi
 
 # 4. User-Data-Skript für die automatische Installation erstellen
 log "Erstelle User-Data-Skript..."
