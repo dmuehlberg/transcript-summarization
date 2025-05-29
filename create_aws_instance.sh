@@ -1,5 +1,6 @@
 #!/bin/bash
-# Korrigiertes Skript zum Deployment von WhisperX auf AWS mit GPU-Unterstützung
+# Angepasstes Skript zum Deployment von WhisperX auf AWS mit GPU-Unterstützung
+# Verwendet das NVIDIA GPU Cloud VMI Base Image
 
 # Farben für bessere Lesbarkeit
 GREEN='\033[0;32m'
@@ -102,74 +103,54 @@ else
     log "Sicherheitsgruppe erstellt mit ID: $SG_ID"
 fi
 
-# 3. Neueste Ubuntu AMI finden
-log "Suche nach der neuesten Ubuntu AMI..."
+# 3. NVIDIA GPU Cloud VMI Base Image finden
+log "Suche nach dem NVIDIA GPU Cloud VMI Base Image..."
+
+# NVIDIA GPU Cloud AMI suchen (AWS Marketplace AMI)
+# Kann je nach Version und Region unterschiedlich sein, daher suchen wir nach einem Muster
 AMI_ID=$(aws ec2 describe-images --region $REGION \
-    --owners 099720109477 \
-    --filters "Name=name,Values=ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*" \
+    --owners aws-marketplace \
+    --filters "Name=name,Values=*NVIDIA GPU Cloud VMI Base*" \
     "Name=state,Values=available" \
     --query "sort_by(Images, &CreationDate)[-1].ImageId" \
     --output text)
 
-log "Verwende AMI: $AMI_ID"
+if [[ -z "$AMI_ID" || "$AMI_ID" == "None" ]]; then
+    error "NVIDIA GPU Cloud VMI Base Image konnte nicht gefunden werden. Bitte überprüfen Sie, ob Sie Zugriff auf das AMI haben."
+    error "Stelle sicher, dass du das AMI abonniert hast: https://aws.amazon.com/marketplace/pp/prodview-64e4rx3k2bpp4"
+    exit 1
+fi
+
+log "Verwende NVIDIA AMI: $AMI_ID"
 
 # 4. User-Data-Skript für die automatische Installation erstellen
 log "Erstelle User-Data-Skript..."
 USER_DATA=$(cat <<'EOF'
 #!/bin/bash
 exec > >(tee /var/log/user-data.log) 2>&1
-echo "Starte WhisperX-Installation..."
+echo "Starte WhisperX-Installation auf NVIDIA GPU Cloud Image..."
 
 # System-Updates
 apt-get update && apt-get upgrade -y
 
-# Grundlegende Tools installieren
+# Grundlegende Tools installieren (falls noch nicht vorhanden)
 apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release git jq wget
 
-# Vollständige Neuinstallation von Docker
-echo "Vollständige Neuinstallation von Docker..."
-apt-get remove -y docker docker-engine docker.io containerd runc || true
-rm -rf /var/lib/docker /var/lib/containerd || true
+# Docker sollte bereits installiert sein, aber stellen wir sicher, dass es läuft
+systemctl status docker || {
+  echo "Docker ist nicht installiert oder läuft nicht, installiere es..."
+  apt-get install -y docker.io
+  systemctl enable docker
+  systemctl start docker
+}
 
-# Docker-Abhängigkeiten installieren
-apt-get update
-apt-get install -y \
-    apt-transport-https \
-    ca-certificates \
-    curl \
-    gnupg \
-    lsb-release
-
-# Docker Repository hinzufügen
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-# Docker installieren
-apt-get update
-apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-
-# Stellen Sie sicher, dass Docker-Socket Berechtigungen hat
+# Docker-Socket-Berechtigungen prüfen
 chmod 666 /var/run/docker.sock
-systemctl enable docker
-systemctl start docker
-sleep 2
-
-# Docker-Berechtigungen prüfen
-echo "Docker-Socket-Berechtigungen:"
-ls -la /var/run/docker.sock
-
-# Benutzer zur Docker-Gruppe hinzufügen
 usermod -aG docker ubuntu
-newgrp docker || true
 
-# NVIDIA-Treiber und Container-Runtime installieren
-distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
-curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | apt-key add -
-curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | tee /etc/apt/sources.list.d/nvidia-docker.list
-apt-get update
-apt-get install -y nvidia-driver-525 nvidia-docker2
-systemctl restart docker
-sleep 5
+# NVIDIA-Status prüfen
+echo "NVIDIA-Status:"
+nvidia-smi
 
 # Das Setup-Skript herunterladen
 cd /home/ubuntu
@@ -177,10 +158,7 @@ wget https://raw.githubusercontent.com/dmuehlberg/transcript-summarization/main/
 chmod +x container-setup.sh
 chown ubuntu:ubuntu container-setup.sh
 
-chmod +x /home/ubuntu/modify_env.sh
-chown ubuntu:ubuntu /home/ubuntu/modify_env.sh
-
-# Erstelle ein Wrapper-Skript, das das Container-Setup ausführt
+# Erstelle ein Wrapper-Skript für das Container-Setup
 cat > /home/ubuntu/run_setup.sh << 'SETUPSCRIPT'
 #!/bin/bash
 set -e
