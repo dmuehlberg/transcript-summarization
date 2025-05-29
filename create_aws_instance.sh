@@ -104,18 +104,18 @@ else
 fi
 
 # 3. Deep Learning AMI finden
-log "Suche nach dem Deep Learning OSS Nvidia Driver AMI GPU PyTorch 2.4 (Ubuntu 22.04)..."
+log "Suche nach dem Ubuntu Server 22.04 LTS (HVM), SSD Volume Type AMI..."
 
 # AWS Deep Learning AMI suchen
 AMI_ID=$(aws ec2 describe-images --region $REGION \
     --owners amazon \
-    --filters "Name=name,Values=*Deep Learning OSS Nvidia Driver AMI GPU PyTorch 2.4.1*Ubuntu 22.04*20240925*" \
+    --filters "Name=name,Values=*Ubuntu Server 22.04 LTS*HVM*SSD Volume Type*" \
     "Name=state,Values=available" \
     --query "sort_by(Images, &CreationDate)[-1].ImageId" \
     --output text)
 
 if [[ -z "$AMI_ID" || "$AMI_ID" == "None" ]]; then
-    warn "Konnte Deep Learning OSS Nvidia Driver AMI nicht finden. Versuche allgemeine Suche nach Deep Learning AMI..."
+    warn "Konnte Ubuntu Server 22.04 LTS (HVM), SSD Volume Type AMI nicht finden. Versuche allgemeine Suche nach Deep Learning AMI..."
     
     AMI_ID=$(aws ec2 describe-images --region $REGION \
         --owners amazon \
