@@ -55,11 +55,11 @@ EOF
     log "Stoppe alte Container..."
     docker compose down 2>/dev/null || true
     
-    log "Baue Container (kann 5-10 Minuten dauern)..."
-    docker compose build
+    log "Baue Container whisperx_cuda (kann 5-10 Minuten dauern)..."
+    docker compose build whisperx_cuda
     
     log "Starte Container..."
-    docker compose up -d
+    docker compose up -d whisperx_cuda
     
     sleep 5
     
