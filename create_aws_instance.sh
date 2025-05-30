@@ -51,33 +51,55 @@ log "Starte EC2-Instanz in Region: $REGION, Instance-Typ: $INSTANCE_TYPE"
 log "Prüfe auf vorhandenes Schlüsselpaar..."
 KEY_EXISTS=$(aws ec2 describe-key-pairs --region $REGION --key-names $KEY_NAME --query 'KeyPairs[0].KeyName' --output text 2>/dev/null)
 
+# Temporäre Datei für das Schlüsselpaar
+KEY_FILE="$KEY_NAME.pem"
+TEMP_KEY_FILE="/tmp/$KEY_NAME-$(date +%s).pem"
+
 if [[ "$KEY_EXISTS" == "$KEY_NAME" ]]; then
     log "Schlüsselpaar '$KEY_NAME' existiert bereits."
     
-    # Prüfen, ob die Datei lokal existiert
-    if [[ ! -f "$KEY_NAME.pem" ]]; then
-        warn "Die lokale Schlüsseldatei '$KEY_NAME.pem' fehlt!"
+    # Prüfen, ob die Datei lokal existiert und beschreibbar ist
+    if [[ ! -f "$KEY_FILE" || ! -w "$KEY_FILE" ]]; then
+        warn "Die lokale Schlüsseldatei '$KEY_FILE' fehlt oder ist nicht beschreibbar!"
         warn "Lösche das vorhandene Schlüsselpaar und erstelle ein neues..."
         aws ec2 delete-key-pair --region $REGION --key-name $KEY_NAME
         
         # Neues Schlüsselpaar erstellen
         log "Erstelle neues Schlüsselpaar '$KEY_NAME'..."
-        aws ec2 create-key-pair --region $REGION --key-name $KEY_NAME --query 'KeyMaterial' --output text > $KEY_NAME.pem
-        chmod 400 $KEY_NAME.pem
-        log "Schlüsselpaar erstellt und in '$KEY_NAME.pem' gespeichert."
+        if ! aws ec2 create-key-pair --region $REGION --key-name $KEY_NAME --query 'KeyMaterial' --output text > "$TEMP_KEY_FILE"; then
+            error "Fehler beim Erstellen des Schlüsselpaars."
+            exit 1
+        fi
+        
+        # Versuche, die temporäre Datei an die gewünschte Stelle zu kopieren
+        if ! cp "$TEMP_KEY_FILE" "$KEY_FILE" 2>/dev/null; then
+            warn "Konnte Schlüsseldatei nicht nach '$KEY_FILE' kopieren. Verwende stattdessen: $TEMP_KEY_FILE"
+            KEY_FILE="$TEMP_KEY_FILE"
+        fi
+        
+        chmod 400 "$KEY_FILE"
+        log "Schlüsselpaar erstellt und in '$KEY_FILE' gespeichert."
     fi
 else
     # Sicherstellen, dass kein Schlüsselpaar mit diesem Namen existiert
     aws ec2 delete-key-pair --region $REGION --key-name $KEY_NAME 2>/dev/null
     
     log "Erstelle neues Schlüsselpaar '$KEY_NAME'..."
-    aws ec2 create-key-pair --region $REGION --key-name $KEY_NAME --query 'KeyMaterial' --output text > $KEY_NAME.pem
-    if [[ $? -ne 0 ]]; then
+    
+    # Zuerst in temporäre Datei schreiben
+    if ! aws ec2 create-key-pair --region $REGION --key-name $KEY_NAME --query 'KeyMaterial' --output text > "$TEMP_KEY_FILE"; then
         error "Fehler beim Erstellen des Schlüsselpaars. Bitte überprüfen Sie Ihre AWS-Berechtigungen."
         exit 1
     fi
-    chmod 400 $KEY_NAME.pem
-    log "Schlüsselpaar erstellt und in '$KEY_NAME.pem' gespeichert."
+    
+    # Versuche, die temporäre Datei an die gewünschte Stelle zu kopieren
+    if ! cp "$TEMP_KEY_FILE" "$KEY_FILE" 2>/dev/null; then
+        warn "Konnte Schlüsseldatei nicht nach '$KEY_FILE' kopieren. Verwende stattdessen: $TEMP_KEY_FILE"
+        KEY_FILE="$TEMP_KEY_FILE"
+    fi
+    
+    chmod 400 "$KEY_FILE"
+    log "Schlüsselpaar erstellt und in '$KEY_FILE' gespeichert."
 fi
 
 # Nochmal prüfen, ob das Schlüsselpaar jetzt existiert
@@ -85,6 +107,8 @@ if ! aws ec2 describe-key-pairs --region $REGION --key-names $KEY_NAME &> /dev/n
     error "Schlüsselpaar '$KEY_NAME' konnte nicht erstellt werden. Bitte überprüfen Sie Ihre AWS-Berechtigungen."
     exit 1
 fi
+
+# Im Rest des Skripts KEY_FILE anstelle von $KEY_NAME.pem verwenden
 
 # 2. Sicherheitsgruppe erstellen, falls sie noch nicht existiert
 SG_NAME="whisperx-sg"
@@ -170,15 +194,27 @@ usermod -aG docker ubuntu
 # NVIDIA-Treiber für GPU installieren
 echo "NVIDIA-Treiber werden installiert..."
 apt-get install -y linux-headers-$(uname -r)
-apt-get install -y build-essential
+apt-get install -y build-essential dkms
 
 # NVIDIA CUDA Repository hinzufügen
 wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
 dpkg -i cuda-keyring_1.1-1_all.deb
 apt-get update
 
-# CUDA 12.1 und NVIDIA-Treiber installieren
-apt-get install -y cuda-12-1 cuda-drivers
+# Installiere zuerst den AWS-spezifischen NVIDIA-Treiber
+apt-get install -y linux-modules-nvidia-535-aws nvidia-driver-535-server
+
+# Versuche bei Bedarf einen zusätzlichen Ansatz
+if ! nvidia-smi &>/dev/null; then
+  echo "AWS-Treiber scheinen nicht zu funktionieren, versuche Metapaket..."
+  apt-get install -y nvidia-driver-535
+fi
+
+# Installiere CUDA Toolkit separat (ohne nochmal Treiber zu installieren)
+apt-get install -y cuda-toolkit-12-1
+
+# Konfigurieren der Modprobe-Optionen für NVIDIA
+echo "options nvidia NVreg_EnableGpuFirmware=0" > /etc/modprobe.d/nvidia.conf
 
 # NVIDIA Container Toolkit installieren
 curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
@@ -251,8 +287,28 @@ echo "$(date): Starte WhisperX Setup nach Reboot..."
 
 # Prüfe, ob NVIDIA-Treiber geladen sind
 if ! nvidia-smi &>/dev/null; then
-  echo "FEHLER: NVIDIA-Treiber sind nicht geladen. Bitte überprüfen!"
-  exit 1
+  echo "WARNUNG: NVIDIA-Treiber sind nicht geladen, versuche Module zu laden..."
+  sudo modprobe nvidia || true
+  sudo modprobe nvidia_uvm || true
+  
+  # Nochmal prüfen
+  if ! nvidia-smi &>/dev/null; then
+    echo "FEHLER: NVIDIA-Treiber konnten nicht geladen werden."
+    echo "Prüfe installierte Pakete..."
+    dpkg -l | grep -i nvidia
+    echo "Versuche manuelle Treiberinstallation..."
+    sudo apt-get update
+    sudo apt-get install -y linux-modules-nvidia-535-aws
+    sudo modprobe nvidia
+    
+    # Letzte Prüfung
+    if ! nvidia-smi &>/dev/null; then
+      echo "FEHLER: NVIDIA-Treiber konnten nicht initialisiert werden!"
+      echo "Diese Instanz benötigt zwingend GPU-Unterstützung."
+      echo "Bitte überprüfen Sie die Treiberinstallation manuell."
+      exit 1
+    fi
+  fi
 fi
 
 # In das Repository-Verzeichnis wechseln
@@ -266,10 +322,21 @@ fi
 
 # NVIDIA Docker-Test ausführen
 echo "Teste NVIDIA Docker..."
-docker run --rm --gpus all nvidia/cuda:12.1.1-base-ubuntu22.04 nvidia-smi || {
+if ! docker run --rm --gpus all nvidia/cuda:12.1.1-base-ubuntu22.04 nvidia-smi; then
   echo "FEHLER: NVIDIA Docker-Test fehlgeschlagen!"
-  exit 1
-}
+  echo "Prüfe, ob nvidia-container-toolkit installiert ist..."
+  dpkg -l | grep -q nvidia-container-toolkit
+  echo "Konfiguriere nvidia-container-toolkit neu..."
+  sudo nvidia-ctk runtime configure --runtime=docker
+  sudo systemctl restart docker
+  
+  # Erneuter Test
+  if ! docker run --rm --gpus all nvidia/cuda:12.1.1-base-ubuntu22.04 nvidia-smi; then
+    echo "FEHLER: NVIDIA Docker-Test ist endgültig fehlgeschlagen."
+    echo "GPU-Durchreichung an Docker funktioniert nicht."
+    exit 1
+  fi
+fi
 
 # Container bauen und starten
 echo "Stoppe alte Container, falls vorhanden..."
@@ -279,7 +346,12 @@ echo "Baue Container (kann 5-10 Minuten dauern)..."
 docker compose build whisperx_cuda
 
 echo "Starte Container..."
-docker compose up -d whisperx_cuda
+if ! docker compose up -d whisperx_cuda; then
+  echo "FEHLER: Container konnte nicht gestartet werden!"
+  echo "Letzten Docker-Logs anzeigen:"
+  docker logs $(docker ps -lq) 2>&1 || true
+  exit 1
+fi
 
 echo "WhisperX-Setup abgeschlossen um $(date)"
 echo "API sollte unter http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4):8000/docs verfügbar sein"
@@ -336,7 +408,7 @@ PUBLIC_IP=$(aws ec2 describe-instances --region $REGION \
 log "EC2-Instanz erfolgreich erstellt!"
 log "Instance ID: $INSTANCE_ID"
 log "Public IP: $PUBLIC_IP"
-log "SSH-Zugriff: ssh -i $KEY_NAME.pem ubuntu@$PUBLIC_IP"
+log "SSH-Zugriff: ssh -i $KEY_FILE ubuntu@$PUBLIC_IP"
 log "WhisperX API wird nach dem Neustart unter http://$PUBLIC_IP:8000 verfügbar sein."
 log "Die Installation läuft im Hintergrund und kann bis zu 15 Minuten dauern, gefolgt von einem Neustart."
 log "Verbinde dich nach ca. 20 Minuten per SSH und überprüfe:"
