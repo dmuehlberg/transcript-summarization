@@ -49,7 +49,9 @@ log "Starte EC2-Instanz in Region: $REGION, Instance-Typ: $INSTANCE_TYPE"
 
 # 1. Schlüsselpaar erstellen, falls es noch nicht existiert
 log "Prüfe auf vorhandenes Schlüsselpaar..."
-if aws ec2 describe-key-pairs --region $REGION --key-names $KEY_NAME &> /dev/null; then
+KEY_EXISTS=$(aws ec2 describe-key-pairs --region $REGION --key-names $KEY_NAME --query 'KeyPairs[0].KeyName' --output text 2>/dev/null)
+
+if [[ "$KEY_EXISTS" == "$KEY_NAME" ]]; then
     log "Schlüsselpaar '$KEY_NAME' existiert bereits."
     
     # Prüfen, ob die Datei lokal existiert
@@ -65,10 +67,23 @@ if aws ec2 describe-key-pairs --region $REGION --key-names $KEY_NAME &> /dev/nul
         log "Schlüsselpaar erstellt und in '$KEY_NAME.pem' gespeichert."
     fi
 else
+    # Sicherstellen, dass kein Schlüsselpaar mit diesem Namen existiert
+    aws ec2 delete-key-pair --region $REGION --key-name $KEY_NAME 2>/dev/null
+    
     log "Erstelle neues Schlüsselpaar '$KEY_NAME'..."
     aws ec2 create-key-pair --region $REGION --key-name $KEY_NAME --query 'KeyMaterial' --output text > $KEY_NAME.pem
+    if [[ $? -ne 0 ]]; then
+        error "Fehler beim Erstellen des Schlüsselpaars. Bitte überprüfen Sie Ihre AWS-Berechtigungen."
+        exit 1
+    fi
     chmod 400 $KEY_NAME.pem
     log "Schlüsselpaar erstellt und in '$KEY_NAME.pem' gespeichert."
+fi
+
+# Nochmal prüfen, ob das Schlüsselpaar jetzt existiert
+if ! aws ec2 describe-key-pairs --region $REGION --key-names $KEY_NAME &> /dev/null; then
+    error "Schlüsselpaar '$KEY_NAME' konnte nicht erstellt werden. Bitte überprüfen Sie Ihre AWS-Berechtigungen."
+    exit 1
 fi
 
 # 2. Sicherheitsgruppe erstellen, falls sie noch nicht existiert
