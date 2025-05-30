@@ -251,23 +251,9 @@ chown -R ubuntu:ubuntu transcript-summarization
 # Das Setup-Skript herunterladen (falls es nicht im Repository ist)
 cd /home/ubuntu
 if [ ! -f "/home/ubuntu/transcript-summarization/container-setup.sh" ]; then
-  wget https://raw.githubusercontent.com/dmuehlberg/transcript-summarization/main/container-setup.sh -O /home/ubuntu/container-setup.sh
-  chmod +x /home/ubuntu/container-setup.sh
-  chown ubuntu:ubuntu /home/ubuntu/container-setup.sh
-fi
-
-# Standard-ENV-Datei erstellen, falls nicht vorhanden
-if [ ! -f "/home/ubuntu/transcript-summarization/.env" ]; then
-  cat > /home/ubuntu/transcript-summarization/.env << 'ENVFILE'
-HF_TOKEN=your_huggingface_token_here
-WHISPER_MODEL=base
-DEFAULT_LANG=en
-DEVICE=cuda
-COMPUTE_TYPE=float16
-LOG_LEVEL=INFO
-ENVIRONMENT=production
-ENVFILE
-  chown ubuntu:ubuntu /home/ubuntu/transcript-summarization/.env
+  wget https://raw.githubusercontent.com/dmuehlberg/transcript-summarization/main/container-setup.sh -O /home/ubuntu/transcript-summarization/container-setup.sh
+  chmod +x /home/ubuntu/transcript-summarization/container-setup.sh
+  chown ubuntu:ubuntu /home/ubuntu/transcript-summarization/container-setup.sh
 fi
 
 # NVIDIA-Status überprüfen
@@ -338,18 +324,14 @@ if ! docker run --rm --gpus all nvidia/cuda:12.1.1-base-ubuntu22.04 nvidia-smi; 
   fi
 fi
 
-# Container bauen und starten
-echo "Stoppe alte Container, falls vorhanden..."
-docker compose down 2>/dev/null || true
-
-echo "Baue Container (kann 5-10 Minuten dauern)..."
-docker compose build whisperx_cuda
-
-echo "Starte Container..."
-if ! docker compose up -d whisperx_cuda; then
-  echo "FEHLER: Container konnte nicht gestartet werden!"
-  echo "Letzten Docker-Logs anzeigen:"
-  docker logs $(docker ps -lq) 2>&1 || true
+# Führe das container-setup.sh Skript aus
+echo "Führe container-setup.sh aus..."
+cd /home/ubuntu/transcript-summarization
+if [ -f "./container-setup.sh" ]; then
+  chmod +x ./container-setup.sh
+  bash -c "echo -e '\n\nn\n' | ./container-setup.sh"
+else
+  echo "FEHLER: container-setup.sh konnte nicht gefunden werden!"
   exit 1
 fi
 
