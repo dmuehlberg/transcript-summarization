@@ -331,22 +331,22 @@ if [ ! -w /var/run/docker.sock ]; then
 fi
 
 # Führe das container-setup.sh Skript aus
-echo "Führe container-setup.sh aus..."
-cd /home/ubuntu/transcript-summarization
-if [ -f "./container-setup.sh" ]; then
-  chmod +x ./container-setup.sh
-  bash -c "echo -e '\n\nn\n' | ./container-setup.sh"
-else
-  echo "FEHLER: container-setup.sh konnte nicht gefunden werden!"
+# echo "Führe container-setup.sh aus..."
+# cd /home/ubuntu/transcript-summarization
+# if [ -f "./container-setup.sh" ]; then
+#   chmod +x ./container-setup.sh
+#   bash -c "echo -e '\n\nn\n' | ./container-setup.sh"
+# else
+#   echo "FEHLER: container-setup.sh konnte nicht gefunden werden!"
   
-  # Lade das Skript herunter, falls es nicht im Repository ist
-  wget https://raw.githubusercontent.com/dmuehlberg/transcript-summarization/main/container-setup.sh -O ./container-setup.sh
-  chmod +x ./container-setup.sh
-  bash -c "echo -e '\n\nn\n' | ./container-setup.sh"
-fi
+#   # Lade das Skript herunter, falls es nicht im Repository ist
+#   wget https://raw.githubusercontent.com/dmuehlberg/transcript-summarization/main/container-setup.sh -O ./container-setup.sh
+#   chmod +x ./container-setup.sh
+#   bash -c "echo -e '\n\nn\n' | ./container-setup.sh"
+# fi
 
-echo "WhisperX-Setup abgeschlossen um $(date)"
-echo "API sollte unter http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4):8000/docs verfügbar sein"
+# echo "WhisperX-Setup abgeschlossen um $(date)"
+# echo "API sollte unter http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4):8000/docs verfügbar sein"
 STARTSCRIPT
 
 chmod +x /home/ubuntu/start_whisperx.sh
