@@ -275,23 +275,6 @@ main() {
     
     cd transcript-summarization
     
-    # .env Datei erstellen falls nicht vorhanden
-    if [ ! -f ".env" ]; then
-        warning "Erstelle .env Datei..."
-        cat > .env << 'EOF'
-HF_TOKEN=your_huggingface_token_here
-WHISPER_MODEL=base
-DEFAULT_LANG=en
-DEVICE=cuda
-COMPUTE_TYPE=float16
-LOG_LEVEL=INFO
-ENVIRONMENT=production
-EOF
-        warning "WICHTIG: Bearbeite .env und setze deinen HuggingFace Token!"
-        info "Verwende: nano .env"
-        read -p "Drücke Enter nach Bearbeitung der .env Datei..." -r
-    fi
-    
     # Docker Setup
     log "Setze Docker Timeouts..."
     export DOCKER_CLIENT_TIMEOUT=300
