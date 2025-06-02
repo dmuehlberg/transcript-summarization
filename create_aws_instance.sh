@@ -353,7 +353,7 @@ chmod +x /home/ubuntu/start_whisperx.sh
 chown ubuntu:ubuntu /home/ubuntu/start_whisperx.sh
 
 # Crontab-Eintrag für den Neustart hinzufügen
-(crontab -l 2>/dev/null || echo "") | { cat; echo "@reboot /home/ubuntu/start_whisperx.sh"; } | crontab -
+# (crontab -l 2>/dev/null || echo "") | { cat; echo "@reboot /home/ubuntu/start_whisperx.sh"; } | crontab -
 
 # Reboot nach der Installation, um die Treiber zu laden
 echo "Installation abgeschlossen. System wird in 10 Sekunden neu gestartet..."
@@ -369,6 +369,24 @@ echo "Setup-Skript beendet. Warte auf Neustart..."
 EOF
 )
 
+# # 5. EC2-Instanz erstellen
+# log "Erstelle EC2-Instanz..."
+# INSTANCE_ID=$(aws ec2 run-instances --region $REGION \
+#     --image-id $AMI_ID \
+#     --instance-type $INSTANCE_TYPE \
+#     --key-name $KEY_NAME \
+#     --security-group-ids $SG_ID \
+#     --block-device-mappings "[{\"DeviceName\":\"/dev/sda1\",\"Ebs\":{\"VolumeSize\":128,\"VolumeType\":\"gp3\"}}]" \
+#     --user-data "$USER_DATA" \
+#     --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$INSTANCE_NAME}]" \
+#     --query "Instances[0].InstanceId" \
+#     --output text)
+
+# if [[ $? -ne 0 || -z "$INSTANCE_ID" ]]; then
+#     error "Fehler beim Erstellen der EC2-Instanz."
+#     exit 1
+# fi
+
 # 5. EC2-Instanz erstellen
 log "Erstelle EC2-Instanz..."
 INSTANCE_ID=$(aws ec2 run-instances --region $REGION \
@@ -377,7 +395,6 @@ INSTANCE_ID=$(aws ec2 run-instances --region $REGION \
     --key-name $KEY_NAME \
     --security-group-ids $SG_ID \
     --block-device-mappings "[{\"DeviceName\":\"/dev/sda1\",\"Ebs\":{\"VolumeSize\":128,\"VolumeType\":\"gp3\"}}]" \
-    --user-data "$USER_DATA" \
     --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$INSTANCE_NAME}]" \
     --query "Instances[0].InstanceId" \
     --output text)
@@ -403,9 +420,3 @@ log "EC2-Instanz erfolgreich erstellt!"
 log "Instance ID: $INSTANCE_ID"
 log "Public IP: $PUBLIC_IP"
 log "SSH-Zugriff: ssh -i $KEY_FILE ubuntu@$PUBLIC_IP"
-log "WhisperX API wird nach dem Neustart unter http://$PUBLIC_IP:8000 verfügbar sein."
-log "Die Installation läuft im Hintergrund und kann bis zu 15 Minuten dauern, gefolgt von einem Neustart."
-log "Verbinde dich nach ca. 20 Minuten per SSH und überprüfe:"
-log "  tail -f /home/ubuntu/whisperx_startup.log"
-log "  ./verify_gpu_setup.sh    # Um die GPU-Installation zu überprüfen"
-log "  docker ps                # Um zu sehen, ob der Container läuft"
