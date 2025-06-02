@@ -5,6 +5,10 @@ ENV PYTHON_VERSION=3.11
 # Stellen Sie sicher, dass sowohl die CUDA- als auch die cuDNN-Bibliotheken im Pfad sind
 ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/include:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH
 
+# AWS-spezifische Mirror-Konfiguration hinzufügen
+RUN sed -i 's/archive.ubuntu.com/eu-central-1.ec2.archive.ubuntu.com/g' /etc/apt/sources.list && \
+    sed -i 's/security.ubuntu.com/eu-central-1.ec2.archive.ubuntu.com/g' /etc/apt/sources.list
+
 # Install dependencies and clean up in the same layer
 RUN export DEBIAN_FRONTEND=noninteractive \
     && apt-get -y update \
@@ -13,11 +17,12 @@ RUN export DEBIAN_FRONTEND=noninteractive \
     && add-apt-repository ppa:deadsnakes/ppa \
     && apt-get -y update \
     && apt-get -y install --no-install-recommends \
-    python3.11 \
+    python${PYTHON_VERSION} \
+    python${PYTHON_VERSION}-dev \
+    python${PYTHON_VERSION}-distutils \
     python3-pip \
     git \
     ffmpeg \
-    # Wir brauchen kein zusätzliches cuDNN-Paket, da es im Base-Image enthalten ist
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* \
     && ln -s -f /usr/bin/python${PYTHON_VERSION} /usr/bin/python3 \
