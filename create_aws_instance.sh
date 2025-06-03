@@ -142,7 +142,9 @@ fi
 
 # 3. Direkte Verwendung der bekannten AMI-ID für Ubuntu 22.04 LTS
 log "Verwende die angegebene AMI-ID für Ubuntu Server 22.04 LTS..."
-AMI_ID="ami-04a5bacc58328233d"
+# AMI_ID="ami-04a5bacc58328233d"
+AMI_ID="ami-0ebbe5fd64f8315ed"
+
 log "Verwende Ubuntu Server 22.04 LTS AMI: $AMI_ID"
 
 # Optional: AMI-Details anzeigen
