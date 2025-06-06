@@ -1,5 +1,8 @@
-## Verwenden Sie CUDA 12.4 Runtime Image (kompatibel mit Treiber 550.163.01)
-FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
+## Verwenden Sie ein stabileres CUDA-Runtime-Image mit integriertem cuDNN
+FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
+
+# Verwenden Sie das AWS-optimierte Deep Learning Container Base Image
+#FROM 763104351884.dkr.ecr.eu-central-1.amazonaws.com/pytorch-training:2.0.1-gpu-py310-cu118-ubuntu20.04-ec2
 
 ENV PYTHON_VERSION=3.11
 # Stellen Sie sicher, dass sowohl die CUDA- als auch die cuDNN-Bibliotheken im Pfad sind
@@ -42,8 +45,8 @@ COPY requirements requirements/
 # Überprüfen und anzeigen der CUDA-Bibliotheken und ihrer Pfade für Diagnosezwecke
 RUN find /usr -name "libcudnn*.so*" | sort
 
-# PyTorch-Installation für CUDA 12.4
-RUN uv pip install --system --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124 \
+# Ändern Sie die PyTorch-Installation zu einer Version, die mit CUDA 11.8 und cuDNN 8 kompatibel ist
+RUN uv pip install --system --no-cache-dir torch==2.0.1+cu118 -i https://download.pytorch.org/whl/cu118 \
     && uv pip install --system --no-cache-dir -r requirements/prod.txt \
     # Clean pip cache and temporary files
     && rm -rf /root/.cache /tmp/*
