@@ -347,6 +347,71 @@ echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     log "Verbinde zu EC2-Instanz für Live-Logs..."
     log "Drücken Sie Ctrl+C um zu beenden"
-    sleep 3
-    ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@$PUBLIC_IP 'tail -f /var/log/user-data.log'
+    
+    # Warte bis SSH verfügbar ist
+    log "Warte auf SSH-Verfügbarkeit..."
+    for i in {1..30}; do
+        if ssh -i "$KEY_FILE" -o ConnectTimeout=5 -o StrictHostKeyChecking=no ec2-user@$PUBLIC_IP 'echo "SSH bereit"' 2>/dev/null; then
+            log "SSH Verbindung erfolgreich"
+            break
+        fi
+        echo -n "."
+        sleep 10
+    done
+    echo
+    
+    log "Monitoring gestartet - verschiedene Log-Quellen:"
+    
+    # Intelligentes Log-Monitoring
+    ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@$PUBLIC_IP '
+        echo "=== LOG MONITORING GESTARTET ==="
+        echo "Zeit: $(date)"
+        echo
+        
+        # Funktion für Log-Monitoring
+        monitor_logs() {
+            while true; do
+                echo "--- $(date) ---"
+                
+                # 1. User-Data Log (falls vorhanden)
+                if [ -f /var/log/user-data.log ]; then
+                    echo "USER-DATA LOG (letzte 5 Zeilen):"
+                    sudo tail -5 /var/log/user-data.log
+                else
+                    echo "User-Data Log: Noch nicht verfügbar"
+                fi
+                
+                # 2. Cloud-init Status
+                echo "CLOUD-INIT STATUS: $(sudo cloud-init status 2>/dev/null || echo "unbekannt")"
+                
+                # 3. Docker Container Status (falls Setup läuft)
+                if [ -d "/home/ec2-user/transcript-summarization" ]; then
+                    cd /home/ec2-user/transcript-summarization
+                    if command -v docker-compose &> /dev/null; then
+                        echo "CONTAINER STATUS:"
+                        docker-compose ps 2>/dev/null || echo "Container noch nicht verfügbar"
+                        
+                        echo "BUILD LOGS (letzte 3 Zeilen):"
+                        docker-compose logs --tail=3 whisperx_cuda 2>/dev/null || echo "Noch keine Build-Logs"
+                    elif [ -f "/usr/local/bin/docker-compose" ]; then
+                        echo "CONTAINER STATUS:"
+                        /usr/local/bin/docker-compose ps 2>/dev/null || echo "Container noch nicht verfügbar"
+                        
+                        echo "BUILD LOGS (letzte 3 Zeilen):"
+                        /usr/local/bin/docker-compose logs --tail=3 whisperx_cuda 2>/dev/null || echo "Noch keine Build-Logs"
+                    fi
+                fi
+                
+                # 4. API Health Check
+                echo "API CHECK:"
+                curl -s http://localhost:8000/health 2>/dev/null && echo " - API verfügbar" || echo " - API noch nicht verfügbar"
+                
+                echo "================================"
+                sleep 30
+            done
+        }
+        
+        # Starte Monitoring
+        monitor_logs
+    '
 fi
