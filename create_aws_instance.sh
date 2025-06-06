@@ -165,173 +165,6 @@ USER_DATA=$(cat <<'EOF'
 exec > >(tee /var/log/user-data.log) 2>&1
 echo "Starte WhisperX-Installation auf Ubuntu 22.04 mit NVIDIA 550.163.01 Treibern und CUDA 12.4..."
 
-# System aktualisieren
-echo "System wird aktualisiert..."
-apt-get update
-DEBIAN_FRONTEND=noninteractive apt-get upgrade -y
-
-# Grundlegende Tools installieren
-apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release git jq wget \
-                   python3-pip build-essential dkms bc htop tmux nano
-
-# Docker-Repository hinzufügen und Docker installieren (neueste Version, wie in Brev)
-echo "Docker wird installiert (Version 28.x wie in Brev)..."
-install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-chmod a+r /etc/apt/keyrings/docker.gpg
-
-echo \
-  "deb [arch="$(dpkg --print-architecture)" signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
-  "$(. /etc/os-release && echo "$VERSION_CODENAME")" stable" | \
-  tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-apt-get update
-apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-
-# Docker-Socket-Berechtigungen setzen
-chmod 666 /var/run/docker.sock
-usermod -aG docker ubuntu
-
-# Installation von NVIDIA-Treibern und CUDA 12.4
-echo "NVIDIA-Treiber Version 550.163.01 und CUDA 12.4 werden installiert..."
-
-# Entferne bestehende NVIDIA-Installationen (falls vorhanden)
-apt-get remove --purge -y nvidia* libnvidia*
-apt-get autoremove -y
-
-# Installiere die notwendigen Pakete
-apt-get install -y linux-headers-$(uname -r) build-essential
-
-# NVIDIA APT-Repository hinzufügen
-wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
-dpkg -i cuda-keyring_1.1-1_all.deb
-apt-get update
-
-# Installiere exakte NVIDIA-Treiber Version 550.163.01 (wie in Brev)
-apt-get install -y nvidia-driver-550-server=550.163.01-0ubuntu1 nvidia-utils-550-server=550.163.01-0ubuntu1
-
-# Installiere CUDA 12.4 (exakte Version aus Brev)
-apt-get install -y cuda-toolkit-12-4
-
-# NVIDIA Container Toolkit installieren
-curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
-curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
-  sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
-  tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
-
-apt-get update
-apt-get install -y nvidia-container-toolkit
-nvidia-ctk runtime configure --runtime=docker
-systemctl restart docker
-
-# CUDA-Umgebungsvariablen setzen
-echo 'export PATH=/usr/local/cuda-12.4/bin${PATH:+:${PATH}}' > /etc/profile.d/cuda.sh
-echo 'export LD_LIBRARY_PATH=/usr/local/cuda-12.4/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}' >> /etc/profile.d/cuda.sh
-chmod +x /etc/profile.d/cuda.sh
-source /etc/profile.d/cuda.sh
-
-# Python und weitere Abhängigkeiten für WhisperX
-apt-get install -y python3.10 python3.10-venv python3-pip python3.10-dev ffmpeg libsndfile1
-
-# Docker-Compose installieren
-pip3 install docker-compose
-
-# Das WhisperX Repository klonen
-cd /home/ubuntu
-git clone https://github.com/dmuehlberg/transcript-summarization.git
-chown -R ubuntu:ubuntu transcript-summarization
-
-# Erstelle eine Analysedatei, um die Installation zu überprüfen
-cat > /home/ubuntu/verify_gpu_setup.sh << 'VERIFY_SCRIPT'
-#!/bin/bash
-# Dieses Skript überprüft die GPU-Installation
-
-echo -e "\033[0;34m=== SYSTEMÜBERPRÜFUNG ===\033[0m"
-echo -e "\033[0;32m[INFO] Betriebssystem:\033[0m"
-cat /etc/os-release | grep "PRETTY_NAME\|VERSION"
-
-echo -e "\033[0;32m[INFO] Kernel-Version:\033[0m"
-uname -a
-
-echo -e "\033[0;32m[INFO] NVIDIA-Treiber Status:\033[0m"
-nvidia-smi
-
-echo -e "\033[0;32m[INFO] CUDA Version:\033[0m"
-nvcc --version || echo "nvcc nicht gefunden, CUDA möglicherweise nicht korrekt installiert"
-
-echo -e "\033[0;32m[INFO] Docker Version:\033[0m"
-docker --version
-
-echo -e "\033[0;32m[INFO] Docker-Compose Version:\033[0m"
-docker-compose --version
-
-echo -e "\033[0;32m[INFO] NVIDIA Docker Test:\033[0m"
-docker run --rm --gpus all nvidia/cuda:12.4.0-base-ubuntu22.04 nvidia-smi || echo "NVIDIA Docker nicht funktionsfähig"
-
-echo -e "\033[0;34m=== INSTALLATION ABGESCHLOSSEN ===\033[0m"
-VERIFY_SCRIPT
-
-chmod +x /home/ubuntu/verify_gpu_setup.sh
-chown ubuntu:ubuntu /home/ubuntu/verify_gpu_setup.sh
-
-# Start-Skript erstellen, das nach dem Neustart ausgeführt werden soll
-cat > /home/ubuntu/start_whisperx.sh << 'STARTSCRIPT'
-#!/bin/bash
-set -e
-
-# Logfile
-LOG_FILE="/home/ubuntu/whisperx_startup.log"
-exec > >(tee -a "$LOG_FILE") 2>&1
-
-echo "$(date): Starte WhisperX Setup nach Reboot..."
-
-# Prüfe, ob NVIDIA-Treiber geladen sind
-if ! nvidia-smi &>/dev/null; then
-  echo "WARNUNG: NVIDIA-Treiber sind nicht geladen, versuche Module zu laden..."
-  sudo modprobe nvidia || true
-  
-  # Nochmal prüfen
-  if ! nvidia-smi &>/dev/null; then
-    echo "FEHLER: NVIDIA-Treiber konnten nicht geladen werden."
-    echo "Versuche manuelle Treiberinstallation neu zu starten..."
-    sudo apt-get update
-    sudo apt-get install -y --reinstall nvidia-driver-550-server
-    sudo modprobe nvidia
-    
-    # Letzte Prüfung
-    if ! nvidia-smi &>/dev/null; then
-      echo "FEHLER: NVIDIA-Treiber konnten nicht initialisiert werden!"
-      echo "Bitte überprüfen Sie die Treiberinstallation manuell."
-      exit 1
-    fi
-  fi
-fi
-
-# NVIDIA Docker-Test ausführen
-echo "Teste NVIDIA Docker..."
-if ! docker run --rm --gpus all nvidia/cuda:12.4.0-base-ubuntu22.04 nvidia-smi; then
-  echo "FEHLER: NVIDIA Docker-Test fehlgeschlagen!"
-  echo "Konfiguriere nvidia-container-toolkit neu..."
-  sudo nvidia-ctk runtime configure --runtime=docker
-  sudo systemctl restart docker
-  
-  # Erneuter Test
-  if ! docker run --rm --gpus all nvidia/cuda:12.4.0-base-ubuntu22.04 nvidia-smi; then
-    echo "FEHLER: NVIDIA Docker-Test ist endgültig fehlgeschlagen."
-    echo "GPU-Durchreichung an Docker funktioniert nicht."
-    exit 1
-  fi
-fi
-
-# In das Repository-Verzeichnis wechseln
-cd /home/ubuntu/transcript-summarization
-
-# Docker-Socket-Berechtigungen prüfen
-if [ ! -w /var/run/docker.sock ]; then
-  echo "Berechtigungen für Docker-Socket anpassen..."
-  sudo chmod 666 /var/run/docker.sock
-fi
-
 # Führe das container-setup.sh Skript aus
 # echo "Führe container-setup.sh aus..."
 # cd /home/ubuntu/transcript-summarization
@@ -351,43 +184,9 @@ fi
 # echo "API sollte unter http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4):8000/docs verfügbar sein"
 STARTSCRIPT
 
-chmod +x /home/ubuntu/start_whisperx.sh
-chown ubuntu:ubuntu /home/ubuntu/start_whisperx.sh
 
-# Crontab-Eintrag für den Neustart hinzufügen
-# (crontab -l 2>/dev/null || echo "") | { cat; echo "@reboot /home/ubuntu/start_whisperx.sh"; } | crontab -
-
-# Reboot nach der Installation, um die Treiber zu laden
-echo "Installation abgeschlossen. System wird in 10 Sekunden neu gestartet..."
-echo "Nach dem Neustart wird WhisperX automatisch gestartet."
-echo "Verbinde dich nach dem Neustart per SSH und überprüfe:"
-echo "tail -f /home/ubuntu/whisperx_startup.log"
-echo "Oder führe die Verifikation aus mit: ./verify_gpu_setup.sh"
-
-# Reboot planen
-nohup bash -c "sleep 10 && reboot" &
-
-echo "Setup-Skript beendet. Warte auf Neustart..."
 EOF
 )
-
-# # 5. EC2-Instanz erstellen
-# log "Erstelle EC2-Instanz..."
-# INSTANCE_ID=$(aws ec2 run-instances --region $REGION \
-#     --image-id $AMI_ID \
-#     --instance-type $INSTANCE_TYPE \
-#     --key-name $KEY_NAME \
-#     --security-group-ids $SG_ID \
-#     --block-device-mappings "[{\"DeviceName\":\"/dev/sda1\",\"Ebs\":{\"VolumeSize\":128,\"VolumeType\":\"gp3\"}}]" \
-#     --user-data "$USER_DATA" \
-#     --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$INSTANCE_NAME}]" \
-#     --query "Instances[0].InstanceId" \
-#     --output text)
-
-# if [[ $? -ne 0 || -z "$INSTANCE_ID" ]]; then
-#     error "Fehler beim Erstellen der EC2-Instanz."
-#     exit 1
-# fi
 
 # 5. EC2-Instanz erstellen
 log "Erstelle EC2-Instanz..."
@@ -397,6 +196,7 @@ INSTANCE_ID=$(aws ec2 run-instances --region $REGION \
     --key-name $KEY_NAME \
     --security-group-ids $SG_ID \
     --block-device-mappings "[{\"DeviceName\":\"/dev/sda1\",\"Ebs\":{\"VolumeSize\":128,\"VolumeType\":\"gp3\"}}]" \
+    --user-data "$USER_DATA" \
     --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$INSTANCE_NAME}]" \
     --query "Instances[0].InstanceId" \
     --output text)
@@ -405,6 +205,23 @@ if [[ $? -ne 0 || -z "$INSTANCE_ID" ]]; then
     error "Fehler beim Erstellen der EC2-Instanz."
     exit 1
 fi
+
+# # 5. EC2-Instanz erstellen
+# log "Erstelle EC2-Instanz..."
+# INSTANCE_ID=$(aws ec2 run-instances --region $REGION \
+#     --image-id $AMI_ID \
+#     --instance-type $INSTANCE_TYPE \
+#     --key-name $KEY_NAME \
+#     --security-group-ids $SG_ID \
+#     --block-device-mappings "[{\"DeviceName\":\"/dev/sda1\",\"Ebs\":{\"VolumeSize\":128,\"VolumeType\":\"gp3\"}}]" \
+#     --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$INSTANCE_NAME}]" \
+#     --query "Instances[0].InstanceId" \
+#     --output text)
+
+# if [[ $? -ne 0 || -z "$INSTANCE_ID" ]]; then
+#     error "Fehler beim Erstellen der EC2-Instanz."
+#     exit 1
+# fi
 
 log "EC2-Instanz wird erstellt mit ID: $INSTANCE_ID"
 log "Warte auf Instanzstart..."
