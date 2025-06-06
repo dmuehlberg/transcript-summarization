@@ -341,26 +341,23 @@ log ""
 warn "WICHTIG: Die automatische Installation läuft im Hintergrund!"
 warn "Bitte warten Sie mindestens 10 Minuten bevor Sie die API verwenden."
 
-# Optional: Automatisches Monitoring der Installation
-read -p "Installation-Logs in Echtzeit verfolgen? (y/N): " -n 1 -r
+# Automatisches Live-Monitoring der Installation
+log "Starte automatisches Live-Monitoring..."
+log "Drücken Sie Ctrl+C um zu beenden"
+
+# Warte bis SSH verfügbar ist
+log "Warte auf SSH-Verfügbarkeit..."
+for i in {1..30}; do
+    if ssh -i "$KEY_FILE" -o ConnectTimeout=5 -o StrictHostKeyChecking=no ec2-user@$PUBLIC_IP 'echo "SSH bereit"' 2>/dev/null; then
+        log "SSH Verbindung erfolgreich"
+        break
+    fi
+    echo -n "."
+    sleep 10
+done
 echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    log "Verbinde zu EC2-Instanz für Live-Logs..."
-    log "Drücken Sie Ctrl+C um zu beenden"
-    
-    # Warte bis SSH verfügbar ist
-    log "Warte auf SSH-Verfügbarkeit..."
-    for i in {1..30}; do
-        if ssh -i "$KEY_FILE" -o ConnectTimeout=5 -o StrictHostKeyChecking=no ec2-user@$PUBLIC_IP 'echo "SSH bereit"' 2>/dev/null; then
-            log "SSH Verbindung erfolgreich"
-            break
-        fi
-        echo -n "."
-        sleep 10
-    done
-    echo
-    
-    log "Monitoring gestartet - verschiedene Log-Quellen:"
+
+log "Live-Monitoring gestartet - verschiedene Log-Quellen:"
     
     # Intelligentes Log-Monitoring
     ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@$PUBLIC_IP '
@@ -414,4 +411,3 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
         # Starte Monitoring
         monitor_logs
     '
-fi
