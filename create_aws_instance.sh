@@ -421,4 +421,4 @@ PUBLIC_IP=$(aws ec2 describe-instances --region $REGION \
 log "EC2-Instanz erfolgreich erstellt!"
 log "Instance ID: $INSTANCE_ID"
 log "Public IP: $PUBLIC_IP"
-log "SSH-Zugriff: ssh -i $KEY_FILE ubuntu@$PUBLIC_IP"
+log "SSH-Zugriff: ssh -i $KEY_FILE ec2-user@$PUBLIC_IP"
