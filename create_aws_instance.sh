@@ -161,53 +161,130 @@ fi
 log "Erstelle User-Data-Skript..."
 USER_DATA=$(cat <<'EOF'
 #!/bin/bash
+
+# User-Data Skript für WhisperX Installation
+# Logs werden in mehrere Dateien geschrieben für besseres Debugging
+
 exec > >(tee /var/log/user-data.log) 2>&1
-echo "Starte WhisperX-Installation auf Amazon Linux 2 mit NVIDIA 550.163.01 Treibern und CUDA 12.4..."
+echo "=== WHISPERX INSTALLATION GESTARTET ==="
+echo "Datum: $(date)"
+echo "User: $(whoami)"
+echo "Working Dir: $(pwd)"
+
+# Cloud-init Status loggen
+echo "Cloud-init Status: $(cloud-init status 2>/dev/null || echo 'unknown')"
+
+echo "Starte WhisperX-Installation auf Amazon Linux 2 mit NVIDIA Treibern..."
+
+# Warte kurz bis System bereit ist
+sleep 30
 
 # System Update für Amazon Linux 2
-yum update -y
+echo "System Update..."
+yum update -y 2>&1
 
 # Git installieren falls nicht vorhanden
-yum install -y git
+echo "Git Installation..."
+yum install -y git 2>&1
 
 # Docker installieren falls nicht vorhanden
 if ! command -v docker &> /dev/null; then
     echo "Installiere Docker..."
-    yum install -y docker
-    systemctl enable docker
-    systemctl start docker
-    usermod -aG docker ec2-user
+    yum install -y docker 2>&1
+    systemctl enable docker 2>&1
+    systemctl start docker 2>&1
+    usermod -aG docker ec2-user 2>&1
     echo "Docker installiert"
-fi
-
-# Als ec2-user wechseln und container-setup.sh ausführen
-sudo -u ec2-user bash << 'USERSCRIPT'
-cd /home/ec2-user
-
-# Repository klonen (falls nicht vorhanden)
-if [ ! -d "transcript-summarization" ]; then
-    echo "Klone Repository..."
-    git clone https://github.com/dmuehlberg/transcript-summarization.git
-fi
-
-cd transcript-summarization
-
-# container-setup.sh ausführen (automatisch, ohne Interaktion)
-if [ -f "./container-setup.sh" ]; then
-    echo "Führe container-setup.sh aus..."
-    chmod +x ./container-setup.sh
-    echo "n" | ./container-setup.sh
 else
-    echo "FEHLER: container-setup.sh nicht gefunden!"
-    # Fallback: Lade das Skript herunter
-    wget https://raw.githubusercontent.com/dmuehlberg/transcript-summarization/main/container-setup.sh -O ./container-setup.sh
-    chmod +x ./container-setup.sh
-    echo "n" | ./container-setup.sh
+    echo "Docker bereits installiert"
+    systemctl start docker 2>&1
 fi
+
+# Docker Status prüfen
+echo "Docker Status:"
+systemctl status docker --no-pager 2>&1
+docker --version 2>&1
+
+# Wechsel zu ec2-user für Setup
+echo "Wechsle zu ec2-user für Repository Setup..."
+
+# Setup als ec2-user ausführen
+sudo -u ec2-user bash -c '
+    echo "=== EC2-USER SETUP GESTARTET ==="
+    cd /home/ec2-user
+    
+    # Repository klonen (falls nicht vorhanden)
+    if [ ! -d "transcript-summarization" ]; then
+        echo "Klone Repository..."
+        git clone https://github.com/dmuehlberg/transcript-summarization.git 2>&1
+        if [ $? -eq 0 ]; then
+            echo "Repository erfolgreich geklont"
+        else
+            echo "FEHLER: Repository konnte nicht geklont werden"
+            exit 1
+        fi
+    else
+        echo "Repository bereits vorhanden"
+        cd transcript-summarization
+        git pull 2>&1 || echo "Git pull fehlgeschlagen"
+        cd ..
+    fi
+    
+    cd transcript-summarization
+    
+    # container-setup.sh ausführen
+    if [ -f "./container-setup.sh" ]; then
+        echo "Führe container-setup.sh aus..."
+        chmod +x ./container-setup.sh
+        
+        # Setup ohne Interaktion ausführen
+        echo "n" | timeout 1800 ./container-setup.sh 2>&1
+        SETUP_EXIT_CODE=$?
+        
+        if [ $SETUP_EXIT_CODE -eq 0 ]; then
+            echo "container-setup.sh erfolgreich abgeschlossen"
+        elif [ $SETUP_EXIT_CODE -eq 124 ]; then
+            echo "WARNUNG: container-setup.sh Timeout nach 30 Minuten"
+        else
+            echo "FEHLER: container-setup.sh fehlgeschlagen (Exit Code: $SETUP_EXIT_CODE)"
+        fi
+    else
+        echo "FEHLER: container-setup.sh nicht gefunden!"
+        echo "Verfügbare Dateien:"
+        ls -la 2>&1
+        
+        # Fallback: Lade das Skript herunter
+        echo "Fallback: Lade container-setup.sh herunter..."
+        wget https://raw.githubusercontent.com/dmuehlberg/transcript-summarization/main/container-setup.sh -O ./container-setup.sh 2>&1
+        if [ -f "./container-setup.sh" ]; then
+            chmod +x ./container-setup.sh
+            echo "n" | timeout 1800 ./container-setup.sh 2>&1
+        else
+            echo "FEHLER: Fallback fehlgeschlagen"
+        fi
+    fi
+    
+    echo "=== EC2-USER SETUP ABGESCHLOSSEN ==="
+'
+
+# Final Status
+echo "=== INSTALLATION STATUS ==="
+echo "Datum: $(date)"
+
+# Docker Container Status
+echo "Docker Container:"
+sudo -u ec2-user bash -c 'cd /home/ec2-user/transcript-summarization && docker-compose ps 2>/dev/null || echo "Container Status nicht verfügbar"'
+
+# API Test
+PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
+echo "Public IP: $PUBLIC_IP"
+echo "API URL: http://$PUBLIC_IP:8000/docs"
+
+# Health Check (falls API läuft)
+curl -s http://localhost:8000/health 2>/dev/null && echo "API Health Check: OK" || echo "API Health Check: Nicht verfügbar"
 
 echo "WhisperX-Setup abgeschlossen um $(date)"
-echo "API sollte unter http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4):8000/docs verfügbar sein"
-USERSCRIPT
+echo "=== INSTALLATION LOG ENDE ==="
 
 EOF
 )
