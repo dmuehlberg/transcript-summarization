@@ -190,6 +190,7 @@ services:
       - "8000:8000"
     # volumes:
     #   - ./whisperx-service/app:/app
+    runtime: nvidia
     environment:
       - DEVICE=cuda
       - HF_TOKEN=${HF_TOKEN}
