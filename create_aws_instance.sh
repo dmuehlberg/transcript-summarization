@@ -376,7 +376,8 @@ EOF
                 fi
                 
                 # 2. Cloud-init Status
-                echo 'CLOUD-INIT STATUS: \$(sudo cloud-init status 2>/dev/null || echo \"unbekannt\")'
+                echo 'CLOUD-INIT STATUS:'
+                sudo cloud-init status 2>/dev/null || echo "unbekannt"
                 
                 # 3. Docker Container Status (falls Setup läuft)
                 if [ -d '/home/ec2-user/transcript-summarization' ]; then
