@@ -401,7 +401,19 @@ log "Live-Monitoring gestartet - verschiedene Log-Quellen:"
                 
                 # 4. API Health Check
                 echo "API CHECK:"
-                curl -s http://localhost:8000/health 2>/dev/null && echo " - API verfügbar" || echo " - API noch nicht verfügbar"
+                if curl -s http://localhost:8000/health 2>/dev/null; then
+                    echo " - API verfügbar"
+                    echo ""
+                    echo "=== INSTALLATION ERFOLGREICH ABGESCHLOSSEN ==="
+                    echo "Public IP: $PUBLIC_IP"
+                    echo "SSH-Zugriff: ssh -i $KEY_FILE ec2-user@$PUBLIC_IP"
+                    echo "API URL: http://$PUBLIC_IP:8000/docs"
+                    echo ""
+                    echo "Das Skript wird jetzt beendet."
+                    exit 0
+                else
+                    echo " - API noch nicht verfügbar"
+                fi
                 
                 echo "================================"
                 sleep 30
