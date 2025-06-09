@@ -241,7 +241,7 @@
                   {
                     "id": "b4456cb5-b856-468a-8ea7-2e0406615114",
                     "leftValue": "={{ $json.infrastructure }}",
-                    "rightValue": "nvidia_brev",
+                    "rightValue": "aws_t4",
                     "operator": {
                       "type": "string",
                       "operation": "equals",
@@ -252,7 +252,32 @@
                 "combinator": "and"
               },
               "renameOutput": true,
-              "outputKey": "nvidia_brev"
+              "outputKey": "aws_t4"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "6f4391d7-9e2f-4ef0-8bce-bf7c77d9ad1a",
+                    "leftValue": "={{ $json.infrastructure }}",
+                    "rightValue": "aws_a10g",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "aws_a10g"
             }
           ]
         },
@@ -304,7 +329,7 @@
             {
               "id": "f462dde0-9383-42d6-bcb4-57769f422b58",
               "name": "infrastructure",
-              "value": "local",
+              "value": "aws_t4",
               "type": "string"
             }
           ]
@@ -368,65 +393,6 @@
       ],
       "id": "34b5d32d-8272-4025-b1a8-758b70034230",
       "name": "Set Remote Transcription Host"
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "=http://{{ $json.transcriptionHostFinal }}:8000/speech-to-text",
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
-            {
-              "name": "device",
-              "value": "cpu"
-            },
-            {
-              "name": "model",
-              "value": "large-v3"
-            },
-            {
-              "name": "compute_type",
-              "value": "int8"
-            },
-            {
-              "name": "chunk_size",
-              "value": "5"
-            },
-            {
-              "name": "batch_size",
-              "value": "2"
-            }
-          ]
-        },
-        "sendBody": true,
-        "contentType": "multipart-form-data",
-        "bodyParameters": {
-          "parameters": [
-            {
-              "parameterType": "formBinaryData",
-              "name": "file",
-              "inputDataFieldName": "data"
-            }
-          ]
-        },
-        "options": {
-          "response": {
-            "response": {
-              "fullResponse": true,
-              "responseFormat": "json"
-            }
-          }
-        }
-      },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        -4580,
-        880
-      ],
-      "id": "2a3c9e8c-f5da-4ab5-a28b-a8c895514409",
-      "name": "Start Transcription (Send HTTP POST)",
-      "alwaysOutputData": false
     },
     {
       "parameters": {
@@ -587,89 +553,6 @@
     },
     {
       "parameters": {
-        "assignments": {
-          "assignments": [
-            {
-              "id": "25c5729e-a0c1-4f21-a1a9-61c49a74e9c3",
-              "name": "transcriptionHost",
-              "value": "52.29.14.119",
-              "type": "string"
-            }
-          ]
-        },
-        "includeOtherFields": true,
-        "options": {}
-      },
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.4,
-      "position": [
-        -5380,
-        1220
-      ],
-      "id": "4f73f24b-bc73-4293-b7a6-b0e46c775b63",
-      "name": "Set Remote Nvidia Brev Transcription Host"
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "=http://{{ $json.transcriptionHostFinal }}:8000/speech-to-text",
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
-            {
-              "name": "device",
-              "value": "cuda"
-            },
-            {
-              "name": "model",
-              "value": "large-v3"
-            },
-            {
-              "name": "compute_type",
-              "value": "float16"
-            },
-            {
-              "name": "chunk_size",
-              "value": "15"
-            },
-            {
-              "name": "batch_size",
-              "value": "4"
-            }
-          ]
-        },
-        "sendBody": true,
-        "contentType": "multipart-form-data",
-        "bodyParameters": {
-          "parameters": [
-            {
-              "parameterType": "formBinaryData",
-              "name": "file",
-              "inputDataFieldName": "data"
-            }
-          ]
-        },
-        "options": {
-          "response": {
-            "response": {
-              "fullResponse": true,
-              "responseFormat": "json"
-            }
-          }
-        }
-      },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        -4580,
-        1120
-      ],
-      "id": "7f5f9115-e3b0-4bf8-a7ae-9c5c5c6049af",
-      "name": "Start Transcription (Send HTTP POST)1",
-      "alwaysOutputData": false
-    },
-    {
-      "parameters": {
         "rules": {
           "values": [
             {
@@ -733,7 +616,7 @@
                   {
                     "id": "b4456cb5-b856-468a-8ea7-2e0406615114",
                     "leftValue": "={{ $json.infrastructure }}",
-                    "rightValue": "nvidia_brev",
+                    "rightValue": "aws_t4",
                     "operator": {
                       "type": "string",
                       "operation": "equals",
@@ -744,7 +627,32 @@
                 "combinator": "and"
               },
               "renameOutput": true,
-              "outputKey": "nvidia_brev"
+              "outputKey": "aws_t4"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "74aa5bdb-3f08-4411-8198-286176e6ea12",
+                    "leftValue": "={{ $json.infrastructure }}",
+                    "rightValue": "aws_a10g",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "aws_a10g"
             }
           ]
         },
@@ -758,6 +666,30 @@
       ],
       "id": "252a61de-1e80-44a3-9792-a1e40b2271b3",
       "name": "Switch1"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "25c5729e-a0c1-4f21-a1a9-61c49a74e9c3",
+              "name": "transcriptionHost",
+              "value": "18.156.163.193",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -5380,
+        1220
+      ],
+      "id": "4f73f24b-bc73-4293-b7a6-b0e46c775b63",
+      "name": "Set Remote AWS Transcription Host"
     },
     {
       "parameters": {
@@ -776,7 +708,7 @@
             },
             {
               "name": "compute_type",
-              "value": "float32"
+              "value": "float16"
             },
             {
               "name": "chunk_size",
@@ -784,7 +716,7 @@
             },
             {
               "name": "batch_size",
-              "value": "32"
+              "value": "8"
             }
           ]
         },
@@ -811,11 +743,129 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -4540,
-        1400
+        -4580,
+        1120
+      ],
+      "id": "7f5f9115-e3b0-4bf8-a7ae-9c5c5c6049af",
+      "name": "Start Transcription on T4 GPU (Send HTTP POST)",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://{{ $json.transcriptionHostFinal }}:8000/speech-to-text",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "device",
+              "value": "cpu"
+            },
+            {
+              "name": "model",
+              "value": "large-v3"
+            },
+            {
+              "name": "compute_type",
+              "value": "int8"
+            },
+            {
+              "name": "chunk_size",
+              "value": "5"
+            },
+            {
+              "name": "batch_size",
+              "value": "2"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -4580,
+        880
+      ],
+      "id": "2a3c9e8c-f5da-4ab5-a28b-a8c895514409",
+      "name": "Start Local Transcription (Send HTTP POST)",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://{{ $json.transcriptionHostFinal }}:8000/speech-to-text",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "device",
+              "value": "cuda"
+            },
+            {
+              "name": "model",
+              "value": "large-v3"
+            },
+            {
+              "name": "compute_type",
+              "value": "float32"
+            },
+            {
+              "name": "chunk_size",
+              "value": "30"
+            },
+            {
+              "name": "batch_size",
+              "value": "16"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -4580,
+        1380
       ],
       "id": "d6c9d434-1152-4864-a708-d9c6c7492ab0",
-      "name": "Start Transcription (Send HTTP POST)2",
+      "name": "Start Transcription on A10G GPU (Send HTTP POST)",
       "alwaysOutputData": false
     }
   ],
@@ -823,12 +873,12 @@
     "When Executed by Another Workflow": [
       {
         "json": {
-          "filePath": "/data/shared/2025-06-07 16-11-00.mp3"
+          "filePath": "/data/shared/2025-06-02 14-59-14.mp3"
         }
       },
       {
         "json": {
-          "baseFileName": "2025-06-07 16-11-00"
+          "baseFileName": "2025-06-02 14-59-14"
         }
       }
     ]
@@ -925,7 +975,14 @@
         ],
         [
           {
-            "node": "Set Remote Nvidia Brev Transcription Host",
+            "node": "Set Remote AWS Transcription Host",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set Remote AWS Transcription Host",
             "type": "main",
             "index": 0
           }
@@ -970,17 +1027,6 @@
         [
           {
             "node": "Set Final Transcription Host",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Start Transcription (Send HTTP POST)": {
-      "main": [
-        [
-          {
-            "node": "Set processId",
             "type": "main",
             "index": 0
           }
@@ -1075,7 +1121,39 @@
         ]
       ]
     },
-    "Set Remote Nvidia Brev Transcription Host": {
+    "Switch1": {
+      "main": [
+        [
+          {
+            "node": "Start Local Transcription (Send HTTP POST)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Start Local Transcription (Send HTTP POST)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Start Transcription on T4 GPU (Send HTTP POST)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Start Transcription on A10G GPU (Send HTTP POST)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Remote AWS Transcription Host": {
       "main": [
         [
           {
@@ -1086,32 +1164,29 @@
         ]
       ]
     },
-    "Switch1": {
+    "Start Transcription on T4 GPU (Send HTTP POST)": {
       "main": [
         [
           {
-            "node": "Start Transcription (Send HTTP POST)",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Start Transcription (Send HTTP POST)",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Start Transcription (Send HTTP POST)1",
+            "node": "Set processId",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Start Transcription (Send HTTP POST)1": {
+    "Start Local Transcription (Send HTTP POST)": {
+      "main": [
+        [
+          {
+            "node": "Set processId",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Transcription on A10G GPU (Send HTTP POST)": {
       "main": [
         [
           {
@@ -1127,7 +1202,7 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "ad5ab521-6daa-4abd-abba-b82eb80b8426",
+  "versionId": "771ee77f-0c0c-4aca-aecc-4b1e0c51270f",
   "meta": {
     "instanceId": "e19a58ffb0fd248efa26d031fe3b9360ad1bd1b828d9ae749d875af6b5124b71"
   },
