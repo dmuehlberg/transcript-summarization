@@ -9,10 +9,10 @@
       "type": "n8n-nodes-base.readWriteFile",
       "typeVersion": 1,
       "position": [
-        220,
-        0
+        -6280,
+        860
       ],
-      "id": "68b9e486-c73e-4e81-8de1-ace115028da3",
+      "id": "33f8c7c5-cd1e-4ecf-af71-67124becff9a",
       "name": "Read MP3 File"
     },
     {
@@ -33,10 +33,10 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        2200,
-        0
+        -4300,
+        860
       ],
-      "id": "23a897eb-28ff-4ab4-a50e-14a985308c6d",
+      "id": "8a2a02a6-9e7d-4dda-86a6-9b7b64c56b2c",
       "name": "Set processId"
     },
     {
@@ -47,10 +47,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2460,
-        0
+        -4040,
+        860
       ],
-      "id": "fbfebe1d-5e60-43d8-b953-48fe0de54852",
+      "id": "8af470bc-3180-4a6e-92bf-3dc03d229179",
       "name": "Check Transcription Status"
     },
     {
@@ -114,10 +114,10 @@
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
       "position": [
-        2880,
-        0
+        -3620,
+        860
       ],
-      "id": "f4b14993-b800-4169-b788-628dab8d9a0d",
+      "id": "1d80968b-a45c-4dac-8825-45c9054f2dbd",
       "name": "Transcription finished?"
     },
     {
@@ -127,10 +127,10 @@
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
       "position": [
-        3060,
-        120
+        -3440,
+        980
       ],
-      "id": "57a4f198-9ffa-40e5-a88d-b6f1fe0bf8f5",
+      "id": "2d4822e4-a833-42dd-96d4-36311d695313",
       "name": "Wait",
       "webhookId": "9bf9a2b6-5a69-42d7-99a2-0931e04bc858"
     },
@@ -170,10 +170,10 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        3320,
-        -100
+        -3180,
+        760
       ],
-      "id": "08b01260-1b2d-4628-9c6f-5aea49ab8ccf",
+      "id": "f9939bdc-ec76-46a9-ac90-36240c7f5977",
       "name": "Collect Transcription_Details"
     },
     {
@@ -261,10 +261,10 @@
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
       "position": [
-        880,
-        0
+        -5620,
+        860
       ],
-      "id": "1f1c3aef-6417-4778-8d02-5c36dc46d24b",
+      "id": "5be31318-9287-4868-a4a8-937506641b63",
       "name": "Switch"
     },
     {
@@ -276,29 +276,11 @@
               "name": "baseFileName",
               "value": "={{ $json.fileName.split('/').pop().split('.')[0] }}",
               "type": "string"
-            }
-          ]
-        },
-        "includeOtherFields": true,
-        "options": {}
-      },
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.4,
-      "position": [
-        440,
-        0
-      ],
-      "id": "fd1177e9-5fd8-4b6f-96f3-de8afdaece41",
-      "name": "Set Filename"
-    },
-    {
-      "parameters": {
-        "assignments": {
-          "assignments": [
+            },
             {
-              "id": "f462dde0-9383-42d6-bcb4-57769f422b58",
-              "name": "infrastructure",
-              "value": "nvidia_brev",
+              "id": "37594e04-abec-4853-b1d1-ae1823da306b",
+              "name": "basePath",
+              "value": "={{ $('When Executed by Another Workflow').item.json.filePath.split('/').slice(0, -1).join('/') }}",
               "type": "string"
             }
           ]
@@ -309,10 +291,34 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        660,
-        0
+        -6060,
+        860
       ],
-      "id": "fe7f4209-953d-460c-ab0f-d0225af7a209",
+      "id": "5de8fa10-91c3-4899-a2b9-bd914edd7eae",
+      "name": "Set Filename"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f462dde0-9383-42d6-bcb4-57769f422b58",
+              "name": "infrastructure",
+              "value": "local",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -5840,
+        860
+      ],
+      "id": "616285d0-8be8-421c-ac83-1240cde65b02",
       "name": "Set Infrastructure (Remote or Local)"
     },
     {
@@ -333,10 +339,10 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        1120,
-        -60
+        -5380,
+        800
       ],
-      "id": "7dbd06bd-5768-4225-ac38-34cd3785659f",
+      "id": "47191546-62f3-4c21-9dcf-9f6fd0379641",
       "name": "Set Local Transcription Host"
     },
     {
@@ -357,10 +363,10 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        1120,
-        140
+        -5380,
+        1000
       ],
-      "id": "6b10bd3c-db99-435d-9455-8ecc828d428a",
+      "id": "34b5d32d-8272-4025-b1a8-758b70034230",
       "name": "Set Remote Transcription Host"
     },
     {
@@ -415,10 +421,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1920,
-        20
+        -4580,
+        880
       ],
-      "id": "4f210950-ffdb-4198-86b3-e021fb14fe3f",
+      "id": "2a3c9e8c-f5da-4ab5-a28b-a8c895514409",
       "name": "Start Transcription (Send HTTP POST)",
       "alwaysOutputData": false
     },
@@ -429,10 +435,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3540,
-        -100
+        -2960,
+        760
       ],
-      "id": "9bbfe4b3-04c7-48c6-bd3e-760a40f423ec",
+      "id": "78bc55e4-1c60-4ca1-a264-a7873810e9fe",
       "name": "Merge Transcript Segments"
     },
     {
@@ -442,16 +448,16 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3760,
-        -100
+        -2740,
+        760
       ],
-      "id": "88360ff8-6ad8-41b2-b3c0-5feffeaf1761",
+      "id": "fd932d55-b00e-4973-a0eb-c0a9cde570c0",
       "name": "Prepare Binary File for Transcript"
     },
     {
       "parameters": {
         "operation": "write",
-        "fileName": "={{ $('Read MP3 File').item.json.directory }}/{{ $('Set Filename').item.json.baseFileName }}.txt",
+        "fileName": "={{ $('Set Filename').item.json.basePath }}/{{ $('Set Filename').item.json.baseFileName }}.txt",
         "dataPropertyName": "file",
         "options": {
           "append": false
@@ -460,10 +466,10 @@
       "type": "n8n-nodes-base.readWriteFile",
       "typeVersion": 1,
       "position": [
-        3980,
-        -100
+        -2520,
+        760
       ],
-      "id": "09caba52-eb77-4088-9304-417822e45ab7",
+      "id": "d71526a0-6d95-4755-9d15-a7fbe4510d5f",
       "name": "Write Transcript TXT File to Disk"
     },
     {
@@ -476,10 +482,10 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        4200,
-        -100
+        -2300,
+        760
       ],
-      "id": "af9308ca-28e4-415a-8893-4481be90de07",
+      "id": "11814e41-efe6-4458-ba1c-74ff825d5a48",
       "name": "Build JSON"
     },
     {
@@ -494,16 +500,16 @@
       "type": "n8n-nodes-base.convertToFile",
       "typeVersion": 1.1,
       "position": [
-        4420,
-        -100
+        -2080,
+        760
       ],
-      "id": "787e5dde-488a-449e-95c3-97ccdd9d51d4",
+      "id": "b1ad6abc-9497-41a5-b994-4ce907442c33",
       "name": "Convert to File"
     },
     {
       "parameters": {
         "operation": "write",
-        "fileName": "={{ $('Read MP3 File').item.json.directory }}/{{ $('Set Filename').item.json.baseFileName }}.json",
+        "fileName": "={{ $('Set Filename').item.json.basePath }}/{{ $('Set Filename').item.json.baseFileName }}.json",
         "dataPropertyName": "file",
         "options": {
           "append": false
@@ -512,32 +518,23 @@
       "type": "n8n-nodes-base.readWriteFile",
       "typeVersion": 1,
       "position": [
-        4640,
-        -100
+        -1860,
+        760
       ],
-      "id": "8783d219-a5af-4d0f-acc7-b844f92f8c15",
+      "id": "d2c20549-6aca-4162-bb76-073adfc360d4",
       "name": "Read/Write Files from Disk"
     },
     {
       "parameters": {
-        "workflowInputs": {
-          "values": [
-            {
-              "name": "filePath"
-            },
-            {
-              "name": "baseFileName"
-            }
-          ]
-        }
+        "inputSource": "passthrough"
       },
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1.1,
       "position": [
-        0,
-        0
+        -6500,
+        860
       ],
-      "id": "1921688e-53bc-4325-b4fa-32910f11e895",
+      "id": "ec075000-f0eb-489c-a55c-dff5842a0843",
       "name": "When Executed by Another Workflow"
     },
     {
@@ -558,10 +555,10 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        1460,
-        40
+        -5040,
+        900
       ],
-      "id": "0dfe0b58-808f-4898-9f9f-f3e690f4a30c",
+      "id": "c4c8ef07-43e8-4a02-bdb9-33708906441d",
       "name": "Set Final Transcription Host"
     },
     {
@@ -582,10 +579,10 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        3280,
-        120
+        -3220,
+        980
       ],
-      "id": "9600738d-f9d1-449a-b1b5-5d3df9c6a55d",
+      "id": "bc0a9a92-1ecc-4212-86c3-c0b642581c09",
       "name": "Set Process ID"
     },
     {
@@ -595,7 +592,7 @@
             {
               "id": "25c5729e-a0c1-4f21-a1a9-61c49a74e9c3",
               "name": "transcriptionHost",
-              "value": "ec2-13-217-4-17.compute-1.amazonaws.com",
+              "value": "52.29.14.119",
               "type": "string"
             }
           ]
@@ -606,10 +603,10 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        1120,
-        360
+        -5380,
+        1220
       ],
-      "id": "7aa0c9db-6afb-446d-96a7-ceaa01895383",
+      "id": "4f73f24b-bc73-4293-b7a6-b0e46c775b63",
       "name": "Set Remote Nvidia Brev Transcription Host"
     },
     {
@@ -633,11 +630,11 @@
             },
             {
               "name": "chunk_size",
-              "value": "30"
+              "value": "15"
             },
             {
               "name": "batch_size",
-              "value": "48"
+              "value": "4"
             }
           ]
         },
@@ -664,10 +661,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1920,
-        260
+        -4580,
+        1120
       ],
-      "id": "10d7ce6e-da48-4a47-94e8-041664b1c734",
+      "id": "7f5f9115-e3b0-4bf8-a7ae-9c5c5c6049af",
       "name": "Start Transcription (Send HTTP POST)1",
       "alwaysOutputData": false
     },
@@ -756,10 +753,10 @@
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
       "position": [
-        1640,
-        40
+        -4860,
+        900
       ],
-      "id": "c3008239-1c03-4500-af2c-8f64d0622e66",
+      "id": "252a61de-1e80-44a3-9792-a1e40b2271b3",
       "name": "Switch1"
     },
     {
@@ -814,10 +811,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1960,
-        540
+        -4540,
+        1400
       ],
-      "id": "78bfbb03-2fd6-4aa7-9017-0b0e6756eed7",
+      "id": "d6c9d434-1152-4864-a708-d9c6c7492ab0",
       "name": "Start Transcription (Send HTTP POST)2",
       "alwaysOutputData": false
     }
@@ -826,12 +823,12 @@
     "When Executed by Another Workflow": [
       {
         "json": {
-          "filePath": "/data/shared/2025-05-20 11-01-14.mp3"
+          "filePath": "/data/shared/2025-06-07 16-11-00.mp3"
         }
       },
       {
         "json": {
-          "baseFileName": "2025-05-20 11-01-14"
+          "baseFileName": "2025-06-07 16-11-00"
         }
       }
     ]
@@ -1045,11 +1042,6 @@
         ]
       ]
     },
-    "Read/Write Files from Disk": {
-      "main": [
-        []
-      ]
-    },
     "When Executed by Another Workflow": {
       "main": [
         [
@@ -1135,10 +1127,10 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "e58acdd3-3d24-4982-b5a0-ca1419241630",
+  "versionId": "ad5ab521-6daa-4abd-abba-b82eb80b8426",
   "meta": {
-    "instanceId": "6d4fe15f3d7a2136d5134243b845c1a09442b26a050f667c7ca033e72ef9ef63"
+    "instanceId": "e19a58ffb0fd248efa26d031fe3b9360ad1bd1b828d9ae749d875af6b5124b71"
   },
-  "id": "HR1I3VG4uyexEZfR",
+  "id": "Bq831QTbodw3b9Tv",
   "tags": []
 }
