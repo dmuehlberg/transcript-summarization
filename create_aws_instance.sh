@@ -138,12 +138,23 @@ create_instance_in_region() {
     fi
 
     # 3. AMI-ID für Amazon Linux 2 mit Deep Learning und NVIDIA Treibern
-    log "Verwende Deep Learning AMI für Amazon Linux 2 in $region..."
-    AMI_ID="ami-0ebbe5fd64f8315ed"  # Deep Learning Proprietary Nvidia Driver AMI (Amazon Linux 2) Version 81
+    log "Suche nach Deep Learning AMI für Amazon Linux 2 in $region..."
+    
+    # Suche nach dem neuesten Deep Learning AMI
+    AMI_ID=$(aws ec2 describe-images --region $region \
+        --owners amazon \
+        --filters "Name=name,Values=*Deep Learning Proprietary Nvidia Driver AMI (Amazon Linux 2)*" \
+        --query "sort_by(Images, &CreationDate)[-1].ImageId" \
+        --output text)
 
-    log "Verwende Deep Learning AMI: $AMI_ID"
+    if [[ -z "$AMI_ID" || "$AMI_ID" == "None" ]]; then
+        error "Konnte kein passendes Deep Learning AMI in Region $region finden."
+        return 1
+    fi
 
-    # Optional: AMI-Details anzeigen
+    log "Gefundenes Deep Learning AMI: $AMI_ID"
+
+    # AMI-Details anzeigen
     AMI_NAME=$(aws ec2 describe-images --region $region \
         --image-ids $AMI_ID \
         --query "Images[0].Name" \
@@ -151,7 +162,8 @@ create_instance_in_region() {
     if [[ -n "$AMI_NAME" && "$AMI_NAME" != "None" ]]; then
         log "AMI Name: $AMI_NAME"
     else
-        log "AMI Details konnten nicht abgerufen werden, fahre mit bekannter ID fort."
+        error "AMI Details konnten nicht abgerufen werden."
+        return 1
     fi
 
     # 4. User-Data-Skript für die automatische Installation erstellen
