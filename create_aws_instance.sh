@@ -16,7 +16,7 @@ info() { echo -e "${BLUE}[INFO] $1${NC}"; }
 error() { echo -e "${RED}[ERROR] $1${NC}"; }
 
 # Standardwerte
-REGION="eu-central-1"
+REGIONS=("eu-central-1" "eu-west-1" "eu-north-1" "us-east-1" "us-west-2")
 INSTANCE_NAME="whisperx-server"
 GPU_TYPE="t4"
 KEY_NAME="whisperx-key"
@@ -24,7 +24,7 @@ KEY_NAME="whisperx-key"
 # Parameter verarbeiten
 while [[ "$#" -gt 0 ]]; do
     case $1 in
-        -r|--region) REGION="$2"; shift ;;
+        -r|--region) REGIONS=("$2"); shift ;;
         -t|--type) GPU_TYPE="$2"; shift ;;
         -n|--name) INSTANCE_NAME="$2"; shift ;;
         -k|--key) KEY_NAME="$2"; shift ;;
@@ -45,30 +45,54 @@ else
     exit 1
 fi
 
-log "Starte EC2-Instanz in Region: $REGION, Instance-Typ: $INSTANCE_TYPE"
+# Funktion zum Erstellen der Instanz in einer bestimmten Region
+create_instance_in_region() {
+    local region=$1
+    log "Versuche EC2-Instanz in Region: $region, Instance-Typ: $INSTANCE_TYPE zu erstellen"
 
-# 1. Schlüsselpaar erstellen, falls es noch nicht existiert
-log "Prüfe auf vorhandenes Schlüsselpaar..."
-KEY_EXISTS=$(aws ec2 describe-key-pairs --region $REGION --key-names $KEY_NAME --query 'KeyPairs[0].KeyName' --output text 2>/dev/null)
+    # 1. Schlüsselpaar erstellen, falls es noch nicht existiert
+    log "Prüfe auf vorhandenes Schlüsselpaar in $region..."
+    KEY_EXISTS=$(aws ec2 describe-key-pairs --region $region --key-names $KEY_NAME --query 'KeyPairs[0].KeyName' --output text 2>/dev/null)
 
-# Temporäre Datei für das Schlüsselpaar
-KEY_FILE="$KEY_NAME.pem"
-TEMP_KEY_FILE="/tmp/$KEY_NAME-$(date +%s).pem"
+    # Temporäre Datei für das Schlüsselpaar
+    KEY_FILE="$KEY_NAME.pem"
+    TEMP_KEY_FILE="/tmp/$KEY_NAME-$(date +%s).pem"
 
-if [[ "$KEY_EXISTS" == "$KEY_NAME" ]]; then
-    log "Schlüsselpaar '$KEY_NAME' existiert bereits."
-    
-    # Prüfen, ob die Datei lokal existiert und beschreibbar ist
-    if [[ ! -f "$KEY_FILE" || ! -w "$KEY_FILE" ]]; then
-        warn "Die lokale Schlüsseldatei '$KEY_FILE' fehlt oder ist nicht beschreibbar!"
-        warn "Lösche das vorhandene Schlüsselpaar und erstelle ein neues..."
-        aws ec2 delete-key-pair --region $REGION --key-name $KEY_NAME
+    if [[ "$KEY_EXISTS" == "$KEY_NAME" ]]; then
+        log "Schlüsselpaar '$KEY_NAME' existiert bereits in $region."
         
-        # Neues Schlüsselpaar erstellen
-        log "Erstelle neues Schlüsselpaar '$KEY_NAME'..."
-        if ! aws ec2 create-key-pair --region $REGION --key-name $KEY_NAME --query 'KeyMaterial' --output text > "$TEMP_KEY_FILE"; then
-            error "Fehler beim Erstellen des Schlüsselpaars."
-            exit 1
+        # Prüfen, ob die Datei lokal existiert und beschreibbar ist
+        if [[ ! -f "$KEY_FILE" || ! -w "$KEY_FILE" ]]; then
+            warn "Die lokale Schlüsseldatei '$KEY_FILE' fehlt oder ist nicht beschreibbar!"
+            warn "Lösche das vorhandene Schlüsselpaar und erstelle ein neues..."
+            aws ec2 delete-key-pair --region $region --key-name $KEY_NAME
+            
+            # Neues Schlüsselpaar erstellen
+            log "Erstelle neues Schlüsselpaar '$KEY_NAME' in $region..."
+            if ! aws ec2 create-key-pair --region $region --key-name $KEY_NAME --query 'KeyMaterial' --output text > "$TEMP_KEY_FILE"; then
+                error "Fehler beim Erstellen des Schlüsselpaars in $region."
+                return 1
+            fi
+            
+            # Versuche, die temporäre Datei an die gewünschte Stelle zu kopieren
+            if ! cp "$TEMP_KEY_FILE" "$KEY_FILE" 2>/dev/null; then
+                warn "Konnte Schlüsseldatei nicht nach '$KEY_FILE' kopieren. Verwende stattdessen: $TEMP_KEY_FILE"
+                KEY_FILE="$TEMP_KEY_FILE"
+            fi
+            
+            chmod 400 "$KEY_FILE"
+            log "Schlüsselpaar erstellt und in '$KEY_FILE' gespeichert."
+        fi
+    else
+        # Sicherstellen, dass kein Schlüsselpaar mit diesem Namen existiert
+        aws ec2 delete-key-pair --region $region --key-name $KEY_NAME 2>/dev/null
+        
+        log "Erstelle neues Schlüsselpaar '$KEY_NAME' in $region..."
+        
+        # Zuerst in temporäre Datei schreiben
+        if ! aws ec2 create-key-pair --region $region --key-name $KEY_NAME --query 'KeyMaterial' --output text > "$TEMP_KEY_FILE"; then
+            error "Fehler beim Erstellen des Schlüsselpaars in $region. Bitte überprüfen Sie Ihre AWS-Berechtigungen."
+            return 1
         fi
         
         # Versuche, die temporäre Datei an die gewünschte Stelle zu kopieren
@@ -80,86 +104,59 @@ if [[ "$KEY_EXISTS" == "$KEY_NAME" ]]; then
         chmod 400 "$KEY_FILE"
         log "Schlüsselpaar erstellt und in '$KEY_FILE' gespeichert."
     fi
-else
-    # Sicherstellen, dass kein Schlüsselpaar mit diesem Namen existiert
-    aws ec2 delete-key-pair --region $REGION --key-name $KEY_NAME 2>/dev/null
-    
-    log "Erstelle neues Schlüsselpaar '$KEY_NAME'..."
-    
-    # Zuerst in temporäre Datei schreiben
-    if ! aws ec2 create-key-pair --region $REGION --key-name $KEY_NAME --query 'KeyMaterial' --output text > "$TEMP_KEY_FILE"; then
-        error "Fehler beim Erstellen des Schlüsselpaars. Bitte überprüfen Sie Ihre AWS-Berechtigungen."
-        exit 1
+
+    # 2. Sicherheitsgruppe erstellen, falls sie noch nicht existiert
+    SG_NAME="whisperx-sg"
+    log "Prüfe auf vorhandene Sicherheitsgruppe in $region..."
+    SG_ID=$(aws ec2 describe-security-groups --region $region --filters "Name=group-name,Values=$SG_NAME" --query "SecurityGroups[0].GroupId" --output text 2>/dev/null)
+
+    if [[ "$SG_ID" != "None" && "$SG_ID" != "" ]]; then
+        log "Sicherheitsgruppe '$SG_NAME' existiert bereits in $region mit ID: $SG_ID"
+    else
+        log "Erstelle neue Sicherheitsgruppe '$SG_NAME' in $region..."
+        SG_ID=$(aws ec2 create-security-group --region $region \
+            --group-name $SG_NAME \
+            --description "Security Group for WhisperX Server" \
+            --query "GroupId" --output text)
+        
+        log "Füge Sicherheitsregeln hinzu..."
+        # SSH erlauben
+        aws ec2 authorize-security-group-ingress --region $region \
+            --group-id $SG_ID \
+            --protocol tcp \
+            --port 22 \
+            --cidr 0.0.0.0/0 > /dev/null
+        
+        # WhisperX API auf Port 8000 erlauben
+        aws ec2 authorize-security-group-ingress --region $region \
+            --group-id $SG_ID \
+            --protocol tcp \
+            --port 8000 \
+            --cidr 0.0.0.0/0 > /dev/null
+        
+        log "Sicherheitsgruppe erstellt mit ID: $SG_ID"
     fi
-    
-    # Versuche, die temporäre Datei an die gewünschte Stelle zu kopieren
-    if ! cp "$TEMP_KEY_FILE" "$KEY_FILE" 2>/dev/null; then
-        warn "Konnte Schlüsseldatei nicht nach '$KEY_FILE' kopieren. Verwende stattdessen: $TEMP_KEY_FILE"
-        KEY_FILE="$TEMP_KEY_FILE"
+
+    # 3. AMI-ID für Amazon Linux 2 mit Deep Learning und NVIDIA Treibern
+    log "Verwende Deep Learning AMI für Amazon Linux 2 in $region..."
+    AMI_ID="ami-0ebbe5fd64f8315ed"  # Deep Learning Proprietary Nvidia Driver AMI (Amazon Linux 2) Version 81
+
+    log "Verwende Deep Learning AMI: $AMI_ID"
+
+    # Optional: AMI-Details anzeigen
+    AMI_NAME=$(aws ec2 describe-images --region $region \
+        --image-ids $AMI_ID \
+        --query "Images[0].Name" \
+        --output text)
+    if [[ -n "$AMI_NAME" && "$AMI_NAME" != "None" ]]; then
+        log "AMI Name: $AMI_NAME"
+    else
+        log "AMI Details konnten nicht abgerufen werden, fahre mit bekannter ID fort."
     fi
-    
-    chmod 400 "$KEY_FILE"
-    log "Schlüsselpaar erstellt und in '$KEY_FILE' gespeichert."
-fi
 
-# Nochmal prüfen, ob das Schlüsselpaar jetzt existiert
-if ! aws ec2 describe-key-pairs --region $REGION --key-names $KEY_NAME &> /dev/null; then
-    error "Schlüsselpaar '$KEY_NAME' konnte nicht erstellt werden. Bitte überprüfen Sie Ihre AWS-Berechtigungen."
-    exit 1
-fi
-
-# 2. Sicherheitsgruppe erstellen, falls sie noch nicht existiert
-SG_NAME="whisperx-sg"
-log "Prüfe auf vorhandene Sicherheitsgruppe..."
-SG_ID=$(aws ec2 describe-security-groups --region $REGION --filters "Name=group-name,Values=$SG_NAME" --query "SecurityGroups[0].GroupId" --output text 2>/dev/null)
-
-if [[ "$SG_ID" != "None" && "$SG_ID" != "" ]]; then
-    log "Sicherheitsgruppe '$SG_NAME' existiert bereits mit ID: $SG_ID"
-else
-    log "Erstelle neue Sicherheitsgruppe '$SG_NAME'..."
-    SG_ID=$(aws ec2 create-security-group --region $REGION \
-        --group-name $SG_NAME \
-        --description "Security Group for WhisperX Server" \
-        --query "GroupId" --output text)
-    
-    log "Füge Sicherheitsregeln hinzu..."
-    # SSH erlauben
-    aws ec2 authorize-security-group-ingress --region $REGION \
-        --group-id $SG_ID \
-        --protocol tcp \
-        --port 22 \
-        --cidr 0.0.0.0/0 > /dev/null
-    
-    # WhisperX API auf Port 8000 erlauben
-    aws ec2 authorize-security-group-ingress --region $REGION \
-        --group-id $SG_ID \
-        --protocol tcp \
-        --port 8000 \
-        --cidr 0.0.0.0/0 > /dev/null
-    
-    log "Sicherheitsgruppe erstellt mit ID: $SG_ID"
-fi
-
-# 3. AMI-ID für Amazon Linux 2 mit Deep Learning und NVIDIA Treibern
-log "Verwende Deep Learning AMI für Amazon Linux 2..."
-AMI_ID="ami-0ebbe5fd64f8315ed"  # Deep Learning Proprietary Nvidia Driver AMI (Amazon Linux 2) Version 81
-
-log "Verwende Deep Learning AMI: $AMI_ID"
-
-# Optional: AMI-Details anzeigen
-AMI_NAME=$(aws ec2 describe-images --region $REGION \
-    --image-ids $AMI_ID \
-    --query "Images[0].Name" \
-    --output text)
-if [[ -n "$AMI_NAME" && "$AMI_NAME" != "None" ]]; then
-    log "AMI Name: $AMI_NAME"
-else
-    log "AMI Details konnten nicht abgerufen werden, fahre mit bekannter ID fort."
-fi
-
-# 4. User-Data-Skript für die automatische Installation erstellen
-log "Erstelle User-Data-Skript..."
-USER_DATA=$(cat <<'EOF'
+    # 4. User-Data-Skript für die automatische Installation erstellen
+    log "Erstelle User-Data-Skript..."
+    USER_DATA=$(cat <<'EOF'
 #!/bin/bash
 
 # User-Data Skript für WhisperX Installation
@@ -289,75 +286,75 @@ echo "=== INSTALLATION LOG ENDE ==="
 EOF
 )
 
-# 5. EC2-Instanz erstellen
-log "Erstelle EC2-Instanz..."
-INSTANCE_ID=$(aws ec2 run-instances --region $REGION \
-    --image-id $AMI_ID \
-    --instance-type $INSTANCE_TYPE \
-    --key-name $KEY_NAME \
-    --security-group-ids $SG_ID \
-    --block-device-mappings "[{\"DeviceName\":\"/dev/sda1\",\"Ebs\":{\"VolumeSize\":128,\"VolumeType\":\"gp3\"}}]" \
-    --user-data "$USER_DATA" \
-    --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$INSTANCE_NAME}]" \
-    --query "Instances[0].InstanceId" \
-    --output text)
+    # 5. EC2-Instanz erstellen
+    log "Erstelle EC2-Instanz in $region..."
+    INSTANCE_ID=$(aws ec2 run-instances --region $region \
+        --image-id $AMI_ID \
+        --instance-type $INSTANCE_TYPE \
+        --key-name $KEY_NAME \
+        --security-group-ids $SG_ID \
+        --block-device-mappings "[{\"DeviceName\":\"/dev/sda1\",\"Ebs\":{\"VolumeSize\":128,\"VolumeType\":\"gp3\"}}]" \
+        --user-data "$USER_DATA" \
+        --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$INSTANCE_NAME}]" \
+        --query "Instances[0].InstanceId" \
+        --output text)
 
-if [[ $? -ne 0 || -z "$INSTANCE_ID" ]]; then
-    error "Fehler beim Erstellen der EC2-Instanz."
-    exit 1
-fi
-
-log "EC2-Instanz wird erstellt mit ID: $INSTANCE_ID"
-log "Warte auf Instanzstart..."
-
-# 6. Warten, bis die Instanz läuft
-aws ec2 wait instance-running --region $REGION --instance-ids $INSTANCE_ID
-
-# 7. Public IP-Adresse abrufen
-PUBLIC_IP=$(aws ec2 describe-instances --region $REGION \
-    --instance-ids $INSTANCE_ID \
-    --query "Reservations[0].Instances[0].PublicIpAddress" \
-    --output text)
-
-log "EC2-Instanz erfolgreich erstellt!"
-log "Instance ID: $INSTANCE_ID"
-log "Public IP: $PUBLIC_IP"
-log "SSH-Zugriff: ssh -i $KEY_FILE ec2-user@$PUBLIC_IP"
-log ""
-info "📋 NÄCHSTE SCHRITTE:"
-info "1. Warten Sie ~5-15 Minuten bis die Installation abgeschlossen ist"
-info "2. Installation-Logs prüfen:"
-info "   - User-Data Log: ssh -i $KEY_FILE ec2-user@$PUBLIC_IP 'sudo cat /var/log/user-data.log'"
-info "   - Cloud-init Log: ssh -i $KEY_FILE ec2-user@$PUBLIC_IP 'sudo tail -50 /var/log/cloud-init-output.log'"
-info "3. Container Status prüfen: ssh -i $KEY_FILE ec2-user@$PUBLIC_IP 'cd transcript-summarization && /usr/local/bin/docker-compose ps'"
-info "4. WhisperX API testen: http://$PUBLIC_IP:8000/docs"
-info "5. Health Check: curl http://$PUBLIC_IP:8000/health"
-info ""
-info "🔧 MANUELLE REPARATUR (falls nötig):"
-info "   ssh -i $KEY_FILE ec2-user@$PUBLIC_IP"
-info "   sudo ln -sf /usr/local/bin/docker-compose /usr/bin/docker-compose"
-info "   cd transcript-summarization && ./container-setup.sh"
-log ""
-warn "WICHTIG: Die automatische Installation läuft im Hintergrund!"
-warn "Bitte warten Sie mindestens 10 Minuten bevor Sie die API verwenden."
-
-# Automatisches Live-Monitoring der Installation
-log "Starte automatisches Live-Monitoring..."
-log "Drücken Sie Ctrl+C um zu beenden"
-
-# Warte bis SSH verfügbar ist
-log "Warte auf SSH-Verfügbarkeit..."
-for i in {1..30}; do
-    if ssh -i "$KEY_FILE" -o ConnectTimeout=5 -o StrictHostKeyChecking=no ec2-user@$PUBLIC_IP 'echo "SSH bereit"' 2>/dev/null; then
-        log "SSH Verbindung erfolgreich"
-        break
+    if [[ $? -ne 0 || -z "$INSTANCE_ID" ]]; then
+        error "Fehler beim Erstellen der EC2-Instanz in $region."
+        return 1
     fi
-    echo -n "."
-    sleep 10
-done
-echo
 
-log "Live-Monitoring gestartet - verschiedene Log-Quellen:"
+    log "EC2-Instanz wird erstellt mit ID: $INSTANCE_ID"
+    log "Warte auf Instanzstart..."
+
+    # 6. Warten, bis die Instanz läuft
+    aws ec2 wait instance-running --region $region --instance-ids $INSTANCE_ID
+
+    # 7. Public IP-Adresse abrufen
+    PUBLIC_IP=$(aws ec2 describe-instances --region $region \
+        --instance-ids $INSTANCE_ID \
+        --query "Reservations[0].Instances[0].PublicIpAddress" \
+        --output text)
+
+    log "EC2-Instanz erfolgreich erstellt!"
+    log "Instance ID: $INSTANCE_ID"
+    log "Public IP: $PUBLIC_IP"
+    log "SSH-Zugriff: ssh -i $KEY_FILE ec2-user@$PUBLIC_IP"
+    log ""
+    info "📋 NÄCHSTE SCHRITTE:"
+    info "1. Warten Sie ~5-15 Minuten bis die Installation abgeschlossen ist"
+    info "2. Installation-Logs prüfen:"
+    info "   - User-Data Log: ssh -i $KEY_FILE ec2-user@$PUBLIC_IP 'sudo cat /var/log/user-data.log'"
+    info "   - Cloud-init Log: ssh -i $KEY_FILE ec2-user@$PUBLIC_IP 'sudo tail -50 /var/log/cloud-init-output.log'"
+    info "3. Container Status prüfen: ssh -i $KEY_FILE ec2-user@$PUBLIC_IP 'cd transcript-summarization && /usr/local/bin/docker-compose ps'"
+    info "4. WhisperX API testen: http://$PUBLIC_IP:8000/docs"
+    info "5. Health Check: curl http://$PUBLIC_IP:8000/health"
+    info ""
+    info "🔧 MANUELLE REPARATUR (falls nötig):"
+    info "   ssh -i $KEY_FILE ec2-user@$PUBLIC_IP"
+    info "   sudo ln -sf /usr/local/bin/docker-compose /usr/bin/docker-compose"
+    info "   cd transcript-summarization && ./container-setup.sh"
+    log ""
+    warn "WICHTIG: Die automatische Installation läuft im Hintergrund!"
+    warn "Bitte warten Sie mindestens 10 Minuten bevor Sie die API verwenden."
+
+    # Automatisches Live-Monitoring der Installation
+    log "Starte automatisches Live-Monitoring..."
+    log "Drücken Sie Ctrl+C um zu beenden"
+
+    # Warte bis SSH verfügbar ist
+    log "Warte auf SSH-Verfügbarkeit..."
+    for i in {1..30}; do
+        if ssh -i "$KEY_FILE" -o ConnectTimeout=5 -o StrictHostKeyChecking=no ec2-user@$PUBLIC_IP 'echo "SSH bereit"' 2>/dev/null; then
+            log "SSH Verbindung erfolgreich"
+            break
+        fi
+        echo -n "."
+        sleep 10
+    done
+    echo
+
+    log "Live-Monitoring gestartet - verschiedene Log-Quellen:"
     
     # Intelligentes Log-Monitoring
     ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@$PUBLIC_IP "
@@ -423,3 +420,18 @@ log "Live-Monitoring gestartet - verschiedene Log-Quellen:"
         # Starte Monitoring
         monitor_logs
     "
+    return 0
+}
+
+# Versuche die Instanz in verschiedenen Regionen zu erstellen
+for region in "${REGIONS[@]}"; do
+    if create_instance_in_region "$region"; then
+        log "Instanz erfolgreich in Region $region erstellt!"
+        exit 0
+    else
+        warn "Konnte keine Instanz in Region $region erstellen. Versuche nächste Region..."
+    fi
+done
+
+error "Konnte in keiner der verfügbaren Regionen eine Instanz erstellen. Bitte versuchen Sie es später erneut oder kontaktieren Sie den AWS Support."
+exit 1
