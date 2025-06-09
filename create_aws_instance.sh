@@ -180,9 +180,9 @@ sleep 30
 echo "System Update..."
 yum update -y 2>&1
 
-# Git installieren falls nicht vorhanden
-echo "Git Installation..."
-yum install -y git 2>&1
+# Git und htop installieren falls nicht vorhanden
+echo "Git und htop Installation..."
+yum install -y git htop 2>&1
 
 # Docker installieren falls nicht vorhanden
 if ! command -v docker &> /dev/null; then
