@@ -238,3 +238,4 @@ services:
       - "8200:8200"
     volumes:
       - ./data/ost:/data/ost
+      - /c/Users/dmuehlbe/AppData/Local/Microsoft/Outlook:/data/outlook
