@@ -279,11 +279,10 @@ class VADOptions(BaseModel):
 class WhisperModelParams(BaseModel):
     """Model for Whisper model parameters."""
 
-    # Hauptänderung: Sprache ist jetzt optional. Kein enum, Default = None
     language: Optional[str] = Field(
         Query(
-            default=None,  # None ⇒ WhisperX benutzt automatische Spracherkennung
-            description="Language to transcribe (leave empty for autodetect)",
+            default=None,  # None oder "auto" ⇒ WhisperX benutzt automatische Spracherkennung
+            description="Language to transcribe (use 'auto' or leave empty for autodetect)",
         )
     )
     task: TaskEnum = Field(
