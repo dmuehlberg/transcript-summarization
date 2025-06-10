@@ -17,6 +17,8 @@ error() { echo -e "${RED}[ERROR] $1${NC}"; }
 REGIONS=("eu-central-1" "eu-west-1" "eu-north-1" "us-east-1" "us-west-2")
 INSTANCE_NAME="whisperx-server"
 KEY_NAME="whisperx-key"
+MAX_RETRIES=30  # Maximale Anzahl von Versuchen
+RETRY_INTERVAL=10  # Wartezeit zwischen Versuchen in Sekunden
 
 # Parameter verarbeiten
 while [[ "$#" -gt 0 ]]; do
@@ -28,6 +30,30 @@ while [[ "$#" -gt 0 ]]; do
     esac
     shift
 done
+
+# Funktion zum Warten auf SSH-Verfügbarkeit
+wait_for_ssh() {
+    local ip=$1
+    local key_file=$2
+    local retries=0
+    
+    log "Warte auf SSH-Verfügbarkeit der Instanz..."
+    while [[ $retries -lt $MAX_RETRIES ]]; do
+        if ssh -i "$key_file" -o StrictHostKeyChecking=no -o ConnectTimeout=5 ec2-user@$ip "echo 'SSH-Verbindung erfolgreich'" &>/dev/null; then
+            log "SSH-Verbindung erfolgreich hergestellt!"
+            return 0
+        fi
+        
+        retries=$((retries + 1))
+        if [[ $retries -lt $MAX_RETRIES ]]; then
+            log "Warte noch ${RETRY_INTERVAL} Sekunden... (Versuch $retries/$MAX_RETRIES)"
+            sleep $RETRY_INTERVAL
+        fi
+    done
+    
+    error "Timeout: SSH-Verbindung konnte nicht hergestellt werden."
+    return 1
+}
 
 # Funktion zum Starten der Instanz in einer bestimmten Region
 start_instance_in_region() {
@@ -55,10 +81,8 @@ start_instance_in_region() {
     
     if [[ "$HIBERNATE_STATUS" == *"Hibernation"* ]]; then
         log "Instanz war im Ruhezustand - Start wird schneller sein"
-        EXPECTED_START_TIME="1-2 Minuten"
     else
         log "Instanz war vollständig heruntergefahren"
-        EXPECTED_START_TIME="2-3 Minuten"
     fi
     
     # Instanz starten
@@ -89,14 +113,29 @@ start_instance_in_region() {
         
         if [[ -f "$KEY_FILE" ]]; then
             log "SSH-Zugriff: ssh -i $KEY_FILE ec2-user@$PUBLIC_IP"
+            
+            # Warten auf SSH-Verfügbarkeit
+            if wait_for_ssh "$PUBLIC_IP" "$KEY_FILE"; then
+                # Docker Container starten
+                log "Starte Docker Container..."
+                ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@$PUBLIC_IP "cd /home/ec2-user/transcript-summarization && docker-compose up -d whisperx_cuda"
+                
+                if [[ $? -eq 0 ]]; then
+                    log "Docker Container erfolgreich gestartet!"
+                else
+                    error "Fehler beim Starten des Docker Containers."
+                fi
+            else
+                error "Konnte keine SSH-Verbindung herstellen. Docker Container wurde nicht gestartet."
+                return 1
+            fi
         else
             warn "Schlüsseldatei nicht gefunden. Bitte überprüfen Sie den Pfad zur .pem-Datei."
         fi
         
         info "📋 NÄCHSTE SCHRITTE:"
-        info "1. Warten Sie ~$EXPECTED_START_TIME bis die Instanz vollständig hochgefahren ist"
-        info "2. WhisperX API testen: http://$PUBLIC_IP:8000/docs"
-        info "3. Health Check: curl http://$PUBLIC_IP:8000/health"
+        info "1. WhisperX API testen: http://$PUBLIC_IP:8000/docs"
+        info "2. Health Check: curl http://$PUBLIC_IP:8000/health"
         return 0
     else
         error "Fehler beim Starten der Instanz."
