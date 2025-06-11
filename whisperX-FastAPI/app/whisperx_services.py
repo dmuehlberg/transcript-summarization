@@ -66,6 +66,10 @@ def transcribe_with_whisper(
         torch.set_num_threads(threads)
         faster_whisper_threads = threads
 
+    # Wenn language "auto" ist, setzen wir es auf None für die automatische Spracherkennung
+    if language == "auto":
+        language = None
+
     logger.debug(
         "Loading model with config - model: %s, device: %s, compute_type: %s, threads: %d, task: %s, language: %s",
         model.value,
