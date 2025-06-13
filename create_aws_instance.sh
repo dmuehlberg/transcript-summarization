@@ -371,13 +371,13 @@ EOF
     # Intelligentes Log-Monitoring
     ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@$PUBLIC_IP "
         echo '=== LOG MONITORING GESTARTET ==='
-        echo 'Zeit: \$(date)'
+        echo \"Zeit: \$(date)\"
         echo
         
         # Funktion für Log-Monitoring
         monitor_logs() {
             while true; do
-                echo '--- \$(date) ---'
+                echo \"--- \$(date) ---\"
                 
                 # 1. User-Data Log (falls vorhanden)
                 if [ -f /var/log/user-data.log ]; then
