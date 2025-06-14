@@ -8,4 +8,15 @@ services:
       - "8200:8200"
     volumes:
       - ./data/ost:/data/ost
-      - /c/Users/dmuehlbe/AppData/Local/Microsoft/Outlook:/data/outlook
+      # - /c/Users/dmuehlbe/AppData/Local/Microsoft/Outlook:/data/outlook
+    environment:
+      - DATABASE_URL=postgresql://root:postgres@postgres:5432/n8n
+    networks:
+      - demo
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+networks:
+  demo:
+    external: true

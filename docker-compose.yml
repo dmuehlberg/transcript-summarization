@@ -5,6 +5,7 @@ volumes:
   qdrant_storage:
   open-webui:
   flowise:
+  pgadmin_data:
 
 networks:
   demo:
@@ -181,50 +182,50 @@ services:
         condition: service_healthy
 
 
-  whisperx_cuda:
-    build:
-      context: ./whisperX-FastAPI-cuda
-    container_name: whisperx-cuda
-    networks: ['demo']
-    ports:
-      - "8000:8000"
-    # volumes:
-    #   - ./whisperx-service/app:/app
-    runtime: nvidia
-    environment:
-      - DEVICE=cuda
-      - HF_TOKEN=${HF_TOKEN}
-      - DB_HOST=postgres
-      - DB_USER=${POSTGRES_USER}
-      - DB_PASSWORD=${POSTGRES_PASSWORD}
-      - DB_NAME=${POSTGRES_DB}
-      - THREADS=56
-      - OMP_NUM_THREADS=56
-      - NUMBA_NUM_THREADS=56
-      - MKL_NUM_THREADS=56
-      - TF_INTRA_OP_PARALLELISM_THREADS=56
-      - TF_INTER_OP_PARALLELISM_THREADS=4
-      - LOGLEVEL=DEBUG
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
-      # Nicht stören beim Debugging
-      - PYTHONFAULTHANDLER=1
-    depends_on:
-      postgres:
-        condition: service_healthy
+  # whisperx_cuda:
+  #   build:
+  #     context: ./whisperX-FastAPI-cuda
+  #   container_name: whisperx-cuda
+  #   networks: ['demo']
+  #   ports:
+  #     - "8000:8000"
+  #   # volumes:
+  #   #   - ./whisperx-service/app:/app
+  #   runtime: nvidia
+  #   environment:
+  #     - DEVICE=cuda
+  #     - HF_TOKEN=${HF_TOKEN}
+  #     - DB_HOST=postgres
+  #     - DB_USER=${POSTGRES_USER}
+  #     - DB_PASSWORD=${POSTGRES_PASSWORD}
+  #     - DB_NAME=${POSTGRES_DB}
+  #     - THREADS=56
+  #     - OMP_NUM_THREADS=56
+  #     - NUMBA_NUM_THREADS=56
+  #     - MKL_NUM_THREADS=56
+  #     - TF_INTRA_OP_PARALLELISM_THREADS=56
+  #     - TF_INTER_OP_PARALLELISM_THREADS=4
+  #     - LOGLEVEL=DEBUG
+  #     - NVIDIA_VISIBLE_DEVICES=all
+  #     - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+  #     # Nicht stören beim Debugging
+  #     - PYTHONFAULTHANDLER=1
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
 
 
-  pypff-service:
-    platform: ${TARGETPLATFORM:-linux/amd64}
-    build:
-      context: ./pypff-service
-      dockerfile: Dockerfile
-    container_name: pypff-service
-    networks: ['demo']
-    ports:
-      - "8100:8100"
-    volumes:
-      - ./data/ost:/data/ost
+  # pypff-service:
+  #   platform: ${TARGETPLATFORM:-linux/amd64}
+  #   build:
+  #     context: ./pypff-service
+  #     dockerfile: Dockerfile
+  #   container_name: pypff-service
+  #   networks: ['demo']
+  #   ports:
+  #     - "8100:8100"
+  #   volumes:
+  #     - ./data/ost:/data/ost
 
 
   xstexport-service:
@@ -238,4 +239,23 @@ services:
       - "8200:8200"
     volumes:
       - ./data/ost:/data/ost
-      - /c/Users/dmuehlbe/AppData/Local/Microsoft/Outlook:/data/outlook
+    environment:
+      - DATABASE_URL=postgresql://root:postgres@postgres:5432/n8n
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin
+    networks: ['demo']
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@admin.com
+      - PGADMIN_DEFAULT_PASSWORD=admin
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy

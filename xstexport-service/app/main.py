@@ -6,9 +6,12 @@ import os
 import logging
 import subprocess
 import json
+import shutil
+import tempfile
+import zipfile
 
 from app.services.calendar_extractor import extract_calendar_data, find_dll
-from app.services.file_extractor import extract_calendar_from_existing_file
+from app.services.file_extractor import extract_calendar_from_existing_file, extract_calendar_from_zip
 from app.services.file_service import list_app_files, list_data_directory_files
 from app.services.pst_folder_service import list_pst_folders
 
@@ -26,6 +29,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Datenbank beim Start initialisieren
+@app.on_event("startup")
+async def startup_event():
+    try:
+        logger.info("Anwendung gestartet")
+    except Exception as e:
+        logger.error(f"Fehler beim Start: {str(e)}")
+        raise
 
 # Abhängigkeit für Form-Daten
 async def get_form_data(
@@ -99,25 +111,88 @@ async def extract_calendar(form_data: dict = Depends(get_form_data)):
             detail=f"Fehler bei der Extraktion: {str(e)}"
         )
 
-# Alternativer Endpunkt, der eine zuvor existierende Datei verwendet
 @app.post("/extract-calendar-from-file")
-async def extract_calendar_file_endpoint(request: Request):
+async def extract_calendar(
+    file: UploadFile = File(..., description="Die zu verarbeitende Datei (ZIP, PST oder OST)"),
+    format: str = Form("csv", description="Format der Extraktion ('csv' oder 'native')"),
+    extract_all: bool = Form(False, description="Ob alle Elemente extrahiert werden sollen"),
+    return_file: bool = Form(False, description="Ob die ZIP-Datei als Download zurückgegeben werden soll")
+):
     """
-    Extrahiert Kalenderdaten oder alle Daten aus einer vorhandenen PST/OST-Datei im Container.
-    
-    Body-Parameter:
-        filename: Name der Datei im /data/ost-Verzeichnis
-        format: Format der Extraktion ('csv' oder 'native')
-        target_folder: Optionaler Zielordner (Standard: gleiches Verzeichnis wie Quelldatei)
-        return_file: Ob die ZIP-Datei als Download zurückgegeben werden soll
-        pst_folder: Name des Ordners in der PST-Datei (Standard: "Calendar")
-        extract_all: Ob alle Elemente extrahiert werden sollen (Standard: False)
-    
-    Returns:
-        Bei return_file=True: Die ZIP-Datei als Download
-        Bei return_file=False: JSON-Antwort mit Pfad zur generierten ZIP-Datei
+    Extrahiert Kalenderdaten aus einer hochgeladenen Datei.
+    Unterstützt .zip, .pst und .ost Dateien.
     """
-    return await extract_calendar_from_existing_file(request)
+    if not file:
+        raise HTTPException(status_code=400, detail="Keine Datei hochgeladen")
+        
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Kein Dateiname angegeben")
+    
+    temp_dir = None
+    try:
+        # Temporäres Verzeichnis erstellen
+        temp_dir = tempfile.mkdtemp()
+        logger.info(f"Temporäres Verzeichnis erstellt: {temp_dir}")
+        
+        # Datei speichern
+        file_path = os.path.join(temp_dir, file.filename)
+        logger.info(f"Speichere Datei: {file_path}")
+        
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        # Datei verarbeiten
+        if file.filename.endswith('.zip'):
+            logger.info("Verarbeite ZIP-Datei")
+            result = extract_calendar_from_zip(file_path)
+            if result and 'calendar_path' in result:
+                logger.info(f"Found Calendar.csv at: {result['calendar_path']}")
+                if 'temp_dir' in result:
+                    shutil.rmtree(result['temp_dir'])
+                return JSONResponse(
+                    content={
+                        "message": "Kalenderdaten erfolgreich extrahiert",
+                        "status": "success"
+                    }
+                )
+            else:
+                raise HTTPException(status_code=400, detail="Keine Kalenderdaten in der ZIP-Datei gefunden")
+                
+        elif file.filename.endswith(('.pst', '.ost')):
+            logger.info(f"Verarbeite {file.filename}")
+            # PST/OST-Datei verarbeiten
+            result = await extract_calendar_from_existing_file(
+                file_path=file_path,
+                format=format,
+                extract_all=extract_all,
+                return_file=return_file
+            )
+            
+            if result and 'calendar_path' in result:
+                logger.info(f"Found Calendar.csv at: {result['calendar_path']}")
+                if 'temp_dir' in result:
+                    shutil.rmtree(result['temp_dir'])
+                return JSONResponse(
+                    content={
+                        "message": "Kalenderdaten erfolgreich extrahiert",
+                        "status": "success"
+                    }
+                )
+            else:
+                raise HTTPException(status_code=400, detail="Keine Kalenderdaten in der Datei gefunden")
+        else:
+            raise HTTPException(status_code=400, detail="Nicht unterstütztes Dateiformat. Nur ZIP, PST und OST Dateien werden unterstützt")
+            
+    except Exception as e:
+        logger.error(f"Fehler bei der Extraktion: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if file.file:
+            file.file.close()
+        # Sicherstellen, dass alle temporären Verzeichnisse bereinigt werden
+        if temp_dir and os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir)
+            logger.info(f"Temporäres Verzeichnis bereinigt: {temp_dir}")
 
 @app.post("/list-pst-folders")
 async def list_folders_endpoint(request: Request):

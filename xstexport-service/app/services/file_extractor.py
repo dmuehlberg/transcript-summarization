@@ -1,6 +1,9 @@
 import os
 import json
 import logging
+import zipfile
+import tempfile
+import shutil
 from fastapi import HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 
@@ -9,140 +12,146 @@ from app.services.calendar_extractor import extract_calendar_data
 logger = logging.getLogger(__name__)
 
 class MockUploadFile:
-    """
-    Mock-Klasse für UploadFile, um bestehende Dateien zu verwenden, ohne sie hochzuladen.
-    """
-    def __init__(self, filename):
+    """Mock-Klasse für UploadFile, die nur den Dateinamen benötigt."""
+    def __init__(self, filename: str):
         self.filename = filename
+        self.file = None
         
     async def read(self):
-        # Diese Methode wird nicht verwendet, da wir die vorhandene Datei direkt verwenden
         return b""
+        
+    async def seek(self, offset: int):
+        pass
+        
+    async def close(self):
+        pass
 
-async def extract_calendar_from_existing_file(request: Request):
+async def extract_calendar_from_existing_file(
+    file_path: str,
+    format: str = "csv",
+    extract_all: bool = False,
+    return_file: bool = False
+) -> dict:
     """
-    Extrahiert Kalenderdaten aus einer vorhandenen PST/OST-Datei im Container.
+    Extrahiert Kalenderdaten aus einer vorhandenen PST/OST-Datei.
     
     Args:
-        request: FastAPI Request-Objekt mit JSON-Daten
-    
-    Returns:
-        Bei return_file=True: Die ZIP-Datei als Download
-        Bei return_file=False: JSON-Antwort mit Pfad zur generierten ZIP-Datei
+        file_path: Pfad zur PST/OST-Datei
+        format: Format der Extraktion ('csv' oder 'native')
+        extract_all: Ob alle Elemente extrahiert werden sollen
+        return_file: Ob die ZIP-Datei als Download zurückgegeben werden soll
         
-    Raises:
-        HTTPException: Bei Fehlern während der Verarbeitung
+    Returns:
+        dict: Enthält den Pfad zur extrahierten Calendar.csv
     """
     try:
-        # Content-Type prüfen und ausgeben
-        content_type = request.headers.get("content-type", "")
-        logger.info(f"Request Content-Type: {content_type}")
+        logger.info(f"Starte Extraktion der PST/OST-Datei: {file_path}")
         
-        # JSON-Daten aus der Anfrage lesen mit verbesserter Fehlerbehandlung
-        body_bytes = await request.body()
-        logger.debug(f"Received request body (first 100 bytes): {body_bytes[:100]}")
-        
-        if not body_bytes:
-            logger.error("Leerer Request-Body")
-            raise HTTPException(
-                status_code=400,
-                detail="Der Request-Body ist leer"
-            )
-        
-        # Versuche, den Request-Body zu parsen
-        try:
-            # Standard-Parsing mit UTF-8
-            body_data = json.loads(body_bytes.decode('utf-8'))
-        except UnicodeDecodeError as ude:
-            logger.warning(f"UTF-8 Dekodierungsfehler: {str(ude)}, versuche mit errors=replace")
-            # Versuche mit einer permissiveren Dekodierung, wenn UTF-8 fehlschlägt
-            body_data = json.loads(body_bytes.decode('utf-8', errors='replace'))
-        except json.JSONDecodeError as jde:
-            logger.error(f"JSON-Dekodierungsfehler: {str(jde)}")
-            
-            # Prüfe, ob der Inhalt Form-Daten sein könnte statt JSON
-            if content_type.startswith('multipart/form-data') or content_type.startswith('application/x-www-form-urlencoded'):
-                raise HTTPException(
-                    status_code=400,
-                    detail="Es wurden Formulardaten gesendet, aber JSON wird erwartet. Stelle sicher, dass der Content-Type 'application/json' ist."
-                )
-            
-            # Versuchen, den Body als String auszugeben, um zu sehen, was gesendet wurde
-            body_str = body_bytes.decode('utf-8', errors='replace')
-            sample = body_str[:100] + "..." if len(body_str) > 100 else body_str
-            raise HTTPException(
-                status_code=400,
-                detail=f"Ungültiges JSON-Format: {str(jde)}. Empfangener Inhalt: {sample}"
-            )
-        
-        logger.info(f"Received request data: {body_data}")
-        
-        # Prüfe auf erforderliche Felder
-        filename = body_data.get("filename")
-        if not filename:
-            raise HTTPException(
-                status_code=400,
-                detail="Ein Dateiname muss angegeben werden"
-            )
-            
-        format = body_data.get("format", "csv")
-        target_folder = body_data.get("target_folder", None)
-        return_file = body_data.get("return_file", False)
-        
-        # NEU: Extrahiere Ordnername und extract_all Option aus der Anfrage
-        pst_folder = body_data.get("pst_folder", "Calendar")
-        extract_all = body_data.get("extract_all", False)
-        
-        # Prüfen, ob die Datei existiert
-        source_path = os.path.join("/data/ost", filename)
-        if not os.path.exists(source_path):
-            raise HTTPException(
-                status_code=404,
-                detail=f"Datei {filename} nicht im /data/ost-Verzeichnis gefunden"
-            )
+        # Temporäres Verzeichnis für die Extraktion erstellen
+        temp_dir = tempfile.mkdtemp()
+        logger.info(f"Temporäres Verzeichnis erstellt: {temp_dir}")
         
         # Mock-UploadFile mit dem Dateinamen erstellen
-        mock_file = MockUploadFile(filename)
+        mock_file = MockUploadFile(os.path.basename(file_path))
         
-        if extract_all:
-            logger.info(f"Extraktion mit Format {format} für Datei {filename} - Alle Elemente extrahieren")
-        else:
-            logger.info(f"Extraktion mit Format {format} für Datei {filename} aus Ordner {pst_folder} gestartet")
-        
-        # Kalenderdaten extrahieren mit angepasstem Ordner und extract_all Option
+        # Kalenderdaten extrahieren
+        logger.info(f"Extrahiere Kalenderdaten mit Format {format}")
         result = await extract_calendar_data(
             mock_file,
             format,
-            target_folder,
-            pst_folder,
+            None,  # target_folder
+            "Calendar",  # pst_folder
             extract_all
         )
         
-        if return_file:
-            logger.info(f"Datei wird zurückgegeben: {result.zip_path}")
-            return FileResponse(
-                result.zip_path, 
-                media_type="application/zip",
-                filename=os.path.basename(result.zip_path)
-            )
+        if not result or not result.zip_path:
+            logger.error("Keine ZIP-Datei wurde generiert")
+            return None
+            
+        # ZIP-Datei entpacken
+        output_dir = os.path.join(temp_dir, "extracted")
+        os.makedirs(output_dir, exist_ok=True)
+        logger.info(f"Entpacke ZIP-Datei nach: {output_dir}")
+        
+        with zipfile.ZipFile(result.zip_path, 'r') as zip_ref:
+            zip_ref.extractall(output_dir)
+        
+        # Calendar.csv suchen
+        logger.info("Suche nach Calendar.csv")
+        calendar_path = None
+        for root, _, files in os.walk(output_dir):
+            for file in files:
+                if file.lower() == 'calendar.csv':
+                    calendar_path = os.path.join(root, file)
+                    logger.info(f"Calendar.csv gefunden: {calendar_path}")
+                    break
+            if calendar_path:
+                break
+        
+        if calendar_path:
+            logger.info(f"Calendar.csv gefunden: {calendar_path}")
+            return {
+                'calendar_path': calendar_path,
+                'temp_dir': temp_dir  # Wichtig für spätere Bereinigung
+            }
         else:
-            logger.info(f"JSON-Antwort wird zurückgegeben: {result.zip_path}")
-            return JSONResponse(
-                content={
-                    "status": "success",
-                    "message": result.message,
-                    "output_file": result.zip_path
-                }
-            )
-    except json.JSONDecodeError as e:
-        logger.error(f"Fehler beim Parsen der JSON-Anfrage: {str(e)}")
-        raise HTTPException(
-            status_code=400,
-            detail=f"Ungültiges JSON-Format in der Anfrage: {str(e)}"
-        )
+            logger.warning("Keine Calendar.csv in der extrahierten Datei gefunden")
+            return None
+            
     except Exception as e:
-        logger.error(f"Fehler bei der Extraktion: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Fehler bei der Extraktion: {str(e)}"
-        )
+        logger.error(f"Fehler beim Extrahieren der PST/OST-Datei: {str(e)}")
+        if 'temp_dir' in locals():
+            shutil.rmtree(temp_dir)
+            logger.info(f"Temporäres Verzeichnis bereinigt: {temp_dir}")
+        raise
+
+def extract_calendar_from_zip(zip_path: str) -> dict:
+    """
+    Extrahiert Kalenderdaten aus einer ZIP-Datei.
+    
+    Args:
+        zip_path: Pfad zur ZIP-Datei
+        
+    Returns:
+        dict: Enthält den Pfad zur extrahierten Calendar.csv
+    """
+    try:
+        logger.info(f"Starte Extraktion der ZIP-Datei: {zip_path}")
+        
+        # Temporäres Verzeichnis für die Extraktion erstellen
+        temp_dir = tempfile.mkdtemp()
+        logger.info(f"Temporäres Verzeichnis erstellt: {temp_dir}")
+        
+        # ZIP-Datei extrahieren
+        logger.info("Extrahiere ZIP-Datei")
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(temp_dir)
+        
+        # Calendar.csv suchen
+        logger.info("Suche nach Calendar.csv")
+        calendar_path = None
+        for root, _, files in os.walk(temp_dir):
+            for file in files:
+                if file.lower() == 'calendar.csv':
+                    calendar_path = os.path.join(root, file)
+                    logger.info(f"Calendar.csv gefunden: {calendar_path}")
+                    break
+            if calendar_path:
+                break
+        
+        if calendar_path:
+            logger.info(f"Calendar.csv gefunden: {calendar_path}")
+            return {
+                'calendar_path': calendar_path,
+                'temp_dir': temp_dir  # Wichtig für spätere Bereinigung
+            }
+        else:
+            logger.warning("Keine Calendar.csv in der ZIP-Datei gefunden")
+            return None
+            
+    except Exception as e:
+        logger.error(f"Fehler beim Extrahieren der ZIP-Datei: {str(e)}")
+        if 'temp_dir' in locals():
+            shutil.rmtree(temp_dir)
+            logger.info(f"Temporäres Verzeichnis bereinigt: {temp_dir}")
+        raise
