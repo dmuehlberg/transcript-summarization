@@ -1,16 +1,22 @@
+version: '3.8'
+
 services:
   xstexport-service:
-    platform: ${TARGETPLATFORM:-linux/amd64}
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        - TARGETPLATFORM=${TARGETPLATFORM:-linux/amd64}
     ports:
       - "8200:8200"
     volumes:
-      - ./data/ost:/data/ost
-      # - /c/Users/dmuehlbe/AppData/Local/Microsoft/Outlook:/data/outlook
+      - ./data:/data
     environment:
-      - DATABASE_URL=postgresql://root:postgres@postgres:5432/n8n
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=n8n
+      - POSTGRES_USER=root
+      - POSTGRES_PASSWORD=postgres
     networks:
       - demo
     depends_on:

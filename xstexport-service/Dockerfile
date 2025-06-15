@@ -1,49 +1,50 @@
-# Neueres Debian als Basis verwenden
-FROM debian:bullseye
+FROM python:3.9-slim
 
-# ICU-Pakete installieren (für Globalisierungsunterstützung)
+# Build-Argument für die Plattform
+ARG TARGETPLATFORM=linux/amd64
+
+# Installiere libpst und andere Abhängigkeiten
 RUN apt-get update && apt-get install -y \
+    libpst-dev \
     wget \
-    curl \
-    python3 \
-    python3-pip \
-    unzip \
-    libicu67 \
-    && rm -rf /var/lib/apt/lists/* \
-    # .NET Core 2.1 herunterladen und installieren
-    && mkdir -p /usr/share/dotnet \
-    && wget -q https://dotnetcli.blob.core.windows.net/dotnet/Runtime/2.1.30/dotnet-runtime-2.1.30-linux-arm64.tar.gz -O dotnet-runtime-2.1.30-linux.tar.gz \
-    && tar -zxf dotnet-runtime-2.1.30-linux.tar.gz -C /usr/share/dotnet \
-    && rm dotnet-runtime-2.1.30-linux.tar.gz \
-    && ln -s /usr/share/dotnet/dotnet /usr/bin/dotnet
+    gnupg \
+    && rm -rf /var/lib/apt/lists/*
 
-# Umgebungsvariable für .NET Core setzen, um Invariant-Globalisierung zu aktivieren, falls ICU-Pakete nicht funktionieren
-ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=true
+# Installiere .NET SDK für beide Architekturen
+RUN if [ "$TARGETPLATFORM" = "linux/arm64/v8" ]; then \
+        wget https://dot.net/v1/dotnet-install.sh -O dotnet-install.sh \
+        && chmod +x dotnet-install.sh \
+        && ./dotnet-install.sh --version 6.0.419 \
+        && rm dotnet-install.sh \
+        && ln -s /root/.dotnet/dotnet /usr/local/bin/dotnet; \
+    else \
+        wget https://dot.net/v1/dotnet-install.sh -O dotnet-install.sh \
+        && chmod +x dotnet-install.sh \
+        && ./dotnet-install.sh --version 6.0.419 \
+        && rm dotnet-install.sh \
+        && ln -s /root/.dotnet/dotnet /usr/local/bin/dotnet; \
+    fi
 
-# Arbeitsverzeichnis einrichten
+# Kopiere die Anwendungscode und Konfiguration
+COPY app/ /app/app/
+COPY app/config/ /app/app/config/
+COPY XstReader/XstExporter.Portable.dll /app/XstExporter.Portable.dll
+COPY XstReader/XstExporter.Portable.deps.json /app/XstExporter.Portable.deps.json
+COPY XstReader/XstExporter.Portable.runtimeconfig.json /app/XstExporter.Portable.runtimeconfig.json
+COPY XstReader/XstReader.Api.dll /app/XstReader.Api.dll
+
+# Setze das Arbeitsverzeichnis
 WORKDIR /app
 
-# Lokale XstReader-Dateien kopieren statt herunterladen
-COPY XstReader/ /app/
+# Installiere Python-Abhängigkeiten
+COPY requirements.txt .
+RUN pip install -r requirements.txt
 
-# Debug-Info erstellen
-RUN find . -type f -o -type d | sort > /app/file_structure.txt && \
-    ls -la /app/ > /app/app_contents.txt && \
-    # Zeige .NET-Informationen
-    dotnet --info > /app/dotnet_info.txt || echo "Fehler bei dotnet --info, wird ignoriert"
+# Erstelle Verzeichnis für PST/OST-Dateien
+RUN mkdir -p /data/ost
 
-# Python-Abhängigkeiten installieren
-COPY requirements.txt /app/
-RUN pip3 install -r requirements.txt
-
-# FastAPI-Anwendung kopieren
-COPY app/ /app/app/
-
-# Ausgabeverzeichnis für OST-Dateien erstellen
-RUN mkdir -p /data/ost && chmod 777 /data/ost
-
-# Port öffnen
+# Exponiere den Port
 EXPOSE 8200
 
-# FastAPI starten
+# Starte die Anwendung
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8200"]

@@ -14,12 +14,19 @@ from app.services.calendar_extractor import extract_calendar_data, find_dll
 from app.services.file_extractor import extract_calendar_from_existing_file, extract_calendar_from_zip
 from app.services.file_service import list_app_files, list_data_directory_files
 from app.services.pst_folder_service import list_pst_folders
+from app.services.db_service import DatabaseService
+from app.config.database import get_db_config
 
 # Logger konfigurieren
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="PST/OST Calendar Extractor API")
+
+# Datenbank-Service initialisieren
+db_config = get_db_config()
+logger.info(f"Datenbankkonfiguration: {db_config}")
+db_service = DatabaseService(db_config)
 
 # CORS-Middleware für Cross-Origin-Anfragen hinzufügen
 app.add_middleware(
@@ -35,6 +42,8 @@ app.add_middleware(
 async def startup_event():
     try:
         logger.info("Anwendung gestartet")
+        # Tabelle erstellen, falls sie noch nicht existiert
+        db_service.create_table_if_not_exists()
     except Exception as e:
         logger.error(f"Fehler beim Start: {str(e)}")
         raise
@@ -116,7 +125,8 @@ async def extract_calendar(
     file: UploadFile = File(..., description="Die zu verarbeitende Datei (ZIP, PST oder OST)"),
     format: str = Form("csv", description="Format der Extraktion ('csv' oder 'native')"),
     extract_all: bool = Form(False, description="Ob alle Elemente extrahiert werden sollen"),
-    return_file: bool = Form(False, description="Ob die ZIP-Datei als Download zurückgegeben werden soll")
+    return_file: bool = Form(False, description="Ob die ZIP-Datei als Download zurückgegeben werden soll"),
+    import_to_db: bool = Form(False, description="Ob die Daten in die Datenbank importiert werden sollen")
 ):
     """
     Extrahiert Kalenderdaten aus einer hochgeladenen Datei.
@@ -147,6 +157,19 @@ async def extract_calendar(
             result = extract_calendar_from_zip(file_path)
             if result and 'calendar_path' in result:
                 logger.info(f"Found Calendar.csv at: {result['calendar_path']}")
+                
+                # Daten in die Datenbank importieren, wenn gewünscht
+                if import_to_db and format == 'csv':
+                    try:
+                        db_service.import_csv_to_db(result['calendar_path'])
+                        logger.info("Daten erfolgreich in die Datenbank importiert")
+                    except Exception as e:
+                        logger.error(f"Fehler beim Importieren in die Datenbank: {str(e)}")
+                        raise HTTPException(
+                            status_code=500,
+                            detail=f"Fehler beim Importieren in die Datenbank: {str(e)}"
+                        )
+                
                 if 'temp_dir' in result:
                     shutil.rmtree(result['temp_dir'])
                 return JSONResponse(
@@ -170,6 +193,19 @@ async def extract_calendar(
             
             if result and 'calendar_path' in result:
                 logger.info(f"Found Calendar.csv at: {result['calendar_path']}")
+                
+                # Daten in die Datenbank importieren, wenn gewünscht
+                if import_to_db and format == 'csv':
+                    try:
+                        db_service.import_csv_to_db(result['calendar_path'])
+                        logger.info("Daten erfolgreich in die Datenbank importiert")
+                    except Exception as e:
+                        logger.error(f"Fehler beim Importieren in die Datenbank: {str(e)}")
+                        raise HTTPException(
+                            status_code=500,
+                            detail=f"Fehler beim Importieren in die Datenbank: {str(e)}"
+                        )
+                
                 if 'temp_dir' in result:
                     shutil.rmtree(result['temp_dir'])
                 return JSONResponse(

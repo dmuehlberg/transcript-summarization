@@ -47,6 +47,30 @@ x-init-ollama: &init-ollama
     - "sleep 3; OLLAMA_HOST=ollama:11434 ollama pull llama3.1; OLLAMA_HOST=ollama:11434 ollama pull nomic-embed-text"
 
 services:
+  xstexport-service:
+    platform: ${TARGETPLATFORM:-linux/amd64}
+    build:
+      context: ./xstexport-service
+      dockerfile: Dockerfile
+      args:
+        - TARGETPLATFORM=${TARGETPLATFORM:-linux/amd64}
+    container_name: xstexport-service
+    networks: ['demo']
+    ports:
+      - "8200:8200"
+    volumes:
+      - ./data/ost:/data/ost
+    environment:
+      - DATABASE_URL=postgresql://root:postgres@postgres:5432/n8n
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${POSTGRES_DB}
+      - DB_USER=${POSTGRES_USER}
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   flowise:
     image: flowiseai/flowise
     networks: ['demo']
@@ -227,23 +251,6 @@ services:
   #   volumes:
   #     - ./data/ost:/data/ost
 
-
-  xstexport-service:
-    platform: ${TARGETPLATFORM:-linux/amd64}
-    build:
-      context: ./xstexport-service
-      dockerfile: Dockerfile
-    container_name: xstexport-service
-    networks: ['demo']
-    ports:
-      - "8200:8200"
-    volumes:
-      - ./data/ost:/data/ost
-    environment:
-      - DATABASE_URL=postgresql://root:postgres@postgres:5432/n8n
-    depends_on:
-      postgres:
-        condition: service_healthy
 
   pgadmin:
     image: dpage/pgadmin4
