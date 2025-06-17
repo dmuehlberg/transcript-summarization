@@ -6,24 +6,24 @@
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
       "position": [
-        0,
-        0
+        -720,
+        240
       ],
-      "id": "e2d490c8-f6da-4ad7-a357-ef1ba96fc759",
+      "id": "a3ae8854-9492-49fe-a329-1db7df773fdd",
       "name": "When clicking ‘Test workflow’"
     },
     {
       "parameters": {
-        "fileSelector": "/data/shared/summarize_input/2025-04-28 17-01-19.txt",
+        "fileSelector": "={{ $json.filePath }}",
         "options": {}
       },
       "type": "n8n-nodes-base.readWriteFile",
       "typeVersion": 1,
       "position": [
-        220,
-        0
+        -440,
+        140
       ],
-      "id": "0bf3c866-f027-4366-bf51-09752028a6a9",
+      "id": "826d2baf-1a20-4919-a3bd-c4e3317ca503",
       "name": "Read/Write Files from Disk"
     },
     {
@@ -35,10 +35,10 @@
       "type": "n8n-nodes-base.extractFromFile",
       "typeVersion": 1,
       "position": [
-        440,
-        0
+        -180,
+        140
       ],
-      "id": "197deaf8-22ac-46aa-a7ce-4c7e59dfc5ce",
+      "id": "254f183f-2251-4d53-8de2-7f1be4189c92",
       "name": "Extract from File"
     },
     {
@@ -50,40 +50,26 @@
       "type": "n8n-nodes-base.convertToFile",
       "typeVersion": 1.1,
       "position": [
-        900,
-        320
+        480,
+        140
       ],
-      "id": "c477259b-91ff-4db3-9049-f435532f44f4",
+      "id": "f4dff10e-fc52-41ea-931f-8939626ce87d",
       "name": "Convert to File"
     },
     {
       "parameters": {
         "operation": "write",
-        "fileName": "/data/shared/summarize_input/2025-04-28 17-01-19_transformed.txt",
+        "fileName": "=/data/shared/summarize_input/{{ $('Set baseFileName').item.json.baseFileName }}_transformed.txt",
         "options": {}
       },
       "type": "n8n-nodes-base.readWriteFile",
       "typeVersion": 1,
       "position": [
-        1080,
-        320
+        740,
+        140
       ],
-      "id": "3d5bdb4c-e37e-4d28-b02e-528d0f4e36f8",
+      "id": "18a4260f-2921-47c4-bcd0-5707f48289a6",
       "name": "Read/Write Files from Disk1"
-    },
-    {
-      "parameters": {
-        "language": "python",
-        "pythonCode": "import re\n\n# Wir nehmen den konsolidierten Text aus vorherigem Node\n# Feldname: \"text\", z. B. erzeugt durch vorheriges Skript\n\noutput_items = []\n\nfor item in items:\n    full_text = item['json'].get('text', '')\n    \n    # Aufteilen nach Sprecherblöcken\n    blocks = re.split(r\"\\n(?=\\[\\d{2}:\\d{2}:\\d{2}\\.\\d+\\] SPEAKER_\\d+:)\", full_text)\n\n    for block in blocks:\n        match = re.match(r\"\\[(\\d{2}:\\d{2}:\\d{2}\\.\\d+)\\] (SPEAKER_\\d+):\\n(.+)\", block.strip(), re.DOTALL)\n        if match:\n            start_time, speaker, text = match.groups()\n            output_items.append({\n                \"json\": {\n                    \"speaker\": speaker,\n                    \"start_time\": start_time,\n                    \"text\": text.strip()\n                }\n            })\n\nreturn output_items\n"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        880,
-        -140
-      ],
-      "id": "35994f8e-5305-49a0-a335-3c5b55e2b404",
-      "name": "Split Speaker Sections into Items"
     },
     {
       "parameters": {
@@ -93,61 +79,64 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        660,
-        0
+        20,
+        140
       ],
-      "id": "6f23030a-3b27-441b-b256-07672aa571c7",
+      "id": "020059fc-b762-40d2-b17a-1083da8bd1c8",
       "name": "Consolidate Speaker Sections"
     },
     {
       "parameters": {
-        "promptType": "define",
-        "text": "=Bitte formuliere den folgenden gesprochenen Text als klaren, grammatikalisch korrekten Text in Deutscher Sprache. Entferne Füllwörter wie \"äh\", \"also\", \"halt\", \"irgendwie\" oder unnötige Wiederholungen. Ändere keine inhaltlichen Aussagen oder die Struktur, fasse auch nichts zusammen.\n\nText:\n{{ $json.text }}"
+        "inputSource": "passthrough"
       },
-      "type": "@n8n/n8n-nodes-langchain.chainLlm",
-      "typeVersion": 1.6,
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
       "position": [
-        1320,
-        -140
+        -720,
+        40
       ],
-      "id": "4c3ad149-859e-4727-98b0-78555c210935",
-      "name": "Basic LLM Chain"
+      "id": "1660b96b-3caf-4218-983a-3d256d063f8c",
+      "name": "When Executed by Another Workflow"
     },
     {
       "parameters": {
-        "model": "qwen3:1.7b",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a0521520-3420-40f7-a617-350413ae2577",
+              "name": "baseFileName",
+              "value": "={{ $('Read/Write Files from Disk').item.json.fileName.split('/').pop().split('.')[0] }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
         "options": {}
       },
-      "type": "@n8n/n8n-nodes-langchain.lmOllama",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
       "position": [
-        1340,
-        60
+        260,
+        140
       ],
-      "id": "e7bb3d72-ae8d-48e1-b4ce-7db3ed338c50",
-      "name": "Ollama Model",
-      "credentials": {
-        "ollamaApi": {
-          "id": "OBl4Zc4DOOLWfQEw",
-          "name": "Ollama account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "// Neue Item-Liste\nconst cleanedItems = [];\n\nfor (const item of items) {\n  const raw = item.json.text || \"\";\n  const match = raw.match(/<\\/think>\\s*([\\s\\S]*)/i);\n  const cleaned = match ? match[1].trim() : raw.trim();\n\n  cleanedItems.push({\n    json: {\n      cleaned_text: cleaned,\n      original_text: raw\n    }\n  });\n}\n\nreturn cleanedItems;\n"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1680,
-        -140
-      ],
-      "id": "9109d45d-aa44-45ad-b33d-851b565e2acd",
-      "name": "Code"
+      "id": "12e12847-290a-45e0-a9c7-b26e1b0e265f",
+      "name": "Set baseFileName"
     }
   ],
-  "pinData": {},
+  "pinData": {
+    "When Executed by Another Workflow": [
+      {
+        "json": {
+          "filePath": "/data/shared/summarize_input/2025-06-17 16-36-00.txt"
+        }
+      },
+      {
+        "json": {
+          "baseFileName": "2025-06-17 16-36-00"
+        }
+      }
+    ]
+  },
   "connections": {
     "When clicking ‘Test workflow’": {
       "main": [
@@ -193,49 +182,33 @@
         ]
       ]
     },
-    "Split Speaker Sections into Items": {
-      "main": [
-        [
-          {
-            "node": "Basic LLM Chain",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Consolidate Speaker Sections": {
       "main": [
         [
           {
-            "node": "Split Speaker Sections into Items",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Convert to File",
+            "node": "Set baseFileName",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Ollama Model": {
-      "ai_languageModel": [
-        [
-          {
-            "node": "Basic LLM Chain",
-            "type": "ai_languageModel",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Basic LLM Chain": {
+    "When Executed by Another Workflow": {
       "main": [
         [
           {
-            "node": "Code",
+            "node": "Read/Write Files from Disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set baseFileName": {
+      "main": [
+        [
+          {
+            "node": "Convert to File",
             "type": "main",
             "index": 0
           }
@@ -247,11 +220,11 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "ab43e78c-c156-44a4-9288-e1e7f018ce20",
+  "versionId": "b8fcb088-59a1-41ac-bfcd-547101d7980f",
   "meta": {
     "templateCredsSetupCompleted": true,
-    "instanceId": "6d4fe15f3d7a2136d5134243b845c1a09442b26a050f667c7ca033e72ef9ef63"
+    "instanceId": "e19a58ffb0fd248efa26d031fe3b9360ad1bd1b828d9ae749d875af6b5124b71"
   },
-  "id": "RXqC1CkqLDySzJxT",
+  "id": "o8jkhp342lSgaKvA",
   "tags": []
 }

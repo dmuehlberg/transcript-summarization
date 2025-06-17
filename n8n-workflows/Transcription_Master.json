@@ -9,7 +9,7 @@
         0,
         0
       ],
-      "id": "3020de26-ac0b-4d7f-8756-b5139ed32a4e",
+      "id": "456be428-ec6e-4ab4-89c9-a24bb88d385f",
       "name": "When clicking ‘Test workflow’"
     },
     {
@@ -22,7 +22,7 @@
         220,
         0
       ],
-      "id": "f138815c-d13b-4b65-805f-928c32612dea",
+      "id": "2e6a7b43-e4a5-42ff-a7de-d1a28f8eca04",
       "name": "Ensure Folders Exist"
     },
     {
@@ -35,7 +35,7 @@
         440,
         0
       ],
-      "id": "2d0fa1a8-d03a-48f2-bfba-b9910dfd21fa",
+      "id": "216efc33-14e9-4fe5-b9c3-6c07e524b921",
       "name": "List MP3s"
     },
     {
@@ -48,7 +48,7 @@
         660,
         0
       ],
-      "id": "682fd7d8-dbe7-43c3-9bf5-a4424e63803f",
+      "id": "3917eb36-2143-4b9e-9cb3-2aa23bc9586b",
       "name": "Code"
     },
     {
@@ -77,7 +77,7 @@
         1140,
         0
       ],
-      "id": "bbe9839f-2341-458f-b8d9-a414cd341677",
+      "id": "91513aa4-69d4-498a-b342-1765adb22576",
       "name": "Extract filePath & baseFileName"
     },
     {
@@ -91,7 +91,7 @@
         1360,
         0
       ],
-      "id": "0462cc9c-bff0-4747-b1b3-393f63ea8d5e",
+      "id": "cc36ff37-cea5-49db-8fc8-9676c0d1b13b",
       "name": "Move to Processing"
     },
     {
@@ -114,14 +114,14 @@
         1640,
         0
       ],
-      "id": "752c90ef-4f69-492e-be6d-bf0f0922b53b",
+      "id": "8d297b3e-081e-44a7-8f4a-7cfc0805c3ea",
       "name": "Update filePath to Processing"
     },
     {
       "parameters": {
         "workflowId": {
           "__rl": true,
-          "value": "HR1I3VG4uyexEZfR",
+          "value": "Bq831QTbodw3b9Tv",
           "mode": "list",
           "cachedResultName": "Transcribe MP3"
         },
@@ -131,9 +131,7 @@
             "filePath": "={{ $json.filePath }}",
             "baseFileName": "={{ $('Extract filePath & baseFileName').item.json.baseFileName }}"
           },
-          "matchingColumns": [
-            "filePath"
-          ],
+          "matchingColumns": [],
           "schema": [
             {
               "id": "filePath",
@@ -142,8 +140,7 @@
               "defaultMatch": false,
               "display": true,
               "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
+              "type": "string"
             },
             {
               "id": "baseFileName",
@@ -152,8 +149,7 @@
               "defaultMatch": false,
               "display": true,
               "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
+              "type": "string"
             }
           ],
           "attemptToConvertTypes": false,
@@ -170,22 +166,8 @@
         1860,
         0
       ],
-      "id": "4c3122b9-27cd-4353-83cf-ed53277b1f47",
+      "id": "03e29172-0e4d-492b-a42f-da85ff86253b",
       "name": "Transcribe MP3"
-    },
-    {
-      "parameters": {
-        "executeOnce": false,
-        "command": "=mv \"/data/shared/processing/{{ $node[\"Extract filePath & baseFileName\"].json.baseFileName }}.mp3\"  \"/data/shared/finished/\" && \\\nmv \"/data/shared/processing/{{ $node[\"Extract filePath & baseFileName\"].json.baseFileName }}.txt\"  \"/data/shared/finished/\" && \\\nmv \"/data/shared/processing/{{ $node[\"Extract filePath & baseFileName\"].json.baseFileName }}.json\" \"/data/shared/finished/\"\n"
-      },
-      "type": "n8n-nodes-base.executeCommand",
-      "typeVersion": 1,
-      "position": [
-        2080,
-        0
-      ],
-      "id": "35f9a4d8-a286-464c-b9f5-fe2bb610cba0",
-      "name": "Execute Command"
     },
     {
       "parameters": {
@@ -199,8 +181,103 @@
         880,
         0
       ],
-      "id": "a7520c37-9ab6-471e-aae5-826d597e6dda",
+      "id": "33bc497d-e0d8-4d26-af93-3c46cdf5bb3c",
       "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "executeOnce": false,
+        "command": "=mv \"/data/shared/processing/{{ $node[\"Extract filePath & baseFileName\"].json.baseFileName }}.mp3\"  \"/data/shared/finished/\" && \\\nmv \"/data/shared/processing/{{ $node[\"Extract filePath & baseFileName\"].json.baseFileName }}.txt\"  \"/data/shared/finished/\" && \\\nmv \"/data/shared/processing/{{ $node[\"Extract filePath & baseFileName\"].json.baseFileName }}.json\" \"/data/shared/finished/\"\n"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        2080,
+        0
+      ],
+      "id": "b270b04a-57dd-4a30-8f5d-71b8df0c8250",
+      "name": "Move to Finished Folder"
+    },
+    {
+      "parameters": {
+        "executeOnce": false,
+        "command": "=cp \"/data/shared/finished/{{ $node[\"Extract filePath & baseFileName\"].json.baseFileName }}.txt\"  \"/data/shared/summarize_input/\""
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        2320,
+        0
+      ],
+      "id": "5c9c9158-3d55-4c2e-a7bb-cd2c57620073",
+      "name": "Copy Transcript to Summarize Input"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "85229560-d532-492e-b124-5359b190e335",
+              "name": "filePath",
+              "value": "=/data/shared/summarize_input/{{ $('Extract filePath & baseFileName').item.json.baseFileName }}.txt",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2540,
+        0
+      ],
+      "id": "2f19895a-e581-4e48-9930-2f910472f068",
+      "name": "Update filePath to Summarize_Input"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "o8jkhp342lSgaKvA",
+          "mode": "list",
+          "cachedResultName": "Summarize Transcript"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2780,
+        0
+      ],
+      "id": "2679dd78-ef85-4aee-9324-ec0f89316234",
+      "name": "Summarize MP3"
+    },
+    {
+      "parameters": {
+        "executeOnce": false,
+        "command": "=mv \"/data/shared/summarize_input/{{ $node[\"Extract filePath & baseFileName\"].json.baseFileName }}.txt\"  \"/data/shared/summarize_finished/\" && \\\nmv \"/data/shared/summarize_input/{{ $node[\"Extract filePath & baseFileName\"].json.baseFileName }}_transformed.txt\"  \"/data/shared/summarize_finished/\""
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        3020,
+        0
+      ],
+      "id": "631ba90f-6204-4695-97d1-02f78f2bec13",
+      "name": "Move Summarization to Finished"
     }
   ],
   "pinData": {},
@@ -286,7 +363,7 @@
       "main": [
         [
           {
-            "node": "Execute Command",
+            "node": "Move to Finished Folder",
             "type": "main",
             "index": 0
           }
@@ -305,7 +382,51 @@
         ]
       ]
     },
-    "Execute Command": {
+    "Move to Finished Folder": {
+      "main": [
+        [
+          {
+            "node": "Copy Transcript to Summarize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Copy Transcript to Summarize Input": {
+      "main": [
+        [
+          {
+            "node": "Update filePath to Summarize_Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update filePath to Summarize_Input": {
+      "main": [
+        [
+          {
+            "node": "Summarize MP3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize MP3": {
+      "main": [
+        [
+          {
+            "node": "Move Summarization to Finished",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Move Summarization to Finished": {
       "main": [
         [
           {
@@ -321,10 +442,10 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "24616076-2abe-464a-87de-84272bcb0014",
+  "versionId": "6e9c2215-21b8-49de-8211-3c3ee5bab306",
   "meta": {
-    "instanceId": "6d4fe15f3d7a2136d5134243b845c1a09442b26a050f667c7ca033e72ef9ef63"
+    "instanceId": "e19a58ffb0fd248efa26d031fe3b9360ad1bd1b828d9ae749d875af6b5124b71"
   },
-  "id": "9LwvvlI9mX8T740O",
+  "id": "RkEXqypiBBpPjBO1",
   "tags": []
 }
