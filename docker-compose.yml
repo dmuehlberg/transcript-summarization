@@ -266,3 +266,15 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+
+  phonetic-matcher:
+    build:
+      context: ./phonetic_matcher
+    container_name: phonetic_matcher
+    networks: ['demo']
+    ports:
+      - "8300:8300"
+    env_file:
+      - .env
+    depends_on:
+      - postgres
