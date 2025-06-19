@@ -1,10 +1,6 @@
-Hier ist dein vollständig integriertes und aktualisiertes Konzept mit dem Zusatz zur automatischen Befüllung von recipient_names aus calendar_data, sauber eingebettet in die bestehende Struktur.
-
-⸻
-
 🧾 Ziel & thematischer Kontext (für Cursor)
 
-Du entwickelst einen FastAPI-Webservice, der innerhalb eines bestehenden Projekts (transcript-summarization) läuft.
+Du entwickelst einen FastAPI-Webservice, der innerhalb des bestehenden Projekts (transcript-summarization) läuft.
 Der Dienst soll ein Transkript (Text) entgegennehmen und es phonetisch analysieren, um Namen und Begriffe anhand einer Referenzliste in einer PostgreSQL-Datenbank zu korrigieren.
 
 Die Korrekturen erfolgen auf Basis phonetischer Ähnlichkeit (Cologne oder Metaphone) mit optionalem Fuzzy-Matching.
@@ -131,7 +127,7 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
 
 ⸻
 
-🔷 4. .env Datei erweitern (im Projektroot, wird bereits verwendet)
+🔷 4. .env Datei erweitern (im Projektroot, wird bereits verwendet), nur wenn die Parameter noch nicht existieren sollten
 
 DB_HOST=postgres
 DB_PORT=5432
@@ -150,7 +146,7 @@ services:
       context: ./phonetic_matcher
     container_name: phonetic_matcher
     ports:
-      - "8080:8080"
+      - "8300:8300"
     env_file:
       - .env
     depends_on:
@@ -159,7 +155,7 @@ services:
 
 ⸻
 
-🔷 6. Datenbanktabellen
+🔷 6. Datenbanktabellen (in Datenbank n8n)
 
 🔹 recipient_names
 
@@ -177,8 +173,10 @@ CREATE TABLE manual_terms (term TEXT, category TEXT, note TEXT);
 Implementiere eine Funktion sync_recipient_names() in sync.py, die:
 	1.	Aus der bestehenden Tabelle calendar_data die Spalten sender_name, display_to, display_cc liest
 	2.	Strings in display_to und display_cc auftrennt (z. B. per ; oder ,)
-	3.	Alle Namen cleaned und dedupliziert
-	4.	Die Einträge in recipient_names schreibt (ggf. vorher TRUNCATE)
+  3.  Zerlege alle Namen in einzelne Wörter (Tokens) über Leerzeichen.
+	4.	Filtere Leerzeichen, leere Tokens, Duplikate, Sonderzeichen.
+	5.	Alle Namen cleaned und dedupliziert
+	6.	Die Einträge in recipient_names schreibt (ohne, dass Doppelungen erzeugt werden)
 
 Diese Funktion wird bei jedem API-Aufruf von /correct-transcript vor dem Matching ausgeführt.
 
@@ -219,9 +217,7 @@ Gebe das korrigierte Transkript + alle Änderungen als Liste zurück.
 
 ✅ Ausgabe
 
-Der Service soll lokal über http://localhost:8080/correct-transcript erreichbar sein und die Empfängerinformationen automatisch aus der Tabelle calendar_data extrahieren und verarbeiten.
+Der Service soll lokal über http://localhost:8300/correct-transcript erreichbar sein und die Empfängerinformationen automatisch aus der Tabelle calendar_data extrahieren und verarbeiten.
 
 ⸻
 
-🟢 Cursor kann mit dieser Spezifikation sofort loslegen.
-Wenn du möchtest, fasse ich sie dir direkt als Markdown-Datei zusammen (SPEC.md) für dein Repo.
