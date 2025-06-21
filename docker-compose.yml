@@ -267,10 +267,10 @@ services:
       postgres:
         condition: service_healthy
 
-  phonetic-matcher:
+  processing-service:
     build:
-      context: ./phonetic_matcher
-    container_name: phonetic_matcher
+      context: ./processing_service
+    container_name: processing_service
     networks: ['demo']
     ports:
       - "8300:8300"
