@@ -9,12 +9,12 @@
         0,
         0
       ],
-      "id": "456be428-ec6e-4ab4-89c9-a24bb88d385f",
+      "id": "d214c8dd-a8b8-442a-a9a4-c4614cf0f518",
       "name": "When clicking ‘Test workflow’"
     },
     {
       "parameters": {
-        "command": "mkdir -p /data/shared/processing /data/shared/finished"
+        "command": "mkdir -p /data/shared/processing /data/shared/finished /data/shared/summarize_input /data/shared/summarize_finished"
       },
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
@@ -22,7 +22,7 @@
         220,
         0
       ],
-      "id": "2e6a7b43-e4a5-42ff-a7de-d1a28f8eca04",
+      "id": "4709abd5-3d7d-4439-8ecb-bbaed242bd74",
       "name": "Ensure Folders Exist"
     },
     {
@@ -35,7 +35,7 @@
         440,
         0
       ],
-      "id": "216efc33-14e9-4fe5-b9c3-6c07e524b921",
+      "id": "91a661ee-5fc5-4263-bea9-8eee7e65232f",
       "name": "List MP3s"
     },
     {
@@ -48,7 +48,7 @@
         660,
         0
       ],
-      "id": "3917eb36-2143-4b9e-9cb3-2aa23bc9586b",
+      "id": "6cd6088e-e5a3-4264-ab83-35d89b47dd7e",
       "name": "Code"
     },
     {
@@ -77,7 +77,7 @@
         1140,
         0
       ],
-      "id": "91513aa4-69d4-498a-b342-1765adb22576",
+      "id": "24966e40-5e46-480d-9f1e-07673f8f4400",
       "name": "Extract filePath & baseFileName"
     },
     {
@@ -91,7 +91,7 @@
         1360,
         0
       ],
-      "id": "cc36ff37-cea5-49db-8fc8-9676c0d1b13b",
+      "id": "5640cdc9-2340-4703-a18a-cde6fda65ace",
       "name": "Move to Processing"
     },
     {
@@ -114,14 +114,14 @@
         1640,
         0
       ],
-      "id": "8d297b3e-081e-44a7-8f4a-7cfc0805c3ea",
+      "id": "3758f83e-333c-4dbc-9f71-78c7b0d4277c",
       "name": "Update filePath to Processing"
     },
     {
       "parameters": {
         "workflowId": {
           "__rl": true,
-          "value": "Bq831QTbodw3b9Tv",
+          "value": "WX8z6jgsbqRWzSiu",
           "mode": "list",
           "cachedResultName": "Transcribe MP3"
         },
@@ -166,7 +166,7 @@
         1860,
         0
       ],
-      "id": "03e29172-0e4d-492b-a42f-da85ff86253b",
+      "id": "10af7f2b-da7d-47aa-9b82-cd528d15b5ca",
       "name": "Transcribe MP3"
     },
     {
@@ -181,7 +181,7 @@
         880,
         0
       ],
-      "id": "33bc497d-e0d8-4d26-af93-3c46cdf5bb3c",
+      "id": "145824cd-e9bf-4db8-953c-f70605ace313",
       "name": "Loop Over Items"
     },
     {
@@ -195,7 +195,7 @@
         2080,
         0
       ],
-      "id": "b270b04a-57dd-4a30-8f5d-71b8df0c8250",
+      "id": "89fcb340-3beb-47a2-8375-79a2cba08188",
       "name": "Move to Finished Folder"
     },
     {
@@ -209,7 +209,7 @@
         2320,
         0
       ],
-      "id": "5c9c9158-3d55-4c2e-a7bb-cd2c57620073",
+      "id": "47aaf791-d1d6-410a-953e-16bbbaab2d69",
       "name": "Copy Transcript to Summarize Input"
     },
     {
@@ -232,14 +232,14 @@
         2540,
         0
       ],
-      "id": "2f19895a-e581-4e48-9930-2f910472f068",
+      "id": "38e5f023-f1ca-4d75-a063-3b4c14602b82",
       "name": "Update filePath to Summarize_Input"
     },
     {
       "parameters": {
         "workflowId": {
           "__rl": true,
-          "value": "o8jkhp342lSgaKvA",
+          "value": "Wq20Ouk1zEWnfVQF",
           "mode": "list",
           "cachedResultName": "Summarize Transcript"
         },
@@ -262,7 +262,7 @@
         2780,
         0
       ],
-      "id": "2679dd78-ef85-4aee-9324-ec0f89316234",
+      "id": "812f07a8-37ce-4da5-bb5f-73db07140e21",
       "name": "Summarize MP3"
     },
     {
@@ -276,7 +276,7 @@
         3020,
         0
       ],
-      "id": "631ba90f-6204-4695-97d1-02f78f2bec13",
+      "id": "16b298b6-7c3f-4721-bddb-034774329877",
       "name": "Move Summarization to Finished"
     }
   ],
@@ -442,10 +442,10 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "6e9c2215-21b8-49de-8211-3c3ee5bab306",
+  "versionId": "e5a39823-6fbb-4c9f-a063-ad7aa93400e4",
   "meta": {
-    "instanceId": "e19a58ffb0fd248efa26d031fe3b9360ad1bd1b828d9ae749d875af6b5124b71"
+    "instanceId": "ef294ce2c8969143c3f21aeb83a219f5910d5236d8d11193629e117ac6bdff9f"
   },
-  "id": "RkEXqypiBBpPjBO1",
+  "id": "SoToMOPczncfyTA4",
   "tags": []
 }

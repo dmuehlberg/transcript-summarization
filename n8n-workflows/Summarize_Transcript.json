@@ -6,10 +6,10 @@
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
       "position": [
-        -720,
-        240
+        0,
+        200
       ],
-      "id": "a3ae8854-9492-49fe-a329-1db7df773fdd",
+      "id": "9f6ddb1a-3c7a-4a7c-8c72-d3ebb557f424",
       "name": "When clicking ‘Test workflow’"
     },
     {
@@ -20,10 +20,10 @@
       "type": "n8n-nodes-base.readWriteFile",
       "typeVersion": 1,
       "position": [
-        -440,
-        140
+        280,
+        100
       ],
-      "id": "826d2baf-1a20-4919-a3bd-c4e3317ca503",
+      "id": "a15fe609-27f1-4826-aea2-aebf216dbb32",
       "name": "Read/Write Files from Disk"
     },
     {
@@ -35,10 +35,10 @@
       "type": "n8n-nodes-base.extractFromFile",
       "typeVersion": 1,
       "position": [
-        -180,
-        140
+        540,
+        100
       ],
-      "id": "254f183f-2251-4d53-8de2-7f1be4189c92",
+      "id": "06632573-055f-4f9e-9048-0fa331cb7457",
       "name": "Extract from File"
     },
     {
@@ -50,10 +50,10 @@
       "type": "n8n-nodes-base.convertToFile",
       "typeVersion": 1.1,
       "position": [
-        480,
-        140
+        1200,
+        100
       ],
-      "id": "f4dff10e-fc52-41ea-931f-8939626ce87d",
+      "id": "17bac10a-78dd-43ce-b880-648e65b784fc",
       "name": "Convert to File"
     },
     {
@@ -65,10 +65,10 @@
       "type": "n8n-nodes-base.readWriteFile",
       "typeVersion": 1,
       "position": [
-        740,
-        140
+        1460,
+        100
       ],
-      "id": "18a4260f-2921-47c4-bcd0-5707f48289a6",
+      "id": "71a06091-48ce-4659-ada0-6653a132eb5d",
       "name": "Read/Write Files from Disk1"
     },
     {
@@ -79,10 +79,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        20,
-        140
+        740,
+        100
       ],
-      "id": "020059fc-b762-40d2-b17a-1083da8bd1c8",
+      "id": "6b643f42-ff9c-458c-9b49-e82043a46fe5",
       "name": "Consolidate Speaker Sections"
     },
     {
@@ -92,10 +92,10 @@
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1.1,
       "position": [
-        -720,
-        40
+        0,
+        0
       ],
-      "id": "1660b96b-3caf-4218-983a-3d256d063f8c",
+      "id": "6846f305-fb68-46c1-a302-25f5266e18eb",
       "name": "When Executed by Another Workflow"
     },
     {
@@ -116,10 +116,10 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        260,
-        140
+        980,
+        100
       ],
-      "id": "12e12847-290a-45e0-a9c7-b26e1b0e265f",
+      "id": "d8e9750b-8693-4c29-a2b5-f6439cf92f51",
       "name": "Set baseFileName"
     }
   ],
@@ -220,11 +220,10 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "b8fcb088-59a1-41ac-bfcd-547101d7980f",
+  "versionId": "e70c7544-1ecc-417e-a755-c7c596ee9231",
   "meta": {
-    "templateCredsSetupCompleted": true,
-    "instanceId": "e19a58ffb0fd248efa26d031fe3b9360ad1bd1b828d9ae749d875af6b5124b71"
+    "instanceId": "ef294ce2c8969143c3f21aeb83a219f5910d5236d8d11193629e117ac6bdff9f"
   },
-  "id": "o8jkhp342lSgaKvA",
+  "id": "Wq20Ouk1zEWnfVQF",
   "tags": []
 }
