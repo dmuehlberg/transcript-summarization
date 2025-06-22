@@ -278,6 +278,8 @@ services:
       - .env
     depends_on:
       - postgres
+    volumes:
+     - ./shared:/shared
 
   budibase:
     image: budibase/budibase:latest
