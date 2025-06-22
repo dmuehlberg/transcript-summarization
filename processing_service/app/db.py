@@ -1,6 +1,7 @@
 import os
 import psycopg2
 from dotenv import load_dotenv
+from datetime import datetime
 
 load_dotenv()
 
@@ -32,7 +33,7 @@ def init_db():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS transcriptions (
             id SERIAL PRIMARY KEY,
-            filepath TEXT UNIQUE,
+            filename TEXT UNIQUE,
             recording_date TIMESTAMP,
             detected_language TEXT,
             set_language TEXT,
@@ -50,17 +51,20 @@ def init_db():
     conn.close()
 
 def upsert_transcription(data):
+    data = data.copy()
+    # Nur Dateiname speichern
+    data["filename"] = os.path.basename(data.pop("filepath"))
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("""
         INSERT INTO transcriptions (
-            filepath, recording_date, detected_language, set_language, transcript_text, corrected_text,
+            filename, recording_date, detected_language, set_language, transcript_text, corrected_text,
             participants_firstname, participants_lastname, transcription_duration, audio_duration, created_at
         ) VALUES (
-            %(filepath)s, %(recording_date)s, %(detected_language)s, %(set_language)s, %(transcript_text)s, %(corrected_text)s,
+            %(filename)s, %(recording_date)s, %(detected_language)s, %(set_language)s, %(transcript_text)s, %(corrected_text)s,
             %(participants_firstname)s, %(participants_lastname)s, %(transcription_duration)s, %(audio_duration)s, %(created_at)s
         )
-        ON CONFLICT (filepath) DO UPDATE SET
+        ON CONFLICT (filename) DO UPDATE SET
             recording_date = EXCLUDED.recording_date,
             detected_language = EXCLUDED.detected_language,
             set_language = EXCLUDED.set_language,
@@ -72,6 +76,37 @@ def upsert_transcription(data):
             audio_duration = EXCLUDED.audio_duration,
             created_at = EXCLUDED.created_at;
     """, data)
+    conn.commit()
+    cur.close()
+    conn.close()
+
+def upsert_mp3_file(filepath):
+    filename = os.path.basename(filepath)
+    conn = get_db_connection()
+    cur = conn.cursor()
+    # Falls vorhanden, alten Eintrag löschen
+    cur.execute("DELETE FROM transcriptions WHERE filename = %s", (filename,))
+    # Neuen Eintrag anlegen
+    cur.execute("""
+        INSERT INTO transcriptions (
+            filename, recording_date, detected_language, set_language, transcript_text, corrected_text,
+            participants_firstname, participants_lastname, transcription_duration, audio_duration, created_at
+        ) VALUES (
+            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+        )
+    """, (
+        filename,
+        datetime.utcnow(),  # Aufnahmezeitpunkt unbekannt, daher jetzt
+        None,  # detected_language
+        None,  # set_language
+        None,  # transcript_text
+        None,  # corrected_text
+        None,  # participants_firstname
+        None,  # participants_lastname
+        None,  # transcription_duration
+        None,  # audio_duration
+        datetime.utcnow(),
+    ))
     conn.commit()
     cur.close()
     conn.close() 
