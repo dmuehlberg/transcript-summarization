@@ -283,6 +283,7 @@ services:
 
   budibase:
     image: budibase/budibase:latest
+    container_name: budibase
     ports:
       - "8400:80"
     environment:
