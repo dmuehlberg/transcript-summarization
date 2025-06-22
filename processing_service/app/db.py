@@ -29,6 +29,49 @@ def init_db():
             note TEXT
         );
     """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS transcriptions (
+            id SERIAL PRIMARY KEY,
+            filepath TEXT UNIQUE,
+            recording_date TIMESTAMP,
+            detected_language TEXT,
+            set_language TEXT,
+            transcript_text TEXT,
+            corrected_text TEXT,
+            participants_firstname TEXT,
+            participants_lastname TEXT,
+            transcription_duration FLOAT,
+            audio_duration FLOAT,
+            created_at TIMESTAMP
+        );
+    """)
+    conn.commit()
+    cur.close()
+    conn.close()
+
+def upsert_transcription(data):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO transcriptions (
+            filepath, recording_date, detected_language, set_language, transcript_text, corrected_text,
+            participants_firstname, participants_lastname, transcription_duration, audio_duration, created_at
+        ) VALUES (
+            %(filepath)s, %(recording_date)s, %(detected_language)s, %(set_language)s, %(transcript_text)s, %(corrected_text)s,
+            %(participants_firstname)s, %(participants_lastname)s, %(transcription_duration)s, %(audio_duration)s, %(created_at)s
+        )
+        ON CONFLICT (filepath) DO UPDATE SET
+            recording_date = EXCLUDED.recording_date,
+            detected_language = EXCLUDED.detected_language,
+            set_language = EXCLUDED.set_language,
+            transcript_text = EXCLUDED.transcript_text,
+            corrected_text = EXCLUDED.corrected_text,
+            participants_firstname = EXCLUDED.participants_firstname,
+            participants_lastname = EXCLUDED.participants_lastname,
+            transcription_duration = EXCLUDED.transcription_duration,
+            audio_duration = EXCLUDED.audio_duration,
+            created_at = EXCLUDED.created_at;
+    """, data)
     conn.commit()
     cur.close()
     conn.close() 

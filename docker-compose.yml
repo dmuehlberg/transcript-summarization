@@ -278,3 +278,13 @@ services:
       - .env
     depends_on:
       - postgres
+
+  budibase:
+    image: budibase/budibase:latest
+    ports:
+      - "8400:80"
+    environment:
+      - INTERNAL_POSTGRES_ENABLED=false
+    depends_on:
+      - postgres
+    networks: ['demo']

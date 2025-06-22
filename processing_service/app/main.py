@@ -5,9 +5,13 @@ from pydantic import BaseModel
 from .sync import sync_recipient_names
 from .transcript import tokenize_transcript, replace_tokens
 from .matcher import match_tokens
-from .db import init_db
+from .db import init_db, upsert_transcription
 from typing import Optional
 import json
+import os
+import glob
+import re
+from datetime import datetime
 
 app = FastAPI()
 
@@ -88,4 +92,56 @@ def sync_now():
         sync_recipient_names()
         return {"status": "success", "message": "Empfängernamen wurden synchronisiert."}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) 
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/update_transcript_data")
+def update_transcript_data():
+    base_dir = "/shared/transcription_finished"
+    json_files = glob.glob(os.path.join(base_dir, "*.json"))
+    processed = []
+    for json_path in json_files:
+        base_name = os.path.splitext(os.path.basename(json_path))[0]
+        txt_path = os.path.join(base_dir, base_name + ".txt")
+        if not os.path.exists(txt_path):
+            continue
+        # Lade JSON
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                json_data = f.read()
+            import json as _json
+            meta = _json.loads(json_data)[0]
+        except Exception as e:
+            continue
+        # Lade TXT
+        try:
+            with open(txt_path, "r", encoding="utf-8") as f:
+                transcript_text = f.read()
+        except Exception as e:
+            continue
+        # Zeitstempel aus Dateiname
+        m = re.match(r"(\d{4}-\d{2}-\d{2}) (\d{2}-\d{2}-\d{2})", base_name)
+        if m:
+            date_str = m.group(1) + " " + m.group(2).replace("-", ":")
+            try:
+                recording_date = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
+            except Exception:
+                recording_date = datetime.now()
+        else:
+            recording_date = datetime.now()
+        # Datenbank-Eintrag
+        data = {
+            "filepath": txt_path,
+            "recording_date": recording_date,
+            "detected_language": meta.get("metadata", {}).get("language"),
+            "set_language": None,
+            "transcript_text": transcript_text,
+            "corrected_text": "",
+            "participants_firstname": "",
+            "participants_lastname": "",
+            "transcription_duration": meta.get("metadata", {}).get("duration"),
+            "audio_duration": meta.get("metadata", {}).get("audio_duration"),
+            "created_at": datetime.utcnow(),
+        }
+        upsert_transcription(data)
+        processed.append(base_name)
+    return {"status": "success", "processed": processed} 
