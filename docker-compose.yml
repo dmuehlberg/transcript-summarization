@@ -279,7 +279,7 @@ services:
     depends_on:
       - postgres
     volumes:
-     - ./shared:/shared
+     - ./shared:/data/shared
 
   budibase:
     image: budibase/budibase:latest

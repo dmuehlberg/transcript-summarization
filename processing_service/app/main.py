@@ -96,7 +96,7 @@ def sync_now():
 
 @app.post("/update_transcript_data")
 def update_transcript_data():
-    base_dir = "/shared/transcription_finished"
+    base_dir = "/data/shared/transcription_finished"
     json_files = glob.glob(os.path.join(base_dir, "*.json"))
     processed = []
     for json_path in json_files:
@@ -148,7 +148,7 @@ def update_transcript_data():
 
 @app.post("/import_mp3_files")
 def import_mp3_files():
-    base_dir = "/shared/transcription_input"
+    base_dir = "/data/shared/transcription_input"
     mp3_files = []
     import glob
     import os
