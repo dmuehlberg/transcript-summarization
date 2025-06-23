@@ -34,6 +34,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS transcriptions (
             id SERIAL PRIMARY KEY,
             filename TEXT UNIQUE,
+            transcription_inputpath TEXT,
             recording_date TIMESTAMP,
             detected_language TEXT,
             set_language TEXT,
@@ -52,19 +53,21 @@ def init_db():
 
 def upsert_transcription(data):
     data = data.copy()
-    # Nur Dateiname speichern
-    data["filename"] = os.path.basename(data.pop("filepath"))
+    filepath = data.pop("filepath")
+    data["filename"] = os.path.basename(filepath)
+    data["transcription_inputpath"] = filepath  # kompletter Pfad inkl. Dateiname
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("""
         INSERT INTO transcriptions (
-            filename, recording_date, detected_language, set_language, transcript_text, corrected_text,
+            filename, transcription_inputpath, recording_date, detected_language, set_language, transcript_text, corrected_text,
             participants_firstname, participants_lastname, transcription_duration, audio_duration, created_at
         ) VALUES (
-            %(filename)s, %(recording_date)s, %(detected_language)s, %(set_language)s, %(transcript_text)s, %(corrected_text)s,
+            %(filename)s, %(transcription_inputpath)s, %(recording_date)s, %(detected_language)s, %(set_language)s, %(transcript_text)s, %(corrected_text)s,
             %(participants_firstname)s, %(participants_lastname)s, %(transcription_duration)s, %(audio_duration)s, %(created_at)s
         )
         ON CONFLICT (filename) DO UPDATE SET
+            transcription_inputpath = EXCLUDED.transcription_inputpath,
             recording_date = EXCLUDED.recording_date,
             detected_language = EXCLUDED.detected_language,
             set_language = EXCLUDED.set_language,
@@ -82,6 +85,7 @@ def upsert_transcription(data):
 
 def upsert_mp3_file(filepath):
     filename = os.path.basename(filepath)
+    transcription_inputpath = filepath  # kompletter Pfad inkl. Dateiname
     conn = get_db_connection()
     cur = conn.cursor()
     # Falls vorhanden, alten Eintrag löschen
@@ -89,13 +93,14 @@ def upsert_mp3_file(filepath):
     # Neuen Eintrag anlegen
     cur.execute("""
         INSERT INTO transcriptions (
-            filename, recording_date, detected_language, set_language, transcript_text, corrected_text,
+            filename, transcription_inputpath, recording_date, detected_language, set_language, transcript_text, corrected_text,
             participants_firstname, participants_lastname, transcription_duration, audio_duration, created_at
         ) VALUES (
-            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
         )
     """, (
         filename,
+        transcription_inputpath,
         datetime.utcnow(),  # Aufnahmezeitpunkt unbekannt, daher jetzt
         None,  # detected_language
         None,  # set_language
