@@ -40,12 +40,12 @@
     },
     {
       "parameters": {
-        "jsCode": "// 1. alle Zeilen aus stdout holen\nconst lines = items[0].json.stdout\n  .split('\\n')          // nach Newline splitten\n  .filter(p => p);      // leere Einträge entfernen\n\n// 2. daraus ein Item pro Pfad machen\nreturn lines.map(path => ({\n  json: { filePath: path }\n}));"
+        "jsCode": "return items.map(item => {\n  return {\n    json: {\n      filePath: item.json.transcription_inputpath,\n      set_language: item.json.set_language\n    }\n  }\n});"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        660,
+        880,
         0
       ],
       "id": "816b0080-0b46-4fc4-aec5-5cb70a6d296b",
@@ -74,7 +74,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        1140,
+        1360,
         0
       ],
       "id": "d8d04f7c-20ef-4444-a93f-2c08f0809692",
@@ -88,7 +88,7 @@
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
       "position": [
-        1360,
+        1580,
         0
       ],
       "id": "f96d567a-2745-4ea9-82c4-afe5b7e6b90a",
@@ -111,7 +111,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        1640,
+        1860,
         0
       ],
       "id": "0322155e-23b1-4b03-9edf-2831fac9973f",
@@ -129,7 +129,8 @@
           "mappingMode": "defineBelow",
           "value": {
             "filePath": "={{ $json.filePath }}",
-            "baseFileName": "={{ $('Extract filePath & baseFileName').item.json.baseFileName }}"
+            "baseFileName": "={{ $('Extract filePath & baseFileName').item.json.baseFileName }}",
+            "language": "={{ $('Loop Over Items').item.json.set_language }}"
           },
           "matchingColumns": [],
           "schema": [
@@ -140,7 +141,8 @@
               "defaultMatch": false,
               "display": true,
               "canBeUsedToMatch": true,
-              "type": "string"
+              "type": "string",
+              "removed": false
             },
             {
               "id": "baseFileName",
@@ -149,7 +151,18 @@
               "defaultMatch": false,
               "display": true,
               "canBeUsedToMatch": true,
-              "type": "string"
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "language",
+              "displayName": "language",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
             }
           ],
           "attemptToConvertTypes": false,
@@ -163,7 +176,7 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        1860,
+        2080,
         0
       ],
       "id": "89ceebd6-9bf6-4d5e-808b-1e75871145ac",
@@ -178,7 +191,7 @@
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
       "position": [
-        880,
+        1100,
         0
       ],
       "id": "f5766cb9-e824-4e5e-82a5-3fc45e2e7e82",
@@ -289,7 +302,7 @@
       "type": "n8n-nodes-base.readWriteFile",
       "typeVersion": 1,
       "position": [
-        2220,
+        2440,
         -400
       ],
       "id": "52572f70-2a3e-43ae-a680-ea3692843eca",
@@ -304,7 +317,7 @@
       "type": "n8n-nodes-base.extractFromFile",
       "typeVersion": 1,
       "position": [
-        2480,
+        2700,
         -400
       ],
       "id": "6235fbb8-4fa1-413d-a290-66e967a264b5",
@@ -319,7 +332,7 @@
       "type": "n8n-nodes-base.convertToFile",
       "typeVersion": 1.1,
       "position": [
-        3140,
+        3360,
         -400
       ],
       "id": "7f2bc095-22b4-4364-b994-b35086fcac06",
@@ -334,7 +347,7 @@
       "type": "n8n-nodes-base.readWriteFile",
       "typeVersion": 1,
       "position": [
-        3400,
+        3620,
         -400
       ],
       "id": "b919bf96-0421-479b-a14c-f2136bb2ff4e",
@@ -348,7 +361,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2680,
+        2900,
         -400
       ],
       "id": "2cd17a05-f87d-4c2d-977d-9a682050fc05",
@@ -372,7 +385,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        2920,
+        3140,
         -400
       ],
       "id": "37977ec4-2ec3-4f0a-930b-983f8f17d878",
@@ -395,7 +408,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        2020,
+        2240,
         -400
       ],
       "id": "c85dcb6d-09a2-45a7-b1bb-6fca27167533",
@@ -409,11 +422,32 @@
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
       "position": [
-        2140,
+        2360,
         0
       ],
       "id": "28f7e702-9d12-4cae-8b34-4d652f5dc6b7",
       "name": "Rename and Move to Finished Folder"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT transcription_inputpath, set_language\nFROM transcriptions\nWHERE set_language IN ('en', 'de', 'auto');",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        660,
+        0
+      ],
+      "id": "b57edeba-e3e2-4f34-aba4-31fce4f3cb48",
+      "name": "Postgres",
+      "credentials": {
+        "postgres": {
+          "id": "vETPF55iMKScXl8i",
+          "name": "Postgres account"
+        }
+      }
     }
   ],
   "pinData": {},
@@ -444,7 +478,7 @@
       "main": [
         [
           {
-            "node": "Code",
+            "node": "Postgres",
             "type": "main",
             "index": 0
           }
@@ -643,14 +677,26 @@
           }
         ]
       ]
+    },
+    "Postgres": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": false,
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "60892acb-39db-4303-9a2b-7c736443cdf7",
+  "versionId": "0dd44d56-1355-4091-9cf9-715beddd5cc1",
   "meta": {
+    "templateCredsSetupCompleted": true,
     "instanceId": "e19a58ffb0fd248efa26d031fe3b9360ad1bd1b828d9ae749d875af6b5124b71"
   },
   "id": "FWh6KlmQBnZ4C0lr",
