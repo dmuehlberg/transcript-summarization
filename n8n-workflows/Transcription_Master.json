@@ -6,7 +6,7 @@
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
       "position": [
-        0,
+        -40,
         0
       ],
       "id": "ee1c839d-9b25-4c67-9fe2-75d53b9077aa",
@@ -19,7 +19,7 @@
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
       "position": [
-        220,
+        440,
         0
       ],
       "id": "f75cdd82-3116-491b-915a-9ae845188892",
@@ -32,7 +32,7 @@
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
       "position": [
-        440,
+        660,
         0
       ],
       "id": "b8aa0a30-29b0-4815-bd0e-8c2855ccc120",
@@ -46,7 +46,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        880,
+        1100,
         0
       ],
       "id": "816b0080-0b46-4fc4-aec5-5cb70a6d296b",
@@ -75,7 +75,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        1360,
+        1580,
         0
       ],
       "id": "d8d04f7c-20ef-4444-a93f-2c08f0809692",
@@ -89,7 +89,7 @@
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
       "position": [
-        1580,
+        1800,
         0
       ],
       "id": "f96d567a-2745-4ea9-82c4-afe5b7e6b90a",
@@ -112,7 +112,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        1860,
+        2080,
         0
       ],
       "id": "0322155e-23b1-4b03-9edf-2831fac9973f",
@@ -177,7 +177,7 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        2080,
+        2300,
         0
       ],
       "id": "89ceebd6-9bf6-4d5e-808b-1e75871145ac",
@@ -192,7 +192,7 @@
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
       "position": [
-        1100,
+        1320,
         0
       ],
       "id": "f5766cb9-e824-4e5e-82a5-3fc45e2e7e82",
@@ -206,8 +206,8 @@
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
       "position": [
-        2820,
-        60
+        3120,
+        140
       ],
       "id": "7a96aa15-7c88-44ac-bfed-be4724cbd3b4",
       "name": "Copy Transcript to Summarize Input"
@@ -229,8 +229,8 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        2980,
-        60
+        3340,
+        140
       ],
       "id": "947bfed7-8126-4947-833b-be3544becd02",
       "name": "Update filePath to Summarize_Input"
@@ -259,8 +259,8 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        3220,
-        60
+        3580,
+        140
       ],
       "id": "9618241d-463a-41b2-9c0a-49c7d144345c",
       "name": "Summarize MP3"
@@ -273,8 +273,8 @@
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
       "position": [
-        3460,
-        60
+        3820,
+        140
       ],
       "id": "ae43613b-e4da-430a-8a1d-a587c4144802",
       "name": "Move Summarization to Finished"
@@ -283,13 +283,13 @@
       "parameters": {
         "content": "## Transcript Segmentation\n",
         "height": 300,
-        "width": 1700,
+        "width": 1860,
         "color": 4
       },
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        2140,
+        2380,
         -500
       ],
       "id": "a9117232-2314-48f0-a494-bad65b88d7f5",
@@ -303,7 +303,7 @@
       "type": "n8n-nodes-base.readWriteFile",
       "typeVersion": 1,
       "position": [
-        2660,
+        2880,
         -400
       ],
       "id": "52572f70-2a3e-43ae-a680-ea3692843eca",
@@ -318,7 +318,7 @@
       "type": "n8n-nodes-base.extractFromFile",
       "typeVersion": 1,
       "position": [
-        2920,
+        3140,
         -400
       ],
       "id": "6235fbb8-4fa1-413d-a290-66e967a264b5",
@@ -333,7 +333,7 @@
       "type": "n8n-nodes-base.convertToFile",
       "typeVersion": 1.1,
       "position": [
-        3580,
+        3800,
         -400
       ],
       "id": "7f2bc095-22b4-4364-b994-b35086fcac06",
@@ -348,7 +348,7 @@
       "type": "n8n-nodes-base.readWriteFile",
       "typeVersion": 1,
       "position": [
-        3840,
+        4060,
         -400
       ],
       "id": "b919bf96-0421-479b-a14c-f2136bb2ff4e",
@@ -362,7 +362,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3120,
+        3340,
         -400
       ],
       "id": "2cd17a05-f87d-4c2d-977d-9a682050fc05",
@@ -386,7 +386,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        3360,
+        3580,
         -400
       ],
       "id": "37977ec4-2ec3-4f0a-930b-983f8f17d878",
@@ -409,7 +409,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        2240,
+        2460,
         -400
       ],
       "id": "c85dcb6d-09a2-45a7-b1bb-6fca27167533",
@@ -423,7 +423,7 @@
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
       "position": [
-        2360,
+        2580,
         0
       ],
       "id": "28f7e702-9d12-4cae-8b34-4d652f5dc6b7",
@@ -438,7 +438,7 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
-        660,
+        920,
         0
       ],
       "id": "b57edeba-e3e2-4f34-aba4-31fce4f3cb48",
@@ -623,7 +623,7 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
-        2560,
+        2780,
         0
       ],
       "id": "4ab44eac-d2fd-4f69-9acf-f62f9330ebb9",
@@ -634,6 +634,21 @@
           "name": "Postgres account"
         }
       }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://processing-service:8300/import_mp3_files",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        180,
+        0
+      ],
+      "id": "f6c06a2b-b0ea-41b1-9a4d-10fe4a23b5b8",
+      "name": "Update Transcription Table"
     }
   ],
   "pinData": {},
@@ -642,7 +657,7 @@
       "main": [
         [
           {
-            "node": "Ensure Folders Exist",
+            "node": "Update Transcription Table",
             "type": "main",
             "index": 0
           }
@@ -885,13 +900,24 @@
           }
         ]
       ]
+    },
+    "Update Transcription Table": {
+      "main": [
+        [
+          {
+            "node": "Ensure Folders Exist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": false,
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "a3f7e949-77a3-4f60-bcce-d5627259cd8c",
+  "versionId": "c2d1e71c-ae32-4165-8983-796fff35daf5",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "e19a58ffb0fd248efa26d031fe3b9360ad1bd1b828d9ae749d875af6b5124b71"
