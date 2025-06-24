@@ -2,6 +2,7 @@ import os
 import psycopg2
 from dotenv import load_dotenv
 from datetime import datetime
+import re
 
 load_dotenv()
 
@@ -88,6 +89,19 @@ def upsert_transcription(data):
 def upsert_mp3_file(filepath):
     filename = os.path.basename(filepath)
     transcription_inputpath = filepath  # kompletter Pfad inkl. Dateiname
+    
+    # Zeitstempel aus Dateiname extrahieren
+    base_name = os.path.splitext(filename)[0]
+    m = re.match(r"(\d{4}-\d{2}-\d{2}) (\d{2}-\d{2}-\d{2})", base_name)
+    if m:
+        date_str = m.group(1) + " " + m.group(2).replace("-", ":")
+        try:
+            recording_date = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
+        except Exception:
+            recording_date = datetime.utcnow()
+    else:
+        recording_date = datetime.utcnow()
+    
     conn = get_db_connection()
     cur = conn.cursor()
     # Falls vorhanden, alten Eintrag löschen
@@ -103,7 +117,7 @@ def upsert_mp3_file(filepath):
     """, (
         filename,
         transcription_inputpath,
-        datetime.utcnow(),  # Aufnahmezeitpunkt unbekannt, daher jetzt
+        recording_date,  # Jetzt verwenden wir das extrahierte Datum
         None,  # detected_language
         None,  # set_language
         None,  # transcript_text
@@ -113,7 +127,7 @@ def upsert_mp3_file(filepath):
         None,  # transcription_duration
         None,  # audio_duration
         datetime.utcnow(),
-        None,  # transcription_status
+        "pending"  # Initial status for new files
     ))
     conn.commit()
     cur.close()
