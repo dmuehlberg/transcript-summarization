@@ -699,6 +699,10 @@
             {
               "name": "batch_size",
               "value": "8"
+            },
+            {
+              "name": "=language",
+              "value": "={{ $json.language }}"
             }
           ]
         },
@@ -821,6 +825,10 @@
             {
               "name": "batch_size",
               "value": "16"
+            },
+            {
+              "name": "language",
+              "value": "={{ $json.language }}"
             }
           ]
         },
@@ -902,6 +910,17 @@
       "name": "When clicking ‘Test workflow’"
     },
     {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.1,
+      "position": [
+        -5880,
+        760
+      ],
+      "id": "2d8e7fba-8d39-4f59-9489-8ea42d6725a4",
+      "name": "Merge"
+    },
+    {
       "parameters": {
         "assignments": {
           "assignments": [
@@ -934,18 +953,7 @@
         640
       ],
       "id": "abf091bb-a268-40d3-b602-2c0c8f4caf22",
-      "name": "Edit Fields1"
-    },
-    {
-      "parameters": {},
-      "type": "n8n-nodes-base.merge",
-      "typeVersion": 3.1,
-      "position": [
-        -5880,
-        760
-      ],
-      "id": "2d8e7fba-8d39-4f59-9489-8ea42d6725a4",
-      "name": "Merge"
+      "name": "Set filePath, baseFileName and language"
     }
   ],
   "pinData": {
@@ -1285,18 +1293,7 @@
       "main": [
         [
           {
-            "node": "Edit Fields1",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Edit Fields1": {
-      "main": [
-        [
-          {
-            "node": "Merge",
+            "node": "Set filePath, baseFileName and language",
             "type": "main",
             "index": 0
           }
@@ -1313,13 +1310,24 @@
           }
         ]
       ]
+    },
+    "Set filePath, baseFileName and language": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": false,
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "3d75a0be-715a-4033-851a-0f1b41f30951",
+  "versionId": "1ee22da5-3d8f-4a65-b19f-96890e9745f4",
   "meta": {
     "instanceId": "e19a58ffb0fd248efa26d031fe3b9360ad1bd1b828d9ae749d875af6b5124b71"
   },

@@ -36,7 +36,8 @@
         0
       ],
       "id": "b8aa0a30-29b0-4815-bd0e-8c2855ccc120",
-      "name": "List MP3s"
+      "name": "List MP3s",
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -282,13 +283,13 @@
       "parameters": {
         "content": "## Transcript Segmentation\n",
         "height": 300,
-        "width": 1660,
+        "width": 1700,
         "color": 4
       },
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        1980,
+        2140,
         -500
       ],
       "id": "a9117232-2314-48f0-a494-bad65b88d7f5",
@@ -302,7 +303,7 @@
       "type": "n8n-nodes-base.readWriteFile",
       "typeVersion": 1,
       "position": [
-        2440,
+        2660,
         -400
       ],
       "id": "52572f70-2a3e-43ae-a680-ea3692843eca",
@@ -317,7 +318,7 @@
       "type": "n8n-nodes-base.extractFromFile",
       "typeVersion": 1,
       "position": [
-        2700,
+        2920,
         -400
       ],
       "id": "6235fbb8-4fa1-413d-a290-66e967a264b5",
@@ -332,7 +333,7 @@
       "type": "n8n-nodes-base.convertToFile",
       "typeVersion": 1.1,
       "position": [
-        3360,
+        3580,
         -400
       ],
       "id": "7f2bc095-22b4-4364-b994-b35086fcac06",
@@ -347,7 +348,7 @@
       "type": "n8n-nodes-base.readWriteFile",
       "typeVersion": 1,
       "position": [
-        3620,
+        3840,
         -400
       ],
       "id": "b919bf96-0421-479b-a14c-f2136bb2ff4e",
@@ -361,7 +362,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2900,
+        3120,
         -400
       ],
       "id": "2cd17a05-f87d-4c2d-977d-9a682050fc05",
@@ -385,7 +386,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        3140,
+        3360,
         -400
       ],
       "id": "37977ec4-2ec3-4f0a-930b-983f8f17d878",
@@ -431,7 +432,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT transcription_inputpath, set_language\nFROM transcriptions\nWHERE set_language IN ('en', 'de', 'auto');",
+        "query": "SELECT transcription_inputpath, set_language\nFROM transcriptions\nWHERE set_language IN ('en', 'de', 'auto') and transcription_status <> 'finished';",
         "options": {}
       },
       "type": "n8n-nodes-base.postgres",
@@ -442,6 +443,191 @@
       ],
       "id": "b57edeba-e3e2-4f34-aba4-31fce4f3cb48",
       "name": "Postgres",
+      "credentials": {
+        "postgres": {
+          "id": "vETPF55iMKScXl8i",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "transcriptions",
+          "mode": "list",
+          "cachedResultName": "transcriptions"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "filename": "={{ $('Set baseFileName').item.json.baseFileName }}.mp3",
+            "transcription_status": "finished"
+          },
+          "matchingColumns": [
+            "filename"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "filename",
+              "displayName": "filename",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "transcription_inputpath",
+              "displayName": "transcription_inputpath",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "recording_date",
+              "displayName": "recording_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "detected_language",
+              "displayName": "detected_language",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "set_language",
+              "displayName": "set_language",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "transcript_text",
+              "displayName": "transcript_text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "corrected_text",
+              "displayName": "corrected_text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "participants_firstname",
+              "displayName": "participants_firstname",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "participants_lastname",
+              "displayName": "participants_lastname",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "transcription_duration",
+              "displayName": "transcription_duration",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "audio_duration",
+              "displayName": "audio_duration",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "transcription_status",
+              "displayName": "transcription_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2560,
+        0
+      ],
+      "id": "4ab44eac-d2fd-4f69-9acf-f62f9330ebb9",
+      "name": "Update Status to Finished",
       "credentials": {
         "postgres": {
           "id": "vETPF55iMKScXl8i",
@@ -660,7 +846,7 @@
       "main": [
         [
           {
-            "node": "Loop Over Items",
+            "node": "Update Status to Finished",
             "type": "main",
             "index": 0
           }
@@ -688,13 +874,24 @@
           }
         ]
       ]
+    },
+    "Update Status to Finished": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": false,
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "0dd44d56-1355-4091-9cf9-715beddd5cc1",
+  "versionId": "a3f7e949-77a3-4f60-bcce-d5627259cd8c",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "e19a58ffb0fd248efa26d031fe3b9360ad1bd1b828d9ae749d875af6b5124b71"
