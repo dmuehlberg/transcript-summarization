@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from .sync import sync_recipient_names
 from .transcript import tokenize_transcript, replace_tokens
 from .matcher import match_tokens
-from .db import init_db, upsert_transcription, upsert_mp3_file
+from .db import init_db, upsert_transcription, upsert_mp3_file, get_db_connection
 from typing import Optional
 import json
 import os
@@ -155,7 +155,16 @@ def import_mp3_files():
     import os
     mp3_files = glob.glob(os.path.join(base_dir, "*.mp3"))
     processed = []
+    conn = get_db_connection()
+    cur = conn.cursor()
     for mp3_path in mp3_files:
+        filename = os.path.basename(mp3_path)
+        cur.execute("SELECT transcription_status FROM transcriptions WHERE filename = %s", (filename,))
+        row = cur.fetchone()
+        if row is not None and row[0] == "pending":
+            continue  # Datei mit Status 'pending' überspringen
         upsert_mp3_file(mp3_path)
-        processed.append(os.path.basename(mp3_path))
+        processed.append(filename)
+    cur.close()
+    conn.close()
     return {"status": "success", "processed": processed} 
