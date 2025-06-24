@@ -141,6 +141,7 @@ def update_transcript_data():
             "transcription_duration": meta.get("metadata", {}).get("duration"),
             "audio_duration": meta.get("metadata", {}).get("audio_duration"),
             "created_at": datetime.utcnow(),
+            "transcription_status": "imported"
         }
         upsert_transcription(data)
         processed.append(base_name)

@@ -44,7 +44,8 @@ def init_db():
             participants_lastname TEXT,
             transcription_duration FLOAT,
             audio_duration FLOAT,
-            created_at TIMESTAMP
+            created_at TIMESTAMP,
+            transcription_status TEXT
         );
     """)
     conn.commit()
@@ -61,10 +62,10 @@ def upsert_transcription(data):
     cur.execute("""
         INSERT INTO transcriptions (
             filename, transcription_inputpath, recording_date, detected_language, set_language, transcript_text, corrected_text,
-            participants_firstname, participants_lastname, transcription_duration, audio_duration, created_at
+            participants_firstname, participants_lastname, transcription_duration, audio_duration, created_at, transcription_status
         ) VALUES (
             %(filename)s, %(transcription_inputpath)s, %(recording_date)s, %(detected_language)s, %(set_language)s, %(transcript_text)s, %(corrected_text)s,
-            %(participants_firstname)s, %(participants_lastname)s, %(transcription_duration)s, %(audio_duration)s, %(created_at)s
+            %(participants_firstname)s, %(participants_lastname)s, %(transcription_duration)s, %(audio_duration)s, %(created_at)s, %(transcription_status)s
         )
         ON CONFLICT (filename) DO UPDATE SET
             transcription_inputpath = EXCLUDED.transcription_inputpath,
@@ -77,7 +78,8 @@ def upsert_transcription(data):
             participants_lastname = EXCLUDED.participants_lastname,
             transcription_duration = EXCLUDED.transcription_duration,
             audio_duration = EXCLUDED.audio_duration,
-            created_at = EXCLUDED.created_at;
+            created_at = EXCLUDED.created_at,
+            transcription_status = EXCLUDED.transcription_status;
     """, data)
     conn.commit()
     cur.close()
@@ -94,9 +96,9 @@ def upsert_mp3_file(filepath):
     cur.execute("""
         INSERT INTO transcriptions (
             filename, transcription_inputpath, recording_date, detected_language, set_language, transcript_text, corrected_text,
-            participants_firstname, participants_lastname, transcription_duration, audio_duration, created_at
+            participants_firstname, participants_lastname, transcription_duration, audio_duration, created_at, transcription_status
         ) VALUES (
-            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
         )
     """, (
         filename,
@@ -111,6 +113,7 @@ def upsert_mp3_file(filepath):
         None,  # transcription_duration
         None,  # audio_duration
         datetime.utcnow(),
+        None,  # transcription_status
     ))
     conn.commit()
     cur.close()
