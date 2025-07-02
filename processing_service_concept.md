@@ -1,92 +1,55 @@
-Bitte erweitere den bestehenden FastAPI-Service processing-service im Projekt transcript_summarization um folgende Funktionalität:
+Erweitere den FastAPI-Service processing_service, sodass Meeting-Informationen aus calendar_data in die Tabelle transcriptions geschrieben werden können. Diese Tabelle enthält bisher nur grundlegende Metadaten hochgeladener MP3-Transkripte.
 
-⸻
+1. Datenbankschema
+Füge folgende Spalten zur Tabelle transcriptions hinzu:
 
-🧩 Neuer Endpoint: /update_transcript_data
+meeting_start_date TIMESTAMPTZ
+meeting_end_date   TIMESTAMPTZ
+meeting_title      TEXT
+meeting_location   TEXT
+invitation_text    TEXT
+Aktualisiere init_db() in processing_service/app/db.py, damit diese Felder beim Start des Services erstellt werden. 
 
-Implementiere einen neuen POST-Endpoint /update_transcript_data, der das Verzeichnis
-/shared/transcription_finished durchsucht und dort alle .json- und .txt-Paare verarbeitet.
+2. Hilfsfunktion für Meeting-Info-Update
+Erstelle eine neue Funktion in db.py, z. B. update_transcription_meeting_info(recording_date, info_dict):
 
-Dateibenennung:
-Die Dateien folgen dem Muster YYYY-MM-DD HH-MM-SS.txt bzw. .json. Aus dem Dateinamen soll ein Zeitstempel (recording_date) extrahiert werden. Falls dieser nicht extrahiert werden kann, verwende datetime.now().
+Nutze recording_date, um die passende Zeile in transcriptions zu finden.
 
-⸻
+Aktualisiere die neuen Meeting-Spalten sowie die vorhandene participants-Spalte.
 
-📂 Was soll eingelesen werden?
+Commit und Schließen der Verbindung.
 
-Für jede Transkription existieren:
-	•	eine .txt-Datei mit dem Transkriptions-Text
-	•	eine .json-Datei mit dem gleichen Basisnamen, die folgendes enthält:
-	•	metadata.language → detected_language
-	•	metadata.duration → transcription_duration
-	•	metadata.audio_duration → audio_duration
+3. Neuer API-Endpoint
+Implementiere in processing_service/app/main.py einen Endpoint (POST /get_meeting_info), der einen JSON-Body erwartet:
 
-Verwende die JSON-Struktur aus folgendem Beispiel als Referenz:
-Die JSON-Datei enthält ein Array mit einem Objekt (also Zugriff auf [0]).
+{ "recording_date": "2024-05-01 10-30" }
+Vorgehensweise:
 
-⸻
+Timestamp parsen.
 
-🗄️ PostgreSQL-Tabelle: transcriptions
+In calendar_data nach einem Eintrag suchen, dessen start_date diesem Timestamp entspricht.
 
-Beim Start des processing-service soll geprüft werden, ob die Tabelle transcriptions existiert. Falls nicht, erstelle sie mit folgendem Schema:
+Falls gefunden, Meeting-Informationen sammeln:
 
-Spalte	Typ	Beschreibung
-id	SERIAL PRIMARY KEY	Eindeutiger Identifier
-filepath	TEXT	Pfad zur .txt-Datei
-recording_date	TIMESTAMP	Extrahierter oder aktueller Zeitstempel
-detected_language	TEXT	Aus JSON (metadata.language)
-set_language	TEXT	Manuell auswählbare Sprache (initial NULL)
-transcript_text	TEXT	Inhalt der .txt-Datei
-corrected_text	TEXT	Text nach phonetischer Korrektur (initial leer)
-participants_firstname	TEXT	Vornamen, kommasepariert (initial leer)
-participants_lastname	TEXT	Nachnamen, kommasepariert (initial leer)
-transcription_duration	FLOAT	Aus JSON (metadata.duration)
-audio_duration	FLOAT	Aus JSON (metadata.audio_duration)
-created_at	TIMESTAMP	Zeitstempel des DB-Eintrags (jetzt)
+start_date → meeting_start_date
 
-Wenn ein Datensatz mit identischem filepath bereits existiert, überschreibe ihn.
+end_date → meeting_end_date
 
-⸻
+subject → meeting_title
 
-🧾 Verarbeitungsschritte
-	1.	Liste alle .json-Dateien in /shared/transcription_finished auf.
-	2.	Für jede .json-Datei:
-	•	Extrahiere den Basenamen (ohne Endung)
-	•	Lade zugehörige .txt-Datei
-	•	Lade die JSON-Datei (Array-Zugriff: [0])
-	•	Extrahiere:
-	•	metadata.language
-	•	metadata.duration
-	•	metadata.audio_duration
-	•	Analysiere Dateinamen zur Bestimmung von recording_date
-	•	Schreibe oder überschreibe den Datensatz in der Tabelle transcriptions
+has_picture → meeting_location
 
-⸻
+user_entry_id → invitation_text
 
-🌐 Budibase-Integration
+Namen aus display_to und display_cc kombinieren, an ;/, trennen, deduplizieren → participants.
 
-Ergänze die docker-compose.yml im Projekt-Root um folgenden Budibase-Container:
+Mit diesen Werten update_transcription_meeting_info() aufrufen.
 
-  budibase:
-    image: budibase/budibase:latest
-    ports:
-      - "8400:80"
-    environment:
-      - INTERNAL_POSTGRES_ENABLED=false
-    depends_on:
-      - postgres
+Erfolg oder 404 zurückgeben, falls nichts gefunden wurde.
 
-Budibase soll Zugriff auf dieselbe PostgreSQL-Datenbank wie n8n haben.
-Das Feld set_language in der Tabelle transcriptions soll in Budibase als Dropdown-Feld mit den Werten de und en editierbar sein.
+Verwende zum Deduplizieren die Logik aus sync_recipient_names.
 
-⸻
+4. Registrierung des Endpoints
+Füge die neue Route nach den bestehenden Endpoints in main.py (ca. Zeile 97) hinzu. Stelle sicher, dass die Datenbank beim Start initialisiert wird (bereits in on_startup() erledigt).
 
-🛠 Technische Hinweise
-	•	Verwende SQLAlchemy oder psycopg2 für den Datenbankzugriff
-	•	Dateinamen-Parsing z. B. mit Regex: (\d{4}-\d{2}-\d{2}) (\d{2}-\d{2}-\d{2})
-	•	Füge bei jedem Eintrag ein created_at = datetime.utcnow() hinzu
-	•	Nutze UTF-8 beim Einlesen der .txt-Dateien
-
-⸻
-
-Setze die komplette Funktionalität in processing-service um. Integriere den neuen Endpoint in die vorhandene main.py oder router.py. Ergänze ggf. eine neue Datei db.py oder schema.py für das Tabellenmodell.
+So kann der n8n-Workflow nach jeder Transkription den Kontext für die Meeting-Zusammenfassung anhand des Zeitstempels aus dem MP3-Dateinamen anreichern.
