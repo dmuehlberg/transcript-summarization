@@ -47,7 +47,12 @@ def init_db():
             audio_duration FLOAT,
             created_at TIMESTAMP,
             transcription_status TEXT,
-            participants TEXT
+            participants TEXT,
+            meeting_start_date TIMESTAMPTZ,
+            meeting_end_date TIMESTAMPTZ,
+            meeting_title TEXT,
+            meeting_location TEXT,
+            invitation_text TEXT
         );
     """)
     conn.commit()
@@ -131,6 +136,32 @@ def upsert_mp3_file(filepath):
         datetime.utcnow(),
         "pending",  # Initial status for new files
         None  # participants
+    ))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+def update_transcription_meeting_info(recording_date, info_dict):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    # Update-Statement für die neuen Felder und participants
+    cur.execute("""
+        UPDATE transcriptions
+        SET meeting_start_date = %s,
+            meeting_end_date = %s,
+            meeting_title = %s,
+            meeting_location = %s,
+            invitation_text = %s,
+            participants = %s
+        WHERE recording_date = %s
+    """, (
+        info_dict.get("meeting_start_date"),
+        info_dict.get("meeting_end_date"),
+        info_dict.get("meeting_title"),
+        info_dict.get("meeting_location"),
+        info_dict.get("invitation_text"),
+        info_dict.get("participants"),
+        recording_date
     ))
     conn.commit()
     cur.close()

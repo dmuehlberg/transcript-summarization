@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from .sync import sync_recipient_names
 from .transcript import tokenize_transcript, replace_tokens
 from .matcher import match_tokens
-from .db import init_db, upsert_transcription, upsert_mp3_file, get_db_connection
+from .db import init_db, upsert_transcription, upsert_mp3_file, get_db_connection, update_transcription_meeting_info
 from typing import Optional
 import json
 import os
@@ -37,6 +37,9 @@ class CorrectionRequest(BaseModel):
     language: str
     transcript: str
     options: dict = {}
+
+class MeetingInfoRequest(BaseModel):
+    recording_date: str
 
 @app.post("/correct-transcript")
 async def correct_transcript(
@@ -167,4 +170,57 @@ def import_mp3_files():
         processed.append(filename)
     cur.close()
     conn.close()
-    return {"status": "success", "processed": processed} 
+    return {"status": "success", "processed": processed}
+
+@app.post("/get_meeting_info")
+def get_meeting_info(request: MeetingInfoRequest):
+    try:
+        # Timestamp parsen
+        try:
+            recording_date = datetime.strptime(request.recording_date, "%Y-%m-%d %H-%M")
+        except Exception:
+            raise HTTPException(status_code=400, detail="recording_date muss im Format YYYY-MM-DD HH-MM sein")
+        conn = get_db_connection()
+        cur = conn.cursor()
+        # Suche nach passendem Eintrag in calendar_data
+        cur.execute("""
+            SELECT start_date, end_date, subject, has_picture, user_entry_id, display_to, display_cc
+            FROM calendar_data
+            WHERE start_date = %s
+        """, (recording_date,))
+        row = cur.fetchone()
+        if not row:
+            cur.close()
+            conn.close()
+            raise HTTPException(status_code=404, detail="Kein Meeting mit diesem Startzeitpunkt gefunden.")
+        start_date, end_date, subject, has_picture, user_entry_id, display_to, display_cc = row
+        # Teilnehmernamen kombinieren und deduplizieren (Logik wie in sync_recipient_names)
+        import re as _re
+        tokens = set()
+        for field in [display_to, display_cc]:
+            if not field:
+                continue
+            parts = _re.split(r"[;,]", field)
+            for part in parts:
+                words = part.strip().split()
+                for word in words:
+                    clean = _re.sub(r"[^\wäöüÄÖÜß-]", "", word)
+                    if clean:
+                        tokens.add(clean)
+        participants = ";".join(sorted(tokens))
+        info_dict = {
+            "meeting_start_date": start_date,
+            "meeting_end_date": end_date,
+            "meeting_title": subject,
+            "meeting_location": has_picture,
+            "invitation_text": user_entry_id,
+            "participants": participants
+        }
+        update_transcription_meeting_info(recording_date, info_dict)
+        cur.close()
+        conn.close()
+        return {"status": "success", "meeting_info": info_dict}
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) 
