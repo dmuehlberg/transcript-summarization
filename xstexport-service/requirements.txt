@@ -42,3 +42,6 @@ petl>=1.7.0
 
 paramiko
 scp
+
+flask
+requests
