@@ -32,6 +32,7 @@ COPY XstReader/XstExporter.Portable.dll /app/XstExporter.Portable.dll
 COPY XstReader/XstExporter.Portable.deps.json /app/XstExporter.Portable.deps.json
 COPY XstReader/XstExporter.Portable.runtimeconfig.json /app/XstExporter.Portable.runtimeconfig.json
 COPY XstReader/XstReader.Api.dll /app/XstReader.Api.dll
+COPY export_calendar.scpt /app/export_calendar.scpt
 
 # Setze das Arbeitsverzeichnis
 WORKDIR /app
