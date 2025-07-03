@@ -39,3 +39,6 @@ pydantic>=2.6.0
 
 # Für Tabellenverarbeitung
 petl>=1.7.0
+
+paramiko
+scp

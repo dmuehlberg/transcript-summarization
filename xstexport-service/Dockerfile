@@ -37,8 +37,8 @@ COPY XstReader/XstReader.Api.dll /app/XstReader.Api.dll
 WORKDIR /app
 
 # Installiere Python-Abhängigkeiten
-COPY requirements.txt .
-RUN pip install -r requirements.txt
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Erstelle Verzeichnis für PST/OST-Dateien
 RUN mkdir -p /data/ost

@@ -5,6 +5,8 @@ import xml.etree.ElementTree as ET
 import pandas as pd
 from typing import List, Dict, Any
 import tempfile
+import paramiko
+from scp import SCPClient
 
 EXPORT_SCRIPT = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))) / "export_calendar.scpt"
 EXPORT_RESULT = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))) / "outlook_calendar_export_with_attendees.xml"
@@ -111,27 +113,46 @@ end replaceText
 # Der Name der XML-Datei, wie im Skript verwendet
 XML_FILENAME = "outlook_calendar_export_with_attendees.xml"
 
+SSH_USER = os.getenv("SSH_USER")
+SSH_PASSWORD = os.getenv("SSH_PASSWORD")
+SSH_HOST = os.getenv("SSH_HOST", "host.docker.internal")
+SSH_PORT = 22
+
 def run_applescript() -> Path:
     """
-    Schreibt das AppleScript als temporäre Datei, führt es aus und gibt den Pfad zur erzeugten XML-Datei zurück.
+    Überträgt das AppleScript per SSH auf den Host, führt es dort aus und kopiert die XML-Datei zurück.
     """
+    if not SSH_USER or not SSH_PASSWORD or not SSH_HOST:
+        raise RuntimeError("SSH-Umgebungsvariablen (SSH_USER, SSH_PASSWORD, SSH_HOST) müssen gesetzt sein!")
     with tempfile.TemporaryDirectory() as tmpdir:
         script_path = Path(tmpdir) / "export_calendar.scpt"
         xml_path = Path(tmpdir) / XML_FILENAME
-        # AppleScript schreiben
+        # AppleScript lokal schreiben
         with open(script_path, "w", encoding="utf-8") as f:
             f.write(APPLE_SCRIPT)
-        # Ausführen
-        result = subprocess.run(["osascript", str(script_path)], capture_output=True, text=True)
-        if result.returncode != 0:
-            raise RuntimeError(f"AppleScript-Fehler: {result.stderr}")
+        # SSH-Verbindung aufbauen
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh.connect(SSH_HOST, port=SSH_PORT, username=SSH_USER, password=SSH_PASSWORD)
+        with SCPClient(ssh.get_transport()) as scp:
+            # Skript auf Host kopieren (z.B. ins Home-Verzeichnis)
+            remote_script = f"/Users/{SSH_USER}/export_calendar.scpt"
+            remote_xml = f"/Users/{SSH_USER}/{XML_FILENAME}"
+            scp.put(str(script_path), remote_script)
+            # AppleScript auf Host ausführen
+            stdin, stdout, stderr = ssh.exec_command(f"osascript {remote_script}")
+            exit_code = stdout.channel.recv_exit_status()
+            if exit_code != 0:
+                err = stderr.read().decode()
+                raise RuntimeError(f"AppleScript-Fehler auf Host: {err}")
+            # XML-Datei zurückkopieren
+            scp.get(remote_xml, str(xml_path))
+            # Aufräumen: Skript und XML auf Host löschen
+            ssh.exec_command(f"rm {remote_script} {remote_xml}")
+        ssh.close()
         if not xml_path.exists():
             raise FileNotFoundError(f"Exportierte XML nicht gefunden: {xml_path}")
-        # Die Datei wird aus dem temporären Verzeichnis kopiert, damit sie nach Rückkehr noch existiert
-        final_xml = Path.cwd() / XML_FILENAME
-        with open(xml_path, "rb") as src, open(final_xml, "wb") as dst:
-            dst.write(src.read())
-        return final_xml
+        return xml_path
 
 def parse_calendar_xml(xml_path: Path) -> List[Dict[str, Any]]:
     """
