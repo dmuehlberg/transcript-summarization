@@ -151,6 +151,10 @@
         "Unknown (0x817a)": {
             "pg_field": "unknown_817a",
             "pg_type": "text"
+        },
+        "Calendar": {
+            "pg_field": "calendar",
+            "pg_type": "text"
         }
     }
 } 

@@ -160,3 +160,19 @@ class DatabaseService:
         except Exception as e:
             logger.error(f"Fehler beim Importieren der CSV-Datei: {str(e)}")
             raise 
+
+    def insert_calendar_events(self, events: List[Dict[str, Any]], table_name: str = "calendar_data") -> None:
+        """
+        Fügt eine Liste von Kalender-Events in die Datenbank ein.
+        """
+        try:
+            df = pd.DataFrame(events)
+            if df.empty:
+                logger.warning("Keine Kalender-Events zum Einfügen übergeben.")
+                return
+            self.create_table_if_not_exists(table_name)
+            df.to_sql(table_name, self.engine, if_exists='append', index=False)
+            logger.info(f"{len(df)} Kalender-Events erfolgreich in Tabelle {table_name} eingefügt.")
+        except Exception as e:
+            logger.error(f"Fehler beim Einfügen der Kalender-Events: {str(e)}")
+            raise 

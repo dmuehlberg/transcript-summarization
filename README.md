@@ -18,7 +18,7 @@ Curated by <https://github.com/n8n-io> and <https://github.com/coleam00>, it com
 platform with a curated list of compatible AI products and components to
 quickly get started with building self-hosted AI workflows.
 
-### What’s included
+### What's included
 
 ✅ [**Self-hosted n8n**](https://n8n.io/) - Low-code platform with over 400
 integrations and advanced AI components
@@ -54,7 +54,7 @@ docker compose --profile gpu-nvidia up
 
 ### For Mac / Apple Silicon users
 
-If you’re using a Mac with an M1 or newer processor, you can't expose your GPU
+If you're using a Mac with an M1 or newer processor, you can't expose your GPU
 to the Docker instance, unfortunately. There are two options in this case:
 
 1. Run the starter kit fully on CPU, like in the section "For everyone else"
@@ -86,11 +86,11 @@ docker compose --profile cpu up
 ## ⚡️ Quick start and usage
 
 The main component of the self-hosted AI starter kit is a docker compose file
-pre-configured with network and disk so there isn’t much else you need to
+pre-configured with network and disk so there isn't much else you need to
 install. After completing the installation steps above, follow the steps below
 to get started.
 
-1. Open <http://localhost:5678/> in your browser to set up n8n. You’ll only
+1. Open <http://localhost:5678/> in your browser to set up n8n. You'll only
    have to do this once. You are NOT creating an account with n8n in the setup here,
    it is only a local account for your instance!
 2. Open the included workflow:
@@ -107,12 +107,12 @@ to get started.
    Don't use localhost for the redirect URI, just use another domain you have, it will still work!
    Alternatively, you can set up [local file triggers](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.localfiletrigger/).
 4. Select **Test workflow** to start running the workflow.
-5. If this is the first time you’re running the workflow, you may need to wait
+5. If this is the first time you're running the workflow, you may need to wait
    until Ollama finishes downloading Llama3.1. You can inspect the docker
    console logs to check on the progress.
 6. Make sure to toggle the workflow as active and copy the "Production" webhook URL!
 7. Open <http://localhost:3000/> in your browser to set up Open WebUI.
-You’ll only have to do this once. You are NOT creating an account with Open WebUI in the 
+You'll only have to do this once. You are NOT creating an account with Open WebUI in the 
 setup here, it is only a local account for your instance!
 8. Go to Workspace -> Functions -> Add Function -> Give name + description then paste in
 the code from `n8n_pipe.py`
@@ -126,7 +126,7 @@ you copied in a previous step.
 To open n8n at any time, visit <http://localhost:5678/> in your browser.
 To open Open WebUI at any time, visit <http://localhost:3000/>.
 
-With your n8n instance, you’ll have access to over 400 integrations and a
+With your n8n instance, you'll have access to over 400 integrations and a
 suite of basic and advanced AI nodes such as
 [AI Agent](https://docs.n8n.io/integrations/builtin/cluster-nodes/root-nodes/n8n-nodes-langchain.agent/),
 [Text classifier](https://docs.n8n.io/integrations/builtin/cluster-nodes/root-nodes/n8n-nodes-langchain.text-classifier/),
@@ -136,7 +136,7 @@ language model and Qdrant as your vector store.
 
 > [!NOTE]
 > This starter kit is designed to help you get started with self-hosted AI
-> workflows. While it’s not fully optimized for production environments, it
+> workflows. While it's not fully optimized for production environments, it
 > combines robust components that work well together for proof-of-concept
 > projects. You can customize it to meet your specific needs
 
@@ -198,7 +198,7 @@ your local n8n instance.
 
 - [Tax Code Assistant](https://n8n.io/workflows/2341-build-a-tax-code-assistant-with-qdrant-mistralai-and-openai/)
 - [Breakdown Documents into Study Notes with MistralAI and Qdrant](https://n8n.io/workflows/2339-breakdown-documents-into-study-notes-using-templating-mistralai-and-qdrant/)
-- [Financial Documents Assistant using Qdrant and](https://n8n.io/workflows/2335-build-a-financial-documents-assistant-using-qdrant-and-mistralai/) [Mistral.ai](http://mistral.ai/)
+- [Financial Documents Assistant using Qdrant and](https://n8n.io/workflows/2335-build-a-financial-documents-assistant-using-qdrant-and-mistralai/) [Mistral.ai](http://mistral.ai/)
 - [Recipe Recommendations with Qdrant and Mistral](https://n8n.io/workflows/2333-recipe-recommendations-with-qdrant-and-mistral/)
 
 ## Tips & tricks
@@ -208,7 +208,7 @@ your local n8n instance.
 The self-hosted AI starter kit will create a shared folder (by default,
 located in the same directory) which is mounted to the n8n container and
 allows n8n to access files on disk. This folder within the n8n container is
-located at `/data/shared` -- this is the path you’ll need to use in nodes that
+located at `/data/shared` -- this is the path you'll need to use in nodes that
 interact with the local filesystem.
 
 **Nodes that interact with the local filesystem**
@@ -217,7 +217,32 @@ interact with the local filesystem.
 - [Local File Trigger](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.localfiletrigger/)
 - [Execute Command](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.executecommand/)
 
-## 📜 License
+## 📜 License
 
 This project (originally created by the n8n team, link at the top of the README) is licensed under the Apache License 2.0 - see the
 [LICENSE](LICENSE) file for details.
+
+## Neuer Endpoint: macOS Kalenderexport (xstexport-service)
+
+**POST /mac/export-calendar**
+
+Exportiert Kalenderdaten von macOS über ein AppleScript, parst die XML und fügt sie optional in die Datenbank ein.
+
+- **macOS erforderlich:** Dieser Endpoint funktioniert nur auf einem Mac (platform.system() == "Darwin").
+- **Optionaler Query-Parameter:** `import_to_db` (bool, Standard: False) – Wenn gesetzt, werden die Events direkt in die Datenbank eingefügt.
+
+**Beispielaufruf:**
+
+```bash
+curl -X POST "http://localhost:8000/mac/export-calendar?import_to_db=true"
+```
+
+**Antwort:**
+```json
+{
+  "status": "success",
+  "num_events": 42,
+  "xml_path": "/Pfad/zur/outlook_calendar_export_with_attendees.xml",
+  "imported": true
+}
+```

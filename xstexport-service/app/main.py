@@ -9,6 +9,7 @@ import json
 import shutil
 import tempfile
 import zipfile
+import platform
 
 from app.services.calendar_extractor import extract_calendar_data, find_dll
 from app.services.file_extractor import extract_calendar_from_existing_file, extract_calendar_from_zip
@@ -16,6 +17,7 @@ from app.services.file_service import list_app_files, list_data_directory_files
 from app.services.pst_folder_service import list_pst_folders
 from app.services.db_service import DatabaseService
 from app.config.database import get_db_config
+from app.services.mac_calendar_service import run_applescript, parse_calendar_xml
 
 # Logger konfigurieren
 logging.basicConfig(level=logging.INFO)
@@ -337,3 +339,26 @@ def debug_dotnet():
         return {
             "error": str(e)
         }
+
+@app.post("/mac/export-calendar")
+async def export_mac_calendar(import_to_db: bool = False):
+    """
+    Exportiert Kalenderdaten von macOS über ein AppleScript, parst die XML und fügt sie optional in die Datenbank ein.
+    """
+    if platform.system() != "Darwin":
+        raise HTTPException(status_code=400, detail="Dieser Endpoint kann nur auf macOS ausgeführt werden.")
+    try:
+        xml_path = run_applescript()
+        events = parse_calendar_xml(xml_path)
+        num_events = len(events)
+        if import_to_db and num_events > 0:
+            db_service.insert_calendar_events(events)
+        return {
+            "status": "success",
+            "num_events": num_events,
+            "xml_path": str(xml_path),
+            "imported": bool(import_to_db and num_events > 0)
+        }
+    except Exception as e:
+        logger.error(f"Fehler beim Exportieren des macOS-Kalenders: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
