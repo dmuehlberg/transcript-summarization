@@ -43,9 +43,18 @@ def run_applescript() -> Path:
             scp.put(str(script_path), remote_script)
             stdin, stdout, stderr = ssh.exec_command(f"osascript {remote_script}")
             exit_code = stdout.channel.recv_exit_status()
+            stdout_str = stdout.read().decode()
+            stderr_str = stderr.read().decode()
+            print(f"AppleScript stdout: {stdout_str}")
+            print(f"AppleScript stderr: {stderr_str}")
             if exit_code != 0:
+                raise RuntimeError(f"AppleScript-Fehler auf Host: {stderr_str}")
+            # Prüfe, ob die Datei auf dem Host existiert
+            stdin, stdout, stderr = ssh.exec_command(f'ls {remote_xml}')
+            ls_exit = stdout.channel.recv_exit_status()
+            if ls_exit != 0:
                 err = stderr.read().decode()
-                raise RuntimeError(f"AppleScript-Fehler auf Host: {err}")
+                raise FileNotFoundError(f"XML-Datei wurde auf dem Host nicht gefunden: {remote_xml}. Fehler: {err}")
             scp.get(remote_xml, str(xml_path))
             ssh.exec_command(f"rm {remote_script} {remote_xml}")
         ssh.close()
