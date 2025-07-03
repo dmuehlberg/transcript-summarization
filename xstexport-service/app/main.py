@@ -345,7 +345,10 @@ async def export_mac_calendar(import_to_db: bool = False):
     """
     Exportiert Kalenderdaten von macOS über ein AppleScript, parst die XML und fügt sie optional in die Datenbank ein.
     """
+    logger.info(f"[mac/export-calendar] platform.system() = {platform.system()}")
+    logger.info(f"[mac/export-calendar] SSH_USER={os.getenv('SSH_USER')}, SSH_HOST={os.getenv('SSH_HOST')}")
     if platform.system() != "Darwin":
+        logger.error(f"[mac/export-calendar] Plattform ist nicht Darwin, sondern: {platform.system()}")
         raise HTTPException(status_code=400, detail="Dieser Endpoint kann nur auf macOS ausgeführt werden.")
     try:
         xml_path = run_applescript()
