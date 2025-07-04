@@ -8,6 +8,7 @@ import tempfile
 import paramiko
 from scp import SCPClient
 import requests
+import shutil
 
 EXPORT_SCRIPT = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))) / "export_calendar.scpt"
 EXPORT_RESULT = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))) / "outlook_calendar_export_with_attendees.xml"
@@ -23,6 +24,8 @@ SSH_HOST = os.getenv("SSH_HOST", "host.docker.internal")
 SSH_PORT = 22
 
 PROXY_URL = os.getenv("APPLE_PROXY_URL", "http://host.docker.internal:5001/run-applescript")
+
+XML_TARGET_PATH = os.getenv("XML_TARGET_PATH", "/data/ost/outlook_calendar_export_with_attendees.xml")
 
 def run_applescript() -> Path:
     import tempfile
@@ -41,7 +44,12 @@ def run_applescript() -> Path:
         with open(xml_path, "wb") as f:
             f.write(response.content)
         logger.info(f"Datei gespeichert unter: {xml_path}, Größe: {xml_path.stat().st_size} Bytes")
-        return xml_path
+        # Kopiere die Datei an den Zielpfad
+        final_path = Path(XML_TARGET_PATH)
+        final_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(xml_path, final_path)
+        logger.info(f"Datei nach {final_path} kopiert")
+        return final_path
 
 def parse_calendar_xml(xml_path: Path) -> List[Dict[str, Any]]:
     """
