@@ -353,7 +353,7 @@ async def export_mac_calendar(import_to_db: bool = False):
         events = parse_calendar_xml(xml_path)
         num_events = len(events)
         if import_to_db and num_events > 0:
-            db_service.insert_calendar_events(events)
+            db_service.insert_calendar_events(events, truncate=True)
         return {
             "status": "success",
             "num_events": num_events,

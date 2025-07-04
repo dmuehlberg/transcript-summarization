@@ -161,9 +161,9 @@ class DatabaseService:
             logger.error(f"Fehler beim Importieren der CSV-Datei: {str(e)}")
             raise 
 
-    def insert_calendar_events(self, events: List[Dict[str, Any]], table_name: str = "calendar_data") -> None:
+    def insert_calendar_events(self, events: List[Dict[str, Any]], table_name: str = "calendar_data", truncate: bool = False) -> None:
         """
-        Fügt eine Liste von Kalender-Events in die Datenbank ein.
+        Fügt eine Liste von Kalender-Events in die Datenbank ein. Optional kann die Tabelle vorher geleert werden.
         """
         try:
             df = pd.DataFrame(events)
@@ -171,6 +171,11 @@ class DatabaseService:
                 logger.warning("Keine Kalender-Events zum Einfügen übergeben.")
                 return
             self.create_table_if_not_exists(table_name)
+            if truncate:
+                with self.engine.connect() as conn:
+                    conn.execute(text(f"TRUNCATE TABLE {table_name}"))
+                    conn.commit()
+                logger.info(f"Tabelle {table_name} wurde vor dem Import geleert.")
             df.to_sql(table_name, self.engine, if_exists='append', index=False)
             logger.info(f"{len(df)} Kalender-Events erfolgreich in Tabelle {table_name} eingefügt.")
         except Exception as e:
