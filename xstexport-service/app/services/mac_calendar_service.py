@@ -9,6 +9,7 @@ import paramiko
 from scp import SCPClient
 import requests
 import shutil
+from datetime import datetime
 
 EXPORT_SCRIPT = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))) / "export_calendar.scpt"
 EXPORT_RESULT = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))) / "outlook_calendar_export_with_attendees.xml"
@@ -51,6 +52,41 @@ def run_applescript() -> Path:
         logger.info(f"Datei nach {final_path} kopiert")
         return final_path
 
+def parse_german_datetime(dt_str):
+    """
+    Parst deutsche Datumsstrings wie 'Montag, 23. Juni 2025 um 14:00:00' zu datetime.
+    Gibt None zurück, wenn das Parsen fehlschlägt.
+    """
+    try:
+        if not dt_str:
+            return None
+        # Entferne Wochentag und "um"
+        parts = dt_str.split(',', 1)[-1].replace(' um ', ' ').strip()
+        # Ersetze deutschen Monatsnamen durch Zahl
+        monate = {
+            'Januar': '01', 'Februar': '02', 'März': '03', 'April': '04',
+            'Mai': '05', 'Juni': '06', 'Juli': '07', 'August': '08',
+            'September': '09', 'Oktober': '10', 'November': '11', 'Dezember': '12'
+        }
+        for name, num in monate.items():
+            if name in parts:
+                parts = parts.replace(name, num)
+                break
+        # Jetzt: '23. 06 2025 14:00:00' oder '23.06 2025 14:00:00'
+        # Ersetze doppelten Punkt
+        parts = parts.replace('. ', '.')
+        # Jetzt: '23.06.2025 14:00:00'
+        # Füge Punkt zwischen Tag, Monat und Jahr ein, falls nötig
+        tokens = parts.split()
+        if len(tokens) == 3 and '.' not in tokens[1]:
+            # z.B. ['23.06', '2025', '14:00:00']
+            date = f"{tokens[0]}.{tokens[1]}"
+            parts = f"{date} {tokens[2]}"
+        # Versuche zu parsen
+        return datetime.strptime(parts, "%d.%m.%Y %H:%M:%S")
+    except Exception as e:
+        return None
+
 def parse_calendar_xml(xml_path: Path) -> List[Dict[str, Any]]:
     """
     Parst die XML-Datei und gibt eine Liste von Event-Dictionaries zurück.
@@ -68,8 +104,8 @@ def parse_calendar_xml(xml_path: Path) -> List[Dict[str, Any]]:
         required = event.findtext("requiredAttendees", "")
         optional = event.findtext("optionalAttendees", "")
         # Datumsfelder konvertieren
-        start_date = pd.to_datetime(start, errors='coerce')
-        end_date = pd.to_datetime(end, errors='coerce')
+        start_date = parse_german_datetime(start)
+        end_date = parse_german_datetime(end)
         # Attendees als Strings
         display_to = required if required else ""
         display_cc = optional if optional else ""
