@@ -88,19 +88,36 @@ class DatabaseService:
             raise
 
     def read_csv_safely(self, file_path: str) -> pd.DataFrame:
-        """Liest eine CSV-Datei sicher ein und behandelt verschiedene Trennzeichen."""
-        try:
-            # Versuche zuerst mit Semikolon
-            df = pd.read_csv(file_path, sep=';', encoding='utf-8-sig', low_memory=False)
-            logger.info("CSV erfolgreich mit Semikolon gelesen")
-        except Exception as e:
-            logger.warning(f"Fehler beim Lesen mit Semikolon: {str(e)}, versuche mit Komma")
+        """Liest eine CSV-Datei sicher ein und behandelt verschiedene Trennzeichen und Encodings."""
+        
+        # Verschiedene Encodings versuchen
+        encodings = ['utf-8-sig', 'utf-8', 'latin-1', 'iso-8859-1', 'windows-1252', 'cp1252']
+        
+        for encoding in encodings:
             try:
-                df = pd.read_csv(file_path, sep=',', encoding='utf-8-sig', low_memory=False)
-                logger.info("CSV erfolgreich mit Komma gelesen")
+                logger.info(f"Versuche CSV mit Encoding '{encoding}' zu lesen")
+                
+                # Versuche zuerst mit Semikolon
+                try:
+                    df = pd.read_csv(file_path, sep=';', encoding=encoding, low_memory=False)
+                    logger.info(f"CSV erfolgreich mit Semikolon und Encoding '{encoding}' gelesen")
+                    break
+                except Exception as e:
+                    logger.warning(f"Fehler beim Lesen mit Semikolon und Encoding '{encoding}': {str(e)}, versuche mit Komma")
+                    try:
+                        df = pd.read_csv(file_path, sep=',', encoding=encoding, low_memory=False)
+                        logger.info(f"CSV erfolgreich mit Komma und Encoding '{encoding}' gelesen")
+                        break
+                    except Exception as e2:
+                        logger.warning(f"Fehler beim Lesen mit Komma und Encoding '{encoding}': {str(e2)}")
+                        continue
+                        
             except Exception as e:
-                logger.error(f"Fehler beim Lesen der CSV-Datei: {str(e)}")
-                raise
+                logger.warning(f"Fehler beim Lesen mit Encoding '{encoding}': {str(e)}")
+                continue
+        else:
+            # Wenn alle Encodings fehlgeschlagen sind
+            raise ValueError(f"Konnte CSV-Datei mit keinem der Encodings {encodings} lesen")
 
         # Bereinige Spaltennamen
         df.columns = df.columns.str.replace('"', '').str.strip()
@@ -110,7 +127,7 @@ class DatabaseService:
             # Teile die Spaltennamen
             column_names = df.columns[0].split(';')
             # Erstelle ein neues DataFrame mit den korrekten Spaltennamen
-            df = pd.read_csv(file_path, sep=';', encoding='utf-8-sig', names=column_names, skiprows=1, low_memory=False)
+            df = pd.read_csv(file_path, sep=';', encoding=encoding, names=column_names, skiprows=1, low_memory=False)
             logger.info("Spaltennamen wurden korrekt aufgeteilt")
         
         return df

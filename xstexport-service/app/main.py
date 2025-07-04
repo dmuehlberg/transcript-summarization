@@ -10,6 +10,7 @@ import shutil
 import tempfile
 import zipfile
 import platform
+import pandas as pd
 
 from app.services.calendar_extractor import extract_calendar_data, find_dll
 from app.services.file_extractor import extract_calendar_from_existing_file, extract_calendar_from_zip
@@ -365,74 +366,91 @@ async def export_mac_calendar(import_to_db: bool = False):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/debug/analyze-csv-timestamps")
-async def analyze_csv_timestamps(
-    file: UploadFile = File(..., description="CSV-Datei zur Timestamp-Analyse")
-):
-    """
-    Analysiert die Timestamp-Formate in einer CSV-Datei für Debugging-Zwecke.
-    """
-    if not file or not file.filename:
-        raise HTTPException(status_code=400, detail="Keine Datei hochgeladen")
-    
-    temp_dir = None
+async def analyze_csv_timestamps(file: UploadFile = File(...)):
+    """Debug-Endpoint zur Analyse von Timestamp-Formaten in CSV-Dateien."""
     try:
-        # Temporäres Verzeichnis erstellen
-        temp_dir = tempfile.mkdtemp()
-        file_path = os.path.join(temp_dir, file.filename)
+        # Temporäre Datei erstellen
+        temp_file = f"/tmp/debug_{file.filename}"
+        with open(temp_file, "wb") as buffer:
+            content = await file.read()
+            buffer.write(content)
         
-        # Datei speichern
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        # Verschiedene Encodings versuchen
+        encodings = ['utf-8-sig', 'utf-8', 'latin-1', 'iso-8859-1', 'windows-1252', 'cp1252']
+        df = None
         
-        # CSV einlesen
-        df = db_service.read_csv_safely(file_path)
+        for encoding in encodings:
+            try:
+                logger.info(f"Debug: Versuche CSV mit Encoding '{encoding}' zu lesen")
+                
+                # Versuche zuerst mit Semikolon
+                try:
+                    df = pd.read_csv(temp_file, sep=';', encoding=encoding, low_memory=False)
+                    logger.info(f"Debug: CSV erfolgreich mit Semikolon und Encoding '{encoding}' gelesen")
+                    break
+                except Exception as e:
+                    logger.warning(f"Debug: Fehler beim Lesen mit Semikolon und Encoding '{encoding}': {str(e)}, versuche mit Komma")
+                    try:
+                        df = pd.read_csv(temp_file, sep=',', encoding=encoding, low_memory=False)
+                        logger.info(f"Debug: CSV erfolgreich mit Komma und Encoding '{encoding}' gelesen")
+                        break
+                    except Exception as e2:
+                        logger.warning(f"Debug: Fehler beim Lesen mit Komma und Encoding '{encoding}': {str(e2)}")
+                        continue
+                        
+            except Exception as e:
+                logger.warning(f"Debug: Fehler beim Lesen mit Encoding '{encoding}': {str(e)}")
+                continue
         
-        # Timestamp-Felder identifizieren
-        timestamp_fields = []
-        for field_name, field_info in db_service.mapping.items():
-            if field_info.get('pg_type') == 'timestamp':
-                timestamp_fields.append(field_info['pg_field'])
+        if df is None:
+            raise ValueError(f"Konnte CSV-Datei mit keinem der Encodings {encodings} lesen")
         
+        # Bereinige Spaltennamen
+        df.columns = df.columns.str.replace('"', '').str.strip()
+        
+        # Überprüfe, ob die Spaltennamen als einzelner String gelesen wurden
+        if len(df.columns) == 1 and ';' in df.columns[0]:
+            # Teile die Spaltennamen
+            column_names = df.columns[0].split(';')
+            # Erstelle ein neues DataFrame mit den korrekten Spaltennamen
+            df = pd.read_csv(temp_file, sep=';', encoding=encoding, names=column_names, skiprows=1, low_memory=False)
+            logger.info("Debug: Spaltennamen wurden korrekt aufgeteilt")
+        
+        # Rest der Analyse bleibt gleich
         analysis = {
             "filename": file.filename,
             "total_rows": len(df),
-            "timestamp_fields": timestamp_fields,
-            "sample_data": {},
-            "parsing_results": {}
+            "columns": list(df.columns),
+            "timestamp_columns": [],
+            "sample_data": {}
         }
         
-        # Analysiere jedes Timestamp-Feld
-        for field in timestamp_fields:
-            if field in df.columns:
-                # Zeige Beispieldaten
-                sample_values = df[field].dropna().head(5).tolist()
-                analysis["sample_data"][field] = sample_values
+        # Suche nach Timestamp-Spalten
+        timestamp_patterns = ['date', 'time', 'start', 'end', 'datum', 'zeit', 'beginn', 'ende']
+        for col in df.columns:
+            col_lower = col.lower()
+            if any(pattern in col_lower for pattern in timestamp_patterns):
+                analysis["timestamp_columns"].append(col)
                 
-                # Teste Parsing
-                parsing_results = []
-                for value in sample_values:
-                    try:
-                        from app.utils.timezone_utils import parse_and_convert_timestamp
-                        result = parse_and_convert_timestamp(str(value), 'UTC')
-                        parsing_results.append({
-                            "original": str(value),
-                            "parsed": str(result) if result else "FAILED",
-                            "success": result is not None
-                        })
-                    except Exception as e:
-                        parsing_results.append({
-                            "original": str(value),
-                            "parsed": f"ERROR: {str(e)}",
-                            "success": False
-                        })
-                
-                analysis["parsing_results"][field] = parsing_results
+                # Analysiere die ersten 5 nicht-leeren Werte
+                non_null_values = df[col].dropna().head(5)
+                analysis["sample_data"][col] = {
+                    "data_types": [str(type(val).__name__) for val in non_null_values],
+                    "values": [str(val) for val in non_null_values],
+                    "null_count": df[col].isnull().sum()
+                }
         
-        return JSONResponse(content=analysis)
+        # Entferne temporäre Datei
+        os.remove(temp_file)
+        
+        return analysis
         
     except Exception as e:
         logger.error(f"Fehler bei CSV-Analyse: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        if temp_dir and os.path.exists(temp_dir):
-            shutil.rmtree(temp_dir)
+        # Entferne temporäre Datei falls vorhanden
+        try:
+            if 'temp_file' in locals():
+                os.remove(temp_file)
+        except:
+            pass
+        raise HTTPException(status_code=500, detail=f"Fehler bei CSV-Analyse: {str(e)}")
