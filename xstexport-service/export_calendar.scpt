@@ -40,14 +40,24 @@ tell application "Microsoft Outlook"
 			set xmlContent to xmlContent & "    <requiredAttendees>\n"
 			repeat with r in requiredAttendees
 				set rName to ""
+				set rEmail to ""
+				set rClass to ""
 				try
 					set rName to name of r
+				on error
+					set rName to "NO_NAME"
 				end try
-				set rEmail to ""
 				try
 					set rEmail to address of r
+				on error
+					set rEmail to "NO_EMAIL"
 				end try
-				set xmlContent to xmlContent & "      <attendee name=\"" & my escapeXML(rName) & "\" email=\"" & my escapeXML(rEmail) & "\" />\n"
+				try
+					set rClass to class of r as string
+				on error
+					set rClass to "NO_CLASS"
+				end try
+				set xmlContent to xmlContent & "      <attendee name=\"" & my escapeXML(rName) & "\" email=\"" & my escapeXML(rEmail) & "\" class=\"" & my escapeXML(rClass) & "\" />\n"
 			end repeat
 			set xmlContent to xmlContent & "    </requiredAttendees>\n"
 
