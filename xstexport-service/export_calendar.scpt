@@ -42,6 +42,7 @@ tell application "Microsoft Outlook"
 				set rName to ""
 				set rEmail to ""
 				set rClass to ""
+				set rDebug to ""
 				try
 					set rName to name of r
 				on error
@@ -57,7 +58,17 @@ tell application "Microsoft Outlook"
 				on error
 					set rClass to "NO_CLASS"
 				end try
-				set xmlContent to xmlContent & "      <attendee name=\"" & my escapeXML(rName) & "\" email=\"" & my escapeXML(rEmail) & "\" class=\"" & my escapeXML(rClass) & "\" />\n"
+				try
+					set rDebug to r as string
+				on error
+					set rDebug to "NO_DEBUG"
+				end try
+				try
+					set rDebug to rDebug & " | properties: " & (properties of r as string)
+				on error
+					set rDebug to rDebug & " | NO_PROPERTIES"
+				end try
+				set xmlContent to xmlContent & "      <attendee name=\"" & my escapeXML(rName) & "\" email=\"" & my escapeXML(rEmail) & "\" class=\"" & my escapeXML(rClass) & "\" debug=\"" & my escapeXML(rDebug) & "\" />\n"
 			end repeat
 			set xmlContent to xmlContent & "    </requiredAttendees>\n"
 
