@@ -23,6 +23,10 @@ tell application "Microsoft Outlook"
 			set requiredAttendees to required attendees of evt
 			set optionalAttendees to optional attendees of evt
 
+			-- Anzahl der Teilnehmer als XML-Elemente
+			set xmlContent to xmlContent & "    <requiredAttendeesCount>" & (count of requiredAttendees) & "</requiredAttendeesCount>\n"
+			set xmlContent to xmlContent & "    <optionalAttendeesCount>" & (count of optionalAttendees) & "</optionalAttendeesCount>\n"
+
 			-- Event-Start
 			set xmlContent to xmlContent & "  <event>\n"
 			set xmlContent to xmlContent & "    <calendar>" & my escapeXML(name of cal) & "</calendar>\n"

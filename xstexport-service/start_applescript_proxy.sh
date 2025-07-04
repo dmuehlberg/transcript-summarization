@@ -16,5 +16,8 @@ source "$VENV/bin/activate"
 pip install --upgrade pip
 pip install flask
 
+# Kopiere das aktuelle AppleScript ins Home-Verzeichnis
+cp "$(dirname "$0")/export_calendar.scpt" "$HOME/export_calendar.scpt"
+
 # Starte den Proxy-Service
 python3 $(dirname "$0")/applescript_proxy.py 
