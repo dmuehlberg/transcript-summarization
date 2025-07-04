@@ -11,6 +11,9 @@ import requests
 import shutil
 from datetime import datetime
 
+# Importiere Zeitzonen-Utilities
+from app.utils.timezone_utils import parse_and_convert_timestamp, get_target_timezone
+
 EXPORT_SCRIPT = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))) / "export_calendar.scpt"
 EXPORT_RESULT = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))) / "outlook_calendar_export_with_attendees.xml"
 
@@ -116,9 +119,21 @@ def parse_calendar_xml(xml_path: Path) -> List[Dict[str, Any]]:
         optional_elem = event.find("optionalAttendees")
         display_to = extract_attendees(required_elem)
         display_cc = extract_attendees(optional_elem)
-        # Datumsfelder konvertieren
+        
+        # Datumsfelder konvertieren - deutsche Datumsstrings sind bereits in lokaler Zeit
         start_date = parse_german_datetime(start)
         end_date = parse_german_datetime(end)
+        
+        # Zeitzonenkonvertierung nur wenn nötig (falls deutsche Zeit zu UTC konvertiert werden soll)
+        target_tz = get_target_timezone()
+        if target_tz.upper() != 'UTC':
+            # Deutsche Datumsstrings sind bereits in lokaler Zeit, 
+            # aber wir müssen sie zur konfigurierten Zeitzone konvertieren
+            if start_date:
+                start_date = parse_and_convert_timestamp(start_date.strftime("%Y-%m-%d %H:%M:%S"), 'Europe/Berlin')
+            if end_date:
+                end_date = parse_and_convert_timestamp(end_date.strftime("%Y-%m-%d %H:%M:%S"), 'Europe/Berlin')
+        
         # Dummy-Felder für Kompatibilität
         has_picture = ""
         user_entry_id = ""

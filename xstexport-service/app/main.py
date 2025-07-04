@@ -363,3 +363,76 @@ async def export_mac_calendar(import_to_db: bool = False):
     except Exception as e:
         logger.error(f"Fehler beim Exportieren des macOS-Kalenders: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/debug/analyze-csv-timestamps")
+async def analyze_csv_timestamps(
+    file: UploadFile = File(..., description="CSV-Datei zur Timestamp-Analyse")
+):
+    """
+    Analysiert die Timestamp-Formate in einer CSV-Datei für Debugging-Zwecke.
+    """
+    if not file or not file.filename:
+        raise HTTPException(status_code=400, detail="Keine Datei hochgeladen")
+    
+    temp_dir = None
+    try:
+        # Temporäres Verzeichnis erstellen
+        temp_dir = tempfile.mkdtemp()
+        file_path = os.path.join(temp_dir, file.filename)
+        
+        # Datei speichern
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        # CSV einlesen
+        df = db_service.read_csv_safely(file_path)
+        
+        # Timestamp-Felder identifizieren
+        timestamp_fields = []
+        for field_name, field_info in db_service.mapping.items():
+            if field_info.get('pg_type') == 'timestamp':
+                timestamp_fields.append(field_info['pg_field'])
+        
+        analysis = {
+            "filename": file.filename,
+            "total_rows": len(df),
+            "timestamp_fields": timestamp_fields,
+            "sample_data": {},
+            "parsing_results": {}
+        }
+        
+        # Analysiere jedes Timestamp-Feld
+        for field in timestamp_fields:
+            if field in df.columns:
+                # Zeige Beispieldaten
+                sample_values = df[field].dropna().head(5).tolist()
+                analysis["sample_data"][field] = sample_values
+                
+                # Teste Parsing
+                parsing_results = []
+                for value in sample_values:
+                    try:
+                        from app.utils.timezone_utils import parse_and_convert_timestamp
+                        result = parse_and_convert_timestamp(str(value), 'UTC')
+                        parsing_results.append({
+                            "original": str(value),
+                            "parsed": str(result) if result else "FAILED",
+                            "success": result is not None
+                        })
+                    except Exception as e:
+                        parsing_results.append({
+                            "original": str(value),
+                            "parsed": f"ERROR: {str(e)}",
+                            "success": False
+                        })
+                
+                analysis["parsing_results"][field] = parsing_results
+        
+        return JSONResponse(content=analysis)
+        
+    except Exception as e:
+        logger.error(f"Fehler bei CSV-Analyse: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if temp_dir and os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir)
