@@ -87,6 +87,16 @@ def parse_german_datetime(dt_str):
     except Exception as e:
         return None
 
+def extract_attendees(parent_elem):
+    attendees = []
+    if parent_elem is not None:
+        for att in parent_elem.findall("attendee"):
+            name = att.attrib.get("name", "")
+            email = att.attrib.get("email", "")
+            if name or email:
+                attendees.append(f"{name} <{email}>".strip())
+    return ", ".join(attendees)
+
 def parse_calendar_xml(xml_path: Path) -> List[Dict[str, Any]]:
     """
     Parst die XML-Datei und gibt eine Liste von Event-Dictionaries zurück.
@@ -101,14 +111,14 @@ def parse_calendar_xml(xml_path: Path) -> List[Dict[str, Any]]:
         end = event.findtext("end", "")
         location = event.findtext("location", "")
         content = event.findtext("content", "")
-        required = event.findtext("requiredAttendees", "")
-        optional = event.findtext("optionalAttendees", "")
+        # Teilnehmer extrahieren
+        required_elem = event.find("requiredAttendees")
+        optional_elem = event.find("optionalAttendees")
+        display_to = extract_attendees(required_elem)
+        display_cc = extract_attendees(optional_elem)
         # Datumsfelder konvertieren
         start_date = parse_german_datetime(start)
         end_date = parse_german_datetime(end)
-        # Attendees als Strings
-        display_to = required if required else ""
-        display_cc = optional if optional else ""
         # Dummy-Felder für Kompatibilität
         has_picture = ""
         user_entry_id = ""
