@@ -25,18 +25,22 @@ SSH_PORT = 22
 PROXY_URL = os.getenv("APPLE_PROXY_URL", "http://host.docker.internal:5001/run-applescript")
 
 def run_applescript() -> Path:
-    """
-    Überträgt das AppleScript per SSH auf den Host, führt es dort aus und kopiert die XML-Datei zurück.
-    """
-    if not SSH_USER or not SSH_PASSWORD or not SSH_HOST:
-        raise RuntimeError("SSH-Umgebungsvariablen (SSH_USER, SSH_PASSWORD, SSH_HOST) müssen gesetzt sein!")
+    import tempfile
+    from pathlib import Path
+    import logging
+    logger = logging.getLogger(__name__)
     with tempfile.TemporaryDirectory() as tmpdir:
         xml_path = Path(tmpdir) / XML_FILENAME
         response = requests.post(PROXY_URL)
+        logger.info(f"Proxy-Service Status: {response.status_code}")
+        logger.info(f"Proxy-Service Content-Type: {response.headers.get('Content-Type')}")
         if response.status_code != 200:
+            logger.error(f"Proxy-Service Fehler: {response.text}")
             raise RuntimeError(f"Proxy-Service Fehler: {response.text}")
-        with open(xml_path, "wb") as f:
+        logger.info(f"Empfangene Dateigröße: {len(response.content)} Bytes")
+        with open(xml_path, \"wb\") as f:
             f.write(response.content)
+        logger.info(f\"Datei gespeichert unter: {xml_path}, Größe: {xml_path.stat().st_size} Bytes\")
         return xml_path
 
 def parse_calendar_xml(xml_path: Path) -> List[Dict[str, Any]]:
