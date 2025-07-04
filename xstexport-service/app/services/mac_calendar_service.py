@@ -38,9 +38,9 @@ def run_applescript() -> Path:
             logger.error(f"Proxy-Service Fehler: {response.text}")
             raise RuntimeError(f"Proxy-Service Fehler: {response.text}")
         logger.info(f"Empfangene Dateigröße: {len(response.content)} Bytes")
-        with open(xml_path, \"wb\") as f:
+        with open(xml_path, "wb") as f:
             f.write(response.content)
-        logger.info(f\"Datei gespeichert unter: {xml_path}, Größe: {xml_path.stat().st_size} Bytes\")
+        logger.info(f"Datei gespeichert unter: {xml_path}, Größe: {xml_path.stat().st_size} Bytes")
         return xml_path
 
 def parse_calendar_xml(xml_path: Path) -> List[Dict[str, Any]]:
