@@ -48,8 +48,8 @@ def init_db():
             created_at TIMESTAMP,
             transcription_status TEXT,
             participants TEXT,
-            meeting_start_date TIMESTAMPTZ,
-            meeting_end_date TIMESTAMPTZ,
+            meeting_start_date TIMESTAMP,
+            meeting_end_date TIMESTAMP,
             meeting_title TEXT,
             meeting_location TEXT,
             invitation_text TEXT

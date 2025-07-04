@@ -6,7 +6,7 @@
         },
         "Client Submit Time": {
             "pg_field": "client_submit_time",
-            "pg_type": "timestamp with time zone"
+            "pg_type": "timestamp"
         },
         "Sent Representing Name": {
             "pg_field": "sent_representing_name",
@@ -14,11 +14,11 @@
         },
         "Start Date": {
             "pg_field": "start_date",
-            "pg_type": "timestamp with time zone"
+            "pg_type": "timestamp"
         },
         "End Date": {
             "pg_field": "end_date",
-            "pg_type": "timestamp with time zone"
+            "pg_type": "timestamp"
         },
         "Conversation Topic": {
             "pg_field": "conversation_topic",
@@ -42,27 +42,27 @@
         },
         "Message Delivery Time": {
             "pg_field": "message_delivery_time",
-            "pg_type": "timestamp with time zone"
+            "pg_type": "timestamp"
         },
         "Unknown (0x0f02)": {
             "pg_field": "unknown_0f02",
-            "pg_type": "timestamp with time zone"
+            "pg_type": "timestamp"
         },
         "Unknown (0x0f0a)": {
             "pg_field": "unknown_0f0a",
-            "pg_type": "timestamp with time zone"
+            "pg_type": "timestamp"
         },
         "Last Verb Execution Time": {
             "pg_field": "last_verb_execution_time",
-            "pg_type": "timestamp with time zone"
+            "pg_type": "timestamp"
         },
         "Creation Time": {
             "pg_field": "creation_time",
-            "pg_type": "timestamp with time zone"
+            "pg_type": "timestamp"
         },
         "Last Modification Time": {
             "pg_field": "last_modification_time",
-            "pg_type": "timestamp with time zone"
+            "pg_type": "timestamp"
         },
         "Unknown (0x3fd9)": {
             "pg_field": "unknown_3fd9",

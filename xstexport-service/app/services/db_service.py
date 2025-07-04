@@ -146,7 +146,11 @@ class DatabaseService:
                     pg_field = field_info['pg_field']
                     pg_type = field_info.get('pg_type', 'TEXT')
                     
-                    if pg_type == 'TIMESTAMP':
+                    if pg_type == 'timestamp':
+                        # Konvertiere zu naive datetime Objekten (ohne Zeitzone)
+                        df_mapped[pg_field] = pd.to_datetime(df_mapped[pg_field], errors='coerce')
+                    elif pg_type == 'timestamp with time zone':
+                        # Für den Fall, dass noch alte TIMESTAMPTZ Felder existieren
                         df_mapped[pg_field] = pd.to_datetime(df_mapped[pg_field], errors='coerce')
                     elif pg_type == 'INTEGER':
                         df_mapped[pg_field] = pd.to_numeric(df_mapped[pg_field], errors='coerce').fillna(0).astype(int)
