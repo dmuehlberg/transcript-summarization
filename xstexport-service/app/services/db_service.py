@@ -214,7 +214,7 @@ class DatabaseService:
                     # Erstelle ein neues DataFrame mit den korrekten Spaltennamen
                     df = pd.read_csv(file_path, sep=detected_sep, encoding=encoding, 
                                    names=column_names, skiprows=1, low_memory=False, 
-                                   on_bad_lines='skip', error_bad_lines=False)
+                                   on_bad_lines='skip')
                     logger.info(f"Spaltennamen wurden korrekt aufgeteilt: {len(df.columns)} Spalten")
                 except Exception as e:
                     logger.error(f"Fehler beim Neulesen mit aufgeteilten Spaltennamen: {str(e)}")
@@ -223,6 +223,30 @@ class DatabaseService:
                     df = self._manual_csv_parse_with_headers(file_path, detected_sep, column_names)
             else:
                 logger.error("Konnte keine gültige Header-Zeile finden")
+                # Versuche, die Header aus der ersten Zeile zu extrahieren
+                logger.info("Versuche Header-Extraktion aus erster Zeile")
+                try:
+                    with open(file_path, 'rb') as f:
+                        raw_content = f.read()
+                    text_content = raw_content.decode(encoding, errors='replace')
+                    lines = text_content.split('\n')
+                    
+                    # Finde die erste nicht-leere Zeile
+                    first_line = None
+                    for line in lines:
+                        if line.strip():
+                            first_line = line.strip()
+                            break
+                    
+                    if first_line and detected_sep in first_line:
+                        column_names = first_line.split(detected_sep)
+                        column_names = [name.strip().strip('"').strip("'") for name in column_names]
+                        logger.info(f"Header aus erster Zeile extrahiert: {len(column_names)} Spalten")
+                        df = self._manual_csv_parse_with_headers(file_path, detected_sep, column_names)
+                    else:
+                        logger.error("Konnte keine Header aus erster Zeile extrahieren")
+                except Exception as e:
+                    logger.error(f"Fehler bei Header-Extraktion: {str(e)}")
         
         return df
 
