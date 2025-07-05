@@ -153,16 +153,14 @@ class DatabaseService:
                 # Versuche mit verschiedenen pandas-Optionen
                 try:
                     df = pd.read_csv(file_path, sep=detected_sep, encoding=encoding, 
-                                   engine='python', error_bad_lines=False, warn_bad_lines=True,
-                                   on_bad_lines='skip', low_memory=False)
+                                   engine='python', on_bad_lines='skip', low_memory=False)
                     logger.info(f"Erfolgreich mit pandas engine='python' gelesen")
                     break
                 except Exception as e:
                     logger.warning(f"Fehler mit engine='python': {str(e)}, versuche engine='c'")
                     try:
                         df = pd.read_csv(file_path, sep=detected_sep, encoding=encoding,
-                                       engine='c', error_bad_lines=False, warn_bad_lines=True,
-                                       on_bad_lines='skip', low_memory=False)
+                                       engine='c', on_bad_lines='skip', low_memory=False)
                         logger.info(f"Erfolgreich mit pandas engine='c' gelesen")
                         break
                     except Exception as e2:
