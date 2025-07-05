@@ -125,23 +125,123 @@ class DatabaseService:
             Pandas Series mit Timestamps in der Zielzeitzone
         """
         try:
+            logger.info(f"Starte Zeitzonenkonvertierung für {len(timestamp_series)} Timestamps")
+            logger.info(f"Ursprünglicher Datentyp: {timestamp_series.dtype}")
+            logger.info(f"Erste 3 Werte vor Konvertierung: {timestamp_series.head(3).tolist()}")
+            
             # Konvertiere zu datetime, falls es noch nicht ist
             if timestamp_series.dtype == 'object':
+                logger.info("Konvertiere object zu datetime")
                 timestamp_series = pd.to_datetime(timestamp_series, errors='coerce')
+                logger.info(f"Datentyp nach pd.to_datetime: {timestamp_series.dtype}")
             
-            # Füge UTC-Zeitzone hinzu (falls nicht vorhanden)
-            if timestamp_series.dt.tz is None:
-                timestamp_series = timestamp_series.dt.tz_localize('UTC')
+            # Prüfe, ob wir gültige Timestamps haben
+            if timestamp_series.isna().all():
+                logger.warning("Alle Timestamps sind NaN, keine Konvertierung möglich")
+                return timestamp_series
             
-            # Konvertiere zur Zielzeitzone
-            target_time = timestamp_series.dt.tz_convert(self.target_timezone)
-            
-            logger.info(f"Zeitzonenkonvertierung erfolgreich: UTC -> {self.target_timezone}")
-            return target_time
+            # Versuche pandas Zeitzonenkonvertierung
+            try:
+                # Füge UTC-Zeitzone hinzu (falls nicht vorhanden)
+                if timestamp_series.dt.tz is None:
+                    logger.info("Füge UTC-Zeitzone hinzu")
+                    timestamp_series = timestamp_series.dt.tz_localize('UTC')
+                    logger.info(f"Zeitzone nach tz_localize: {timestamp_series.dt.tz}")
+                else:
+                    logger.info(f"Timestamps haben bereits Zeitzone: {timestamp_series.dt.tz}")
+                
+                # Konvertiere zur Zielzeitzone
+                logger.info(f"Konvertiere zu Zielzeitzone: {self.target_timezone}")
+                target_time = timestamp_series.dt.tz_convert(self.target_timezone)
+                logger.info(f"Zeitzone nach Konvertierung: {target_time.dt.tz}")
+                logger.info(f"Erste 3 Werte nach Konvertierung: {target_time.head(3).tolist()}")
+                
+                # Prüfe, ob die Konvertierung erfolgreich war
+                if target_time.dt.tz is None:
+                    raise ValueError("Zeitzonenkonvertierung fehlgeschlagen")
+                
+                logger.info(f"Zeitzonenkonvertierung erfolgreich: UTC -> {self.target_timezone}")
+                return target_time
+                
+            except Exception as pandas_error:
+                logger.warning(f"Pandas Zeitzonenkonvertierung fehlgeschlagen: {str(pandas_error)}")
+                logger.info("Versuche manuelle Zeitzonenkonvertierung (+2 Stunden für Berlin)")
+                
+                # Manuelle Konvertierung: Addiere 2 Stunden für Berlin-Zeit
+                if self.target_timezone == 'Europe/Berlin':
+                    manual_offset = pd.Timedelta(hours=2)
+                    manual_converted = timestamp_series + manual_offset
+                    logger.info(f"Manuelle Konvertierung: +2 Stunden hinzugefügt")
+                    logger.info(f"Erste 3 Werte nach manueller Konvertierung: {manual_converted.head(3).tolist()}")
+                    return manual_converted
+                else:
+                    # Für andere Zeitzonen: Versuche andere Offsets
+                    logger.warning(f"Manuelle Konvertierung für {self.target_timezone} nicht implementiert")
+                    return timestamp_series
             
         except Exception as e:
-            logger.warning(f"Fehler bei der Zeitzonenkonvertierung: {str(e)}. Verwende ursprüngliche Timestamps.")
+            logger.error(f"Fehler bei der Zeitzonenkonvertierung: {str(e)}")
+            logger.error(f"Exception-Typ: {type(e).__name__}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            logger.warning("Verwende ursprüngliche Timestamps")
             return timestamp_series
+
+    def debug_timezone_conversion(self, csv_path: str) -> None:
+        """
+        Debug-Funktion zum Testen der Zeitzonenkonvertierung.
+        
+        Args:
+            csv_path: Pfad zur CSV-Datei
+        """
+        try:
+            logger.info("=== DEBUG: Zeitzonenkonvertierung ===")
+            
+            # Lese CSV-Datei
+            df = self.read_csv_safely(csv_path)
+            logger.info(f"CSV gelesen, {len(df)} Zeilen, {len(df.columns)} Spalten")
+            logger.info(f"Spalten: {list(df.columns)}")
+            
+            # Finde Timestamp-Spalten
+            timestamp_columns = []
+            for field_name, field_info in self.mapping.items():
+                if field_name in df.columns and 'timestamp' in field_info.get('pg_type', '').lower():
+                    timestamp_columns.append(field_name)
+                    logger.info(f"Timestamp-Spalte gefunden: {field_name} -> {field_info['pg_field']}")
+            
+            if not timestamp_columns:
+                logger.warning("Keine Timestamp-Spalten gefunden!")
+                return
+            
+            # Teste jede Timestamp-Spalte
+            for col in timestamp_columns:
+                logger.info(f"\n--- Teste Spalte: {col} ---")
+                sample_values = df[col].head(3)
+                logger.info(f"Beispielwerte: {sample_values.tolist()}")
+                logger.info(f"Datentyp: {df[col].dtype}")
+                
+                # Teste Zeitzonenkonvertierung
+                converted = self.convert_utc_to_target_timezone(df[col])
+                logger.info(f"Konvertierte Werte: {converted.head(3).tolist()}")
+                logger.info(f"Konvertierter Datentyp: {converted.dtype}")
+                
+                # Prüfe Unterschied
+                if len(sample_values) > 0 and len(converted) > 0:
+                    original = sample_values.iloc[0]
+                    converted_val = converted.iloc[0]
+                    if pd.notna(original) and pd.notna(converted_val):
+                        try:
+                            diff = converted_val - original
+                            logger.info(f"Zeitdifferenz: {diff}")
+                        except:
+                            logger.info("Zeitdifferenz konnte nicht berechnet werden")
+            
+            logger.info("=== DEBUG ENDE ===")
+            
+        except Exception as e:
+            logger.error(f"Fehler beim Debugging: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
 
     def import_csv_to_db(self, csv_path: str, table_name: str = "calendar_data") -> None:
         """Importiert Daten aus einer CSV-Datei in die Datenbank."""
@@ -154,6 +254,9 @@ class DatabaseService:
             
             # Lese CSV-Datei
             df = self.read_csv_safely(csv_path)
+            
+            # Debug: Zeitzonenkonvertierung testen
+            self.debug_timezone_conversion(csv_path)
             
             # Erstelle Tabelle, falls sie noch nicht existiert
             self.create_table_if_not_exists(table_name)
