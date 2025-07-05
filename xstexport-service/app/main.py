@@ -120,6 +120,53 @@ async def extract_calendar(form_data: dict = Depends(get_form_data)):
             detail=f"Fehler bei der Extraktion: {str(e)}"
         )
 
+@app.post("/test-import-with-debug")
+async def test_import_with_debug(
+    file: UploadFile = File(..., description="Die zu importierende CSV-Datei")
+):
+    """
+    Test-Endpoint zum Debuggen des vollständigen Import-Prozesses.
+    """
+    if not file:
+        raise HTTPException(status_code=400, detail="Keine Datei hochgeladen")
+        
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Kein Dateiname angegeben")
+    
+    temp_dir = None
+    try:
+        # Temporäres Verzeichnis erstellen
+        temp_dir = tempfile.mkdtemp()
+        logger.info(f"Temporäres Verzeichnis erstellt: {temp_dir}")
+        
+        # Datei speichern
+        file_path = os.path.join(temp_dir, file.filename)
+        logger.info(f"Speichere Datei: {file_path}")
+        
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        # Vollständigen Import mit Debug ausführen
+        db_service.import_csv_to_db(file_path)
+        
+        return JSONResponse(
+            content={
+                "message": "Import mit Debug abgeschlossen - siehe Logs",
+                "status": "success"
+            }
+        )
+            
+    except Exception as e:
+        logger.error(f"Fehler beim Test-Import: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if file.file:
+            file.file.close()
+        # Sicherstellen, dass alle temporären Verzeichnisse bereinigt werden
+        if temp_dir and os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir)
+            logger.info(f"Temporäres Verzeichnis bereinigt: {temp_dir}")
+
 @app.post("/debug-timezone-conversion")
 async def debug_timezone_conversion(
     file: UploadFile = File(..., description="Die zu testende CSV-Datei")

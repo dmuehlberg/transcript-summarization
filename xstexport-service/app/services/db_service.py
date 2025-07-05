@@ -243,6 +243,48 @@ class DatabaseService:
             import traceback
             logger.error(f"Traceback: {traceback.format_exc()}")
 
+    def check_imported_data(self, table_name: str = "calendar_data") -> None:
+        """
+        Überprüft die importierten Daten in der Datenbank.
+        
+        Args:
+            table_name: Name der Tabelle
+        """
+        try:
+            logger.info("=== DEBUG: Überprüfe importierte Daten ===")
+            
+            # Finde Timestamp-Spalten
+            timestamp_columns = []
+            for field_name, field_info in self.mapping.items():
+                if 'timestamp' in field_info.get('pg_type', '').lower():
+                    timestamp_columns.append(field_info['pg_field'])
+            
+            if not timestamp_columns:
+                logger.warning("Keine Timestamp-Spalten gefunden!")
+                return
+            
+            # Lese die ersten 3 Zeilen aus der DB
+            query = f"SELECT {', '.join(timestamp_columns)} FROM {table_name} LIMIT 3"
+            
+            with self.engine.connect() as conn:
+                result = conn.execute(text(query))
+                rows = result.fetchall()
+                
+                logger.info(f"Anzahl Zeilen aus DB: {len(rows)}")
+                
+                for i, row in enumerate(rows):
+                    logger.info(f"Zeile {i+1}:")
+                    for j, col in enumerate(timestamp_columns):
+                        value = row[j]
+                        logger.info(f"  {col}: {value} (Typ: {type(value)})")
+            
+            logger.info("=== DEBUG ENDE ===")
+            
+        except Exception as e:
+            logger.error(f"Fehler beim Überprüfen der Daten: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+
     def import_csv_to_db(self, csv_path: str, table_name: str = "calendar_data") -> None:
         """Importiert Daten aus einer CSV-Datei in die Datenbank."""
         try:
@@ -290,8 +332,23 @@ class DatabaseService:
                         df_mapped[pg_field] = df_mapped[pg_field].map({'true': True, 'false': False, 'True': True, 'False': False})
             
             # Importiere in die Datenbank
+            logger.info("=== DEBUG: Vor SQLAlchemy Import ===")
+            logger.info(f"DataFrame Shape: {df_mapped.shape}")
+            logger.info(f"DataFrame Spalten: {list(df_mapped.columns)}")
+            
+            # Zeige Timestamp-Spalten vor dem Import
+            timestamp_cols = [col for col in df_mapped.columns if 'timestamp' in col.lower()]
+            for col in timestamp_cols:
+                sample_values = df_mapped[col].head(3)
+                logger.info(f"Timestamp-Spalte {col} vor DB-Import: {sample_values.tolist()}")
+                logger.info(f"Datentyp: {df_mapped[col].dtype}")
+            
             df_mapped.to_sql(table_name, self.engine, if_exists='append', index=False)
+            logger.info("=== DEBUG: Nach SQLAlchemy Import ===")
             logger.info(f"Daten erfolgreich in Tabelle {table_name} importiert")
+            
+            # Überprüfe die importierten Daten
+            self.check_imported_data(table_name)
             
         except Exception as e:
             logger.error(f"Fehler beim Importieren der CSV-Datei: {str(e)}")
