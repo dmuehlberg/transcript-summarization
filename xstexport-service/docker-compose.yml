@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  xstexport-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - TARGETPLATFORM=${TARGETPLATFORM:-linux/amd64}
+    ports:
+      - "8200:8200"
+    volumes:
+      - ./data:/data
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=n8n
+      - POSTGRES_USER=root
+      - POSTGRES_PASSWORD=postgres
+    networks:
+      - demo
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+networks:
+  demo:
+    external: true

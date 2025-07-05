@@ -1,0 +1,16 @@
+# Everything the developer needs in addition to the production requirements
+-r prod.txt
+
+# Documentation
+codespell==2.4.1
+
+# Pre-commit
+pre-commit==4.2.0
+
+# Testing
+pytest==8.3.5
+pytest-cov==6.1.1
+
+
+# Lint and code style
+ruff==0.11.8
