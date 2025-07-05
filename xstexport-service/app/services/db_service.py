@@ -442,25 +442,30 @@ class DatabaseService:
             
             logger.info(f"Verfügbare Spalten: {available_columns}")
             df_mapped = df[available_columns].copy()
-            df_mapped.columns = [mapping_key for mapping_key in available_mappings.keys()]
+            df_mapped.columns = list(available_mappings.keys())
+            
+            logger.info(f"DataFrame nach Mapping: {len(df_mapped.columns)} Spalten")
+            logger.info(f"Gemappte Spalten: {list(df_mapped.columns)}")
             
             # Konvertiere Datentypen mit Zeitzonenunterstützung
             for field_name, field_info in self.mapping.items():
-                if field_name in df_mapped.columns and field_name in available_mappings:
+                if field_name in df_mapped.columns:
                     pg_field = field_info['pg_field']
                     pg_type = field_info.get('pg_type', 'TEXT')
                     
+                    logger.info(f"Verarbeite Feld: {field_name} -> {pg_field} (Typ: {pg_type})")
+                    
                     if pg_type == 'timestamp':
                         # Zeitzonenkonvertierung für Timestamp-Felder
-                        logger.info(f"Konvertiere Timestamps für Feld {pg_field} mit Zeitzone {get_target_timezone()}")
+                        logger.info(f"Konvertiere Timestamps für Feld {field_name} mit Zeitzone {get_target_timezone()}")
                         
                         # Zeige Beispieldaten vor Konvertierung
-                        sample_before = df_mapped[pg_field].dropna().head(3).tolist()
-                        logger.info(f"Beispieldaten vor Konvertierung ({pg_field}): {sample_before}")
+                        sample_before = df_mapped[field_name].dropna().head(3).tolist()
+                        logger.info(f"Beispieldaten vor Konvertierung ({field_name}): {sample_before}")
                         
                         # Konvertiere mit Fehlerbehandlung
                         converted_values = []
-                        for idx, value in enumerate(df_mapped[pg_field]):
+                        for idx, value in enumerate(df_mapped[field_name]):
                             try:
                                 if pd.notna(value):
                                     converted = parse_and_convert_timestamp(str(value), 'UTC')
@@ -468,33 +473,50 @@ class DatabaseService:
                                 else:
                                     converted_values.append(None)
                             except Exception as e:
-                                logger.error(f"Fehler bei Zeile {idx}, Wert '{value}' für Feld {pg_field}: {str(e)}")
+                                logger.error(f"Fehler bei Zeile {idx}, Wert '{value}' für Feld {field_name}: {str(e)}")
                                 converted_values.append(None)
                         
-                        df_mapped[pg_field] = converted_values
+                        df_mapped[field_name] = converted_values
                         
                         # Zeige Beispieldaten nach Konvertierung
                         sample_after = [v for v in converted_values if v is not None][:3]
-                        logger.info(f"Beispieldaten nach Konvertierung ({pg_field}): {sample_after}")
+                        logger.info(f"Beispieldaten nach Konvertierung ({field_name}): {sample_after}")
                         
                     elif pg_type == 'timestamp with time zone':
                         # Für den Fall, dass noch alte TIMESTAMPTZ Felder existieren
-                        df_mapped[pg_field] = pd.to_datetime(df_mapped[pg_field], errors='coerce')
+                        df_mapped[field_name] = pd.to_datetime(df_mapped[field_name], errors='coerce')
                     elif pg_type == 'INTEGER':
-                        df_mapped[pg_field] = pd.to_numeric(df_mapped[pg_field], errors='coerce').fillna(0).astype(int)
+                        df_mapped[field_name] = pd.to_numeric(df_mapped[field_name], errors='coerce').fillna(0).astype(int)
                     elif pg_type == 'BOOLEAN':
-                        df_mapped[pg_field] = df_mapped[pg_field].map({'true': True, 'false': False, 'True': True, 'False': False})
+                        df_mapped[field_name] = df_mapped[field_name].map({'true': True, 'false': False, 'True': True, 'False': False})
+                else:
+                    logger.warning(f"Feld {field_name} nicht im DataFrame gefunden")
             
             # Prüfe auf NULL-Werte in Timestamp-Feldern
-            timestamp_fields = [field_info['pg_field'] for field_info in self.mapping.values() if field_info.get('pg_type') == 'timestamp']
-            for field in timestamp_fields:
-                if field in df_mapped.columns and field in available_mappings:
-                    null_count = df_mapped[field].isna().sum()
-                    total_count = len(df_mapped[field])
-                    logger.info(f"Feld {field}: {null_count}/{total_count} NULL-Werte ({null_count/total_count*100:.1f}%)")
+            timestamp_fields = [field_name for field_name, field_info in self.mapping.items() if field_info.get('pg_type') == 'timestamp']
+            for field_name in timestamp_fields:
+                if field_name in df_mapped.columns:
+                    null_count = df_mapped[field_name].isna().sum()
+                    total_count = len(df_mapped[field_name])
+                    logger.info(f"Feld {field_name}: {null_count}/{total_count} NULL-Werte ({null_count/total_count*100:.1f}%)")
+                else:
+                    logger.warning(f"Timestamp-Feld {field_name} nicht im DataFrame gefunden")
+            
+            # Benenne Spalten für Datenbank-Import um
+            db_columns = {}
+            for field_name in df_mapped.columns:
+                if field_name in self.mapping:
+                    db_field = self.mapping[field_name]['pg_field']
+                    db_columns[field_name] = db_field
+                    logger.info(f"Spalte umbenannt: {field_name} -> {db_field}")
+            
+            df_for_db = df_mapped.copy()
+            df_for_db.columns = [db_columns.get(col, col) for col in df_for_db.columns]
+            
+            logger.info(f"Finale Spalten für Datenbank: {list(df_for_db.columns)}")
             
             # Importiere in die Datenbank
-            df_mapped.to_sql(table_name, self.engine, if_exists='append', index=False)
+            df_for_db.to_sql(table_name, self.engine, if_exists='append', index=False)
             logger.info(f"Daten erfolgreich in Tabelle {table_name} importiert")
             
         except Exception as e:
