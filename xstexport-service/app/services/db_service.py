@@ -121,9 +121,19 @@ class DatabaseService:
         detected_sep = None
         max_fields = 0
         
+        # Überspringe leere Zeilen und suche nach der ersten Datenzeile
+        data_lines = []
+        for line in lines:
+            if line.strip() and not line.strip().startswith('#'):
+                data_lines.append(line)
+                if len(data_lines) >= 5:  # Analysiere mindestens 5 Datenzeilen
+                    break
+        
+        logger.info(f"Gefundene {len(data_lines)} Datenzeilen für Trennzeichen-Analyse")
+        
         for sep in separators:
             field_counts = []
-            for line in lines[:10]:  # Erste 10 Zeilen
+            for line in data_lines:
                 if line.strip():
                     field_count = len(line.split(sep))
                     field_counts.append(field_count)
@@ -134,7 +144,13 @@ class DatabaseService:
                 
                 logger.info(f"Trennzeichen '{sep}': Durchschnitt {avg_fields:.1f} Felder, Konsistenz {consistency}")
                 
-                if avg_fields > max_fields and consistency <= 2:  # Akzeptiere kleine Inkonsistenzen
+                # Bevorzuge Semikolon für deutsche CSV-Dateien
+                if sep == ';' and avg_fields > 5:
+                    detected_sep = sep
+                    max_fields = avg_fields
+                    logger.info(f"Semikolon bevorzugt: {avg_fields:.1f} Felder")
+                    break
+                elif avg_fields > max_fields and consistency <= 5:  # Erhöhe Toleranz für Inkonsistenz
                     max_fields = avg_fields
                     detected_sep = sep
         
@@ -277,27 +293,44 @@ class DatabaseService:
             df = self.read_csv_safely(csv_path)
             logger.info(f"CSV erfolgreich gelesen: {len(df)} Zeilen, {len(df.columns)} Spalten")
             
+            # Debug: Zeige die ersten Zeilen und Spaltennamen
+            logger.info(f"Spaltennamen: {list(df.columns)}")
+            if len(df) > 0:
+                logger.info(f"Erste Zeile: {df.iloc[0].tolist()}")
+                if len(df) > 1:
+                    logger.info(f"Zweite Zeile: {df.iloc[1].tolist()}")
+            
+            logger.info(f"Tabelle calendar_data wurde erfolgreich erstellt oder existiert bereits")
+            
             # Erstelle Tabelle, falls sie noch nicht existiert
             self.create_table_if_not_exists(table_name)
             
             # Finde übereinstimmende Spalten
-            column_mapping = {}
+            matching_columns = {}
             for csv_col in df.columns:
-                if csv_col in self.mapping:
-                    column_mapping[csv_col] = self.mapping[csv_col]['pg_field']
+                csv_col_lower = csv_col.lower().strip()
+                for mapping_key, mapping_info in self.mapping.items():
+                    if mapping_info['csv_field'].lower().strip() == csv_col_lower:
+                        matching_columns[mapping_key] = csv_col
+                        logger.info(f"Spalte gefunden: '{csv_col}' -> '{mapping_key}'")
+                        break
             
-            logger.info(f"Gefundene Spalten-Mappings: {column_mapping}")
+            logger.info(f"Gefundene Spalten-Mappings: {matching_columns}")
             
-            if not column_mapping:
+            # Debug: Zeige alle CSV-Spalten
+            logger.info(f"Alle CSV-Spalten: {[col for col in df.columns]}")
+            logger.info(f"Mapping-Erwartungen: {[info['csv_field'] for info in self.mapping.values()]}")
+            
+            if not matching_columns:
                 raise ValueError("Keine übereinstimmenden Spalten zwischen CSV und Mapping gefunden")
             
             # Wähle nur die gemappten Spalten aus
-            df_mapped = df[list(column_mapping.keys())].copy()
-            df_mapped.columns = [column_mapping[col] for col in df_mapped.columns]
+            df_mapped = df[list(matching_columns.values())].copy()
+            df_mapped.columns = [mapping_key for mapping_key in matching_columns.keys()]
             
             # Konvertiere Datentypen mit Zeitzonenunterstützung
             for field_name, field_info in self.mapping.items():
-                if field_name in df.columns:
+                if field_name in df_mapped.columns:
                     pg_field = field_info['pg_field']
                     pg_type = field_info.get('pg_type', 'TEXT')
                     
