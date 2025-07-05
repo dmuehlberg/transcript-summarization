@@ -90,47 +90,157 @@ class DatabaseService:
     def read_csv_safely(self, file_path: str) -> pd.DataFrame:
         """Liest eine CSV-Datei sicher ein und behandelt verschiedene Trennzeichen und Encodings."""
         
-        # Verschiedene Encodings versuchen
+        # Lese die ersten Zeilen als Text um das Format zu analysieren
+        with open(file_path, 'rb') as f:
+            raw_content = f.read()
+        
+        # Versuche verschiedene Encodings für die Analyse
         encodings = ['utf-8-sig', 'utf-8', 'latin-1', 'iso-8859-1', 'windows-1252', 'cp1252']
+        text_content = None
         
         for encoding in encodings:
             try:
-                logger.info(f"Versuche CSV mit Encoding '{encoding}' zu lesen")
+                text_content = raw_content.decode(encoding, errors='replace')
+                logger.info(f"Erfolgreich mit Encoding '{encoding}' dekodiert")
+                break
+            except Exception as e:
+                logger.warning(f"Fehler beim Dekodieren mit '{encoding}': {str(e)}")
+                continue
+        
+        if text_content is None:
+            # Fallback: Verwende latin-1 mit Fehlerersetzung
+            text_content = raw_content.decode('latin-1', errors='replace')
+            logger.info("Verwende Fallback-Encoding latin-1 mit Fehlerersetzung")
+        
+        # Analysiere die ersten Zeilen
+        lines = text_content.split('\n')[:20]  # Erste 20 Zeilen
+        logger.info(f"Analysiere erste {len(lines)} Zeilen")
+        
+        # Automatische Trennzeichen-Erkennung
+        separators = [';', ',', '\t', '|']
+        detected_sep = None
+        max_fields = 0
+        
+        for sep in separators:
+            field_counts = []
+            for line in lines[:10]:  # Erste 10 Zeilen
+                if line.strip():
+                    field_count = len(line.split(sep))
+                    field_counts.append(field_count)
+            
+            if field_counts:
+                avg_fields = sum(field_counts) / len(field_counts)
+                consistency = max(field_counts) - min(field_counts)
                 
-                # Versuche zuerst mit Semikolon
+                logger.info(f"Trennzeichen '{sep}': Durchschnitt {avg_fields:.1f} Felder, Konsistenz {consistency}")
+                
+                if avg_fields > max_fields and consistency <= 2:  # Akzeptiere kleine Inkonsistenzen
+                    max_fields = avg_fields
+                    detected_sep = sep
+        
+        if detected_sep is None:
+            detected_sep = ';'  # Fallback
+            logger.warning("Konnte Trennzeichen nicht automatisch erkennen, verwende ';'")
+        
+        logger.info(f"Verwende Trennzeichen '{detected_sep}'")
+        
+        # Jetzt versuche pandas mit dem erkannten Trennzeichen
+        df = None
+        for encoding in encodings:
+            try:
+                logger.info(f"Versuche pandas mit Encoding '{encoding}' und Trennzeichen '{detected_sep}'")
+                
+                # Versuche mit verschiedenen pandas-Optionen
                 try:
-                    df = pd.read_csv(file_path, sep=';', encoding=encoding, low_memory=False)
-                    logger.info(f"CSV erfolgreich mit Semikolon und Encoding '{encoding}' gelesen")
+                    df = pd.read_csv(file_path, sep=detected_sep, encoding=encoding, 
+                                   engine='python', error_bad_lines=False, warn_bad_lines=True,
+                                   on_bad_lines='skip', low_memory=False)
+                    logger.info(f"Erfolgreich mit pandas engine='python' gelesen")
                     break
                 except Exception as e:
-                    logger.warning(f"Fehler beim Lesen mit Semikolon und Encoding '{encoding}': {str(e)}, versuche mit Komma")
+                    logger.warning(f"Fehler mit engine='python': {str(e)}, versuche engine='c'")
                     try:
-                        df = pd.read_csv(file_path, sep=',', encoding=encoding, low_memory=False)
-                        logger.info(f"CSV erfolgreich mit Komma und Encoding '{encoding}' gelesen")
+                        df = pd.read_csv(file_path, sep=detected_sep, encoding=encoding,
+                                       engine='c', error_bad_lines=False, warn_bad_lines=True,
+                                       on_bad_lines='skip', low_memory=False)
+                        logger.info(f"Erfolgreich mit pandas engine='c' gelesen")
                         break
                     except Exception as e2:
-                        logger.warning(f"Fehler beim Lesen mit Komma und Encoding '{encoding}': {str(e2)}")
+                        logger.warning(f"Fehler mit engine='c': {str(e2)}")
                         continue
                         
             except Exception as e:
                 logger.warning(f"Fehler beim Lesen mit Encoding '{encoding}': {str(e)}")
                 continue
-        else:
-            # Wenn alle Encodings fehlgeschlagen sind
-            raise ValueError(f"Konnte CSV-Datei mit keinem der Encodings {encodings} lesen")
+        
+        if df is None:
+            # Letzter Versuch: Manuelles Parsing
+            logger.warning("Pandas fehlgeschlagen, versuche manuelles Parsing")
+            df = self._manual_csv_parse(file_path, detected_sep)
 
         # Bereinige Spaltennamen
         df.columns = df.columns.str.replace('"', '').str.strip()
         
         # Überprüfe, ob die Spaltennamen als einzelner String gelesen wurden
-        if len(df.columns) == 1 and ';' in df.columns[0]:
+        if len(df.columns) == 1 and detected_sep in df.columns[0]:
             # Teile die Spaltennamen
-            column_names = df.columns[0].split(';')
+            column_names = df.columns[0].split(detected_sep)
             # Erstelle ein neues DataFrame mit den korrekten Spaltennamen
-            df = pd.read_csv(file_path, sep=';', encoding=encoding, names=column_names, skiprows=1, low_memory=False)
+            df = pd.read_csv(file_path, sep=detected_sep, encoding=encoding, 
+                           names=column_names, skiprows=1, low_memory=False)
             logger.info("Spaltennamen wurden korrekt aufgeteilt")
         
         return df
+
+    def _manual_csv_parse(self, file_path: str, separator: str) -> pd.DataFrame:
+        """Manuelles CSV-Parsing als Fallback."""
+        logger.info(f"Starte manuelles CSV-Parsing mit Trennzeichen '{separator}'")
+        
+        with open(file_path, 'rb') as f:
+            raw_content = f.read()
+        
+        # Verwende latin-1 mit Fehlerersetzung
+        text_content = raw_content.decode('latin-1', errors='replace')
+        lines = text_content.split('\n')
+        
+        # Finde die erste gültige Zeile (Header)
+        header_line = None
+        data_start = 0
+        
+        for i, line in enumerate(lines):
+            if line.strip() and separator in line:
+                fields = line.split(separator)
+                if len(fields) > 1:
+                    header_line = line
+                    data_start = i + 1
+                    break
+        
+        if header_line is None:
+            raise ValueError("Konnte keine gültige Header-Zeile finden")
+        
+        # Parse Header
+        headers = [h.strip().replace('"', '') for h in header_line.split(separator)]
+        logger.info(f"Gefundene Spalten: {headers}")
+        
+        # Parse Daten
+        data = []
+        for i, line in enumerate(lines[data_start:], data_start):
+            if line.strip():
+                try:
+                    fields = line.split(separator)
+                    # Stelle sicher, dass wir genug Felder haben
+                    while len(fields) < len(headers):
+                        fields.append('')
+                    # Schneide ab falls zu viele Felder
+                    fields = fields[:len(headers)]
+                    
+                    data.append(fields)
+                except Exception as e:
+                    logger.warning(f"Fehler beim Parsen von Zeile {i}: {str(e)}")
+                    continue
+        
+        logger.info(f"Manuell {len(data)} Zeilen geparst")
+        return pd.DataFrame(data, columns=headers)
 
     def import_csv_to_db(self, csv_path: str, table_name: str = "calendar_data") -> None:
         """Importiert Daten aus einer CSV-Datei in die Datenbank."""
