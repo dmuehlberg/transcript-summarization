@@ -122,7 +122,7 @@ class DatabaseService:
             timestamp_series: Pandas Series mit UTC-Timestamps
             
         Returns:
-            Pandas Series mit Timestamps in der Zielzeitzone
+            Pandas Series mit Timestamps in der Zielzeitzone (naive datetime)
         """
         try:
             logger.info(f"Starte Zeitzonenkonvertierung für {len(timestamp_series)} Timestamps")
@@ -160,8 +160,12 @@ class DatabaseService:
                 if target_time.dt.tz is None:
                     raise ValueError("Zeitzonenkonvertierung fehlgeschlagen")
                 
-                logger.info(f"Zeitzonenkonvertierung erfolgreich: UTC -> {self.target_timezone}")
-                return target_time
+                # Entferne Zeitzoneninformationen, behalte aber die konvertierten Werte
+                naive_time = target_time.dt.tz_localize(None)
+                logger.info(f"Zeitzoneninformationen entfernt, naive datetime: {naive_time.head(3).tolist()}")
+                
+                logger.info(f"Zeitzonenkonvertierung erfolgreich: UTC -> {self.target_timezone} (naive)")
+                return naive_time
                 
             except Exception as pandas_error:
                 logger.warning(f"Pandas Zeitzonenkonvertierung fehlgeschlagen: {str(pandas_error)}")
@@ -297,8 +301,8 @@ class DatabaseService:
             # Lese CSV-Datei
             df = self.read_csv_safely(csv_path)
             
-            # Debug: Zeitzonenkonvertierung testen
-            self.debug_timezone_conversion(csv_path)
+            # Debug: Zeitzonenkonvertierung testen (nur bei Bedarf)
+            # self.debug_timezone_conversion(csv_path)
             
             # Erstelle Tabelle, falls sie noch nicht existiert
             self.create_table_if_not_exists(table_name)
@@ -332,23 +336,8 @@ class DatabaseService:
                         df_mapped[pg_field] = df_mapped[pg_field].map({'true': True, 'false': False, 'True': True, 'False': False})
             
             # Importiere in die Datenbank
-            logger.info("=== DEBUG: Vor SQLAlchemy Import ===")
-            logger.info(f"DataFrame Shape: {df_mapped.shape}")
-            logger.info(f"DataFrame Spalten: {list(df_mapped.columns)}")
-            
-            # Zeige Timestamp-Spalten vor dem Import
-            timestamp_cols = [col for col in df_mapped.columns if 'timestamp' in col.lower()]
-            for col in timestamp_cols:
-                sample_values = df_mapped[col].head(3)
-                logger.info(f"Timestamp-Spalte {col} vor DB-Import: {sample_values.tolist()}")
-                logger.info(f"Datentyp: {df_mapped[col].dtype}")
-            
             df_mapped.to_sql(table_name, self.engine, if_exists='append', index=False)
-            logger.info("=== DEBUG: Nach SQLAlchemy Import ===")
             logger.info(f"Daten erfolgreich in Tabelle {table_name} importiert")
-            
-            # Überprüfe die importierten Daten
-            self.check_imported_data(table_name)
             
         except Exception as e:
             logger.error(f"Fehler beim Importieren der CSV-Datei: {str(e)}")
