@@ -465,23 +465,44 @@ async def analyze_csv_timestamps(file: UploadFile = File(...)):
         df.columns = df.columns.str.replace('"', '').str.strip()
         
         # Überprüfe, ob die Spaltennamen als einzelner String gelesen wurden
-        if len(df.columns) == 1 and detected_sep in df.columns[0]:
-            # Teile die Spaltennamen
-            column_names = df.columns[0].split(detected_sep)
-            # Erstelle ein neues DataFrame mit den korrekten Spaltennamen
-            df = pd.read_csv(temp_file, sep=detected_sep, encoding=encoding, 
-                           names=column_names, skiprows=1, low_memory=False)
-            logger.info("Debug: Spaltennamen wurden korrekt aufgeteilt")
+        if len(df.columns) == 1:
+            logger.warning("Debug: Nur eine Spalte gefunden, versuche Header-Zeile zu erkennen")
+            first_column = df.columns[0]
+            
+            # Prüfe, ob die Spalte Kommas enthält (wahrscheinlich CSV-Header)
+            if ',' in first_column:
+                logger.info("Debug: Spalte enthält Kommas, versuche Aufteilung der Spaltennamen")
+                # Entferne Anführungszeichen und teile an Kommas
+                column_names = [col.strip().replace('"', '') for col in first_column.split(',')]
+                logger.info(f"Debug: Spaltennamen aufgeteilt: {len(column_names)} Spalten gefunden")
+                
+                # Zeige die ersten paar Spaltennamen zur Überprüfung
+                logger.info(f"Debug: Erste 5 Spaltennamen: {column_names[:5]}")
+                
+                try:
+                    # Erstelle ein neues DataFrame mit den korrekten Spaltennamen
+                    df = pd.read_csv(temp_file, sep=detected_sep, encoding=encoding, 
+                                   names=column_names, skiprows=1, low_memory=False)
+                    logger.info(f"Debug: Spaltennamen wurden korrekt aufgeteilt: {len(df.columns)} Spalten")
+                except Exception as e:
+                    logger.error(f"Debug: Fehler beim Neulesen mit aufgeteilten Spaltennamen: {str(e)}")
+                    # Fallback: Verwende die ursprüngliche Spalte
+                    pass
+            else:
+                logger.error("Debug: Konnte keine gültige Header-Zeile finden")
         
         # Rest der Analyse bleibt gleich
         analysis = {
             "filename": file.filename,
             "total_rows": len(df),
             "columns": list(df.columns),
+            "column_count": len(df.columns),
             "timestamp_columns": [],
             "sample_data": {},
             "detected_separator": detected_sep,
-            "encoding_used": encoding if 'encoding' in locals() else "unknown"
+            "encoding_used": encoding if 'encoding' in locals() else "unknown",
+            "first_row_sample": df.iloc[0].tolist() if len(df) > 0 else [],
+            "column_names_sample": list(df.columns)[:10] if len(df.columns) > 10 else list(df.columns)
         }
         
         # Suche nach Timestamp-Spalten
@@ -496,8 +517,22 @@ async def analyze_csv_timestamps(file: UploadFile = File(...)):
                 analysis["sample_data"][col] = {
                     "data_types": [str(type(val).__name__) for val in non_null_values],
                     "values": [str(val) for val in non_null_values],
-                    "null_count": df[col].isnull().sum()
+                    "null_count": df[col].isnull().sum(),
+                    "total_count": len(df[col])
                 }
+        
+        # Zeige wichtige Spalten für Debugging
+        important_columns = ['Subject', 'Start Date', 'End Date', 'Sent Representing Name']
+        analysis["important_columns_found"] = []
+        for important_col in important_columns:
+            for col in df.columns:
+                if important_col.lower() in col.lower():
+                    analysis["important_columns_found"].append({
+                        "expected": important_col,
+                        "found": col,
+                        "sample_value": str(df[col].iloc[0]) if len(df) > 0 else "N/A"
+                    })
+                    break
         
         # Entferne temporäre Datei
         os.remove(temp_file)

@@ -196,43 +196,33 @@ class DatabaseService:
         df.columns = df.columns.str.replace('"', '').str.strip()
         
         # Überprüfe, ob die Spaltennamen als einzelner String gelesen wurden
-        if len(df.columns) == 1 and detected_sep in df.columns[0]:
-            # Teile die Spaltennamen
-            column_names = df.columns[0].split(detected_sep)
-            logger.info(f"Spaltennamen aufgeteilt: {len(column_names)} Spalten gefunden")
-            
-            # Erstelle ein neues DataFrame mit den korrekten Spaltennamen
-            df = pd.read_csv(file_path, sep=detected_sep, encoding=encoding, 
-                           names=column_names, skiprows=1, low_memory=False)
-            logger.info("Spaltennamen wurden korrekt aufgeteilt")
-        elif len(df.columns) == 1:
-            # Fallback: Versuche die erste Zeile als Header zu verwenden
+        if len(df.columns) == 1:
             logger.warning("Nur eine Spalte gefunden, versuche Header-Zeile zu erkennen")
-            try:
-                # Lese die erste Zeile als Header
-                header_df = pd.read_csv(file_path, sep=detected_sep, encoding=encoding, nrows=1)
-                if len(header_df.columns) > 1:
-                    # Verwende die erste Zeile als Header
+            first_column = df.columns[0]
+            
+            # Prüfe, ob die Spalte Kommas enthält (wahrscheinlich CSV-Header)
+            if ',' in first_column:
+                logger.info("Spalte enthält Kommas, versuche Aufteilung der Spaltennamen")
+                # Entferne Anführungszeichen und teile an Kommas
+                column_names = [col.strip().replace('"', '') for col in first_column.split(',')]
+                logger.info(f"Spaltennamen aufgeteilt: {len(column_names)} Spalten gefunden")
+                
+                # Zeige die ersten paar Spaltennamen zur Überprüfung
+                logger.info(f"Erste 5 Spaltennamen: {column_names[:5]}")
+                
+                try:
+                    # Erstelle ein neues DataFrame mit den korrekten Spaltennamen
                     df = pd.read_csv(file_path, sep=detected_sep, encoding=encoding, 
-                                   header=0, low_memory=False)
-                    logger.info(f"Header-Zeile erkannt: {len(df.columns)} Spalten")
-                else:
-                    # Versuche manuelle Aufteilung der Spaltennamen
-                    logger.info("Versuche manuelle Aufteilung der Spaltennamen")
-                    first_column = df.columns[0]
-                    if ',' in first_column:
-                        # Spaltennamen sind mit Kommas getrennt
-                        column_names = [col.strip() for col in first_column.split(',')]
-                        logger.info(f"Manuell aufgeteilt: {len(column_names)} Spalten")
-                        
-                        # Erstelle ein neues DataFrame mit den korrekten Spaltennamen
-                        df = pd.read_csv(file_path, sep=detected_sep, encoding=encoding, 
-                                       names=column_names, skiprows=1, low_memory=False)
-                        logger.info("Manuelle Aufteilung erfolgreich")
-                    else:
-                        logger.error("Konnte keine gültige Header-Zeile finden")
-            except Exception as e:
-                logger.error(f"Fehler beim Header-Parsing: {str(e)}")
+                                   names=column_names, skiprows=1, low_memory=False, 
+                                   on_bad_lines='skip', error_bad_lines=False)
+                    logger.info(f"Spaltennamen wurden korrekt aufgeteilt: {len(df.columns)} Spalten")
+                except Exception as e:
+                    logger.error(f"Fehler beim Neulesen mit aufgeteilten Spaltennamen: {str(e)}")
+                    # Fallback: Manuelles Parsing mit den aufgeteilten Spaltennamen
+                    logger.info("Versuche manuelles Parsing mit aufgeteilten Spaltennamen")
+                    df = self._manual_csv_parse_with_headers(file_path, detected_sep, column_names)
+            else:
+                logger.error("Konnte keine gültige Header-Zeile finden")
         
         return df
 
@@ -310,6 +300,57 @@ class DatabaseService:
             # Fallback: Leeres DataFrame
             return pd.DataFrame(columns=[f"Column_{i}" for i in range(5)])
 
+    def _manual_csv_parse_with_headers(self, file_path: str, separator: str, headers: list) -> pd.DataFrame:
+        """Manuelles CSV-Parsing mit vorgegebenen Headern."""
+        logger.info(f"Starte manuelles CSV-Parsing mit {len(headers)} Headern")
+        
+        try:
+            with open(file_path, 'rb') as f:
+                raw_content = f.read()
+            
+            # Verwende latin-1 mit Fehlerersetzung
+            text_content = raw_content.decode('latin-1', errors='replace')
+            lines = text_content.split('\n')
+            
+            logger.info(f"Datei hat {len(lines)} Zeilen")
+            
+            # Überspringe die Header-Zeile und parse Daten
+            data = []
+            max_lines = min(1000, len(lines))  # Begrenze auf 1000 Zeilen für Performance
+            
+            for i, line in enumerate(lines[1:max_lines], 1):  # Überspringe erste Zeile (Header)
+                if line.strip():
+                    try:
+                        fields = line.split(separator)
+                        # Stelle sicher, dass wir genug Felder haben
+                        while len(fields) < len(headers):
+                            fields.append('')
+                        # Schneide ab falls zu viele Felder
+                        fields = fields[:len(headers)]
+                        
+                        data.append(fields)
+                        
+                        # Logge Fortschritt
+                        if len(data) % 100 == 0:
+                            logger.info(f"{len(data)} Zeilen geparst")
+                            
+                    except Exception as e:
+                        logger.warning(f"Fehler beim Parsen von Zeile {i}: {str(e)}")
+                        continue
+            
+            logger.info(f"Manuell {len(data)} Zeilen geparst")
+            
+            if not data:
+                logger.warning("Keine Daten gefunden, erstelle leeres DataFrame")
+                return pd.DataFrame(columns=headers)
+            
+            return pd.DataFrame(data, columns=headers)
+            
+        except Exception as e:
+            logger.error(f"Kritischer Fehler beim manuellen Parsing: {str(e)}")
+            # Fallback: Leeres DataFrame mit den Headern
+            return pd.DataFrame(columns=headers)
+
     def import_csv_to_db(self, csv_path: str, table_name: str = "calendar_data") -> None:
         """Importiert Daten aus einer CSV-Datei in die Datenbank."""
         try:
@@ -337,30 +378,75 @@ class DatabaseService:
             
             # Finde übereinstimmende Spalten
             matching_columns = {}
+            logger.info(f"Suche nach Spalten-Mappings...")
+            logger.info(f"CSV-Spalten ({len(df.columns)}): {list(df.columns)}")
+            logger.info(f"Mapping-Erwartungen: {[info['csv_field'] for info in self.mapping.values()]}")
+            
             for csv_col in df.columns:
-                csv_col_lower = csv_col.lower().strip()
+                csv_col_clean = csv_col.strip().replace('"', '')
+                csv_col_lower = csv_col_clean.lower()
+                
                 for mapping_key, mapping_info in self.mapping.items():
-                    if mapping_info['csv_field'].lower().strip() == csv_col_lower:
+                    mapping_field_clean = mapping_info['csv_field'].strip()
+                    mapping_field_lower = mapping_field_clean.lower()
+                    
+                    if mapping_field_lower == csv_col_lower:
                         matching_columns[mapping_key] = csv_col
-                        logger.info(f"Spalte gefunden: '{csv_col}' -> '{mapping_key}'")
+                        logger.info(f"Spalte gefunden: '{csv_col_clean}' -> '{mapping_key}'")
                         break
             
             logger.info(f"Gefundene Spalten-Mappings: {matching_columns}")
             
-            # Debug: Zeige alle CSV-Spalten
-            logger.info(f"Alle CSV-Spalten: {[col for col in df.columns]}")
-            logger.info(f"Mapping-Erwartungen: {[info['csv_field'] for info in self.mapping.values()]}")
-            
             if not matching_columns:
-                raise ValueError("Keine übereinstimmenden Spalten zwischen CSV und Mapping gefunden")
+                # Versuche Fuzzy-Matching für wichtige Felder
+                logger.warning("Keine exakten Matches gefunden, versuche Fuzzy-Matching")
+                important_fields = ['Subject', 'Start Date', 'End Date', 'Sent Representing Name']
+                
+                for field in important_fields:
+                    field_lower = field.lower()
+                    for csv_col in df.columns:
+                        csv_col_clean = csv_col.strip().replace('"', '')
+                        csv_col_lower = csv_col_clean.lower()
+                        
+                        if field_lower in csv_col_lower or csv_col_lower in field_lower:
+                            # Finde das entsprechende Mapping
+                            for mapping_key, mapping_info in self.mapping.items():
+                                if mapping_info['csv_field'].lower() == field_lower:
+                                    matching_columns[mapping_key] = csv_col
+                                    logger.info(f"Fuzzy-Match gefunden: '{csv_col_clean}' -> '{mapping_key}'")
+                                    break
+                            break
+                
+                if not matching_columns:
+                    raise ValueError("Keine übereinstimmenden Spalten zwischen CSV und Mapping gefunden")
+            
+            # Debug: Zeige die gefundenen Spalten
+            logger.info(f"Gefundene Spalten-Mappings: {matching_columns}")
+            logger.info(f"DataFrame Spalten: {list(df.columns)}")
+            logger.info(f"DataFrame Shape: {df.shape}")
             
             # Wähle nur die gemappten Spalten aus
-            df_mapped = df[list(matching_columns.values())].copy()
-            df_mapped.columns = [mapping_key for mapping_key in matching_columns.keys()]
+            available_columns = []
+            available_mappings = {}
+            
+            for mapping_key, csv_col in matching_columns.items():
+                if csv_col in df.columns:
+                    available_columns.append(csv_col)
+                    available_mappings[mapping_key] = csv_col
+                    logger.info(f"Spalte verfügbar: {csv_col} -> {mapping_key}")
+                else:
+                    logger.warning(f"Spalte nicht verfügbar: {csv_col}")
+            
+            if not available_columns:
+                raise ValueError("Keine der gemappten Spalten ist im DataFrame verfügbar")
+            
+            logger.info(f"Verfügbare Spalten: {available_columns}")
+            df_mapped = df[available_columns].copy()
+            df_mapped.columns = [mapping_key for mapping_key in available_mappings.keys()]
             
             # Konvertiere Datentypen mit Zeitzonenunterstützung
             for field_name, field_info in self.mapping.items():
-                if field_name in df_mapped.columns:
+                if field_name in df_mapped.columns and field_name in available_mappings:
                     pg_field = field_info['pg_field']
                     pg_type = field_info.get('pg_type', 'TEXT')
                     
@@ -402,7 +488,7 @@ class DatabaseService:
             # Prüfe auf NULL-Werte in Timestamp-Feldern
             timestamp_fields = [field_info['pg_field'] for field_info in self.mapping.values() if field_info.get('pg_type') == 'timestamp']
             for field in timestamp_fields:
-                if field in df_mapped.columns:
+                if field in df_mapped.columns and field in available_mappings:
                     null_count = df_mapped[field].isna().sum()
                     total_count = len(df_mapped[field])
                     logger.info(f"Feld {field}: {null_count}/{total_count} NULL-Werte ({null_count/total_count*100:.1f}%)")
