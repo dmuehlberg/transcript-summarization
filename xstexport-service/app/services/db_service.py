@@ -199,10 +199,40 @@ class DatabaseService:
         if len(df.columns) == 1 and detected_sep in df.columns[0]:
             # Teile die Spaltennamen
             column_names = df.columns[0].split(detected_sep)
+            logger.info(f"Spaltennamen aufgeteilt: {len(column_names)} Spalten gefunden")
+            
             # Erstelle ein neues DataFrame mit den korrekten Spaltennamen
             df = pd.read_csv(file_path, sep=detected_sep, encoding=encoding, 
                            names=column_names, skiprows=1, low_memory=False)
             logger.info("Spaltennamen wurden korrekt aufgeteilt")
+        elif len(df.columns) == 1:
+            # Fallback: Versuche die erste Zeile als Header zu verwenden
+            logger.warning("Nur eine Spalte gefunden, versuche Header-Zeile zu erkennen")
+            try:
+                # Lese die erste Zeile als Header
+                header_df = pd.read_csv(file_path, sep=detected_sep, encoding=encoding, nrows=1)
+                if len(header_df.columns) > 1:
+                    # Verwende die erste Zeile als Header
+                    df = pd.read_csv(file_path, sep=detected_sep, encoding=encoding, 
+                                   header=0, low_memory=False)
+                    logger.info(f"Header-Zeile erkannt: {len(df.columns)} Spalten")
+                else:
+                    # Versuche manuelle Aufteilung der Spaltennamen
+                    logger.info("Versuche manuelle Aufteilung der Spaltennamen")
+                    first_column = df.columns[0]
+                    if ',' in first_column:
+                        # Spaltennamen sind mit Kommas getrennt
+                        column_names = [col.strip() for col in first_column.split(',')]
+                        logger.info(f"Manuell aufgeteilt: {len(column_names)} Spalten")
+                        
+                        # Erstelle ein neues DataFrame mit den korrekten Spaltennamen
+                        df = pd.read_csv(file_path, sep=detected_sep, encoding=encoding, 
+                                       names=column_names, skiprows=1, low_memory=False)
+                        logger.info("Manuelle Aufteilung erfolgreich")
+                    else:
+                        logger.error("Konnte keine gültige Header-Zeile finden")
+            except Exception as e:
+                logger.error(f"Fehler beim Header-Parsing: {str(e)}")
         
         return df
 
