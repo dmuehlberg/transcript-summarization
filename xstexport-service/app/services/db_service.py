@@ -8,7 +8,7 @@ import time
 import numpy as np
 import csv
 import petl as etl
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, List, Optional
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
@@ -23,6 +23,8 @@ class DatabaseService:
         self.engine = None
         self.mapping = {}
         self.mapping_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config', 'calendar_mapping.json')
+        # Zeitzone aus Umgebungsvariable oder Standard (Berlin)
+        self.target_timezone = os.getenv('TARGET_TIMEZONE', 'Europe/Berlin')
         self.wait_for_db()
         self.load_mapping()
         self.create_table_if_not_exists()
@@ -112,6 +114,35 @@ class DatabaseService:
         
         return df
 
+    def convert_utc_to_target_timezone(self, timestamp_series: pd.Series) -> pd.Series:
+        """
+        Konvertiert UTC-Timestamps zur Zielzeitzone.
+        
+        Args:
+            timestamp_series: Pandas Series mit UTC-Timestamps
+            
+        Returns:
+            Pandas Series mit Timestamps in der Zielzeitzone
+        """
+        try:
+            # Konvertiere zu datetime, falls es noch nicht ist
+            if timestamp_series.dtype == 'object':
+                timestamp_series = pd.to_datetime(timestamp_series, errors='coerce')
+            
+            # Füge UTC-Zeitzone hinzu (falls nicht vorhanden)
+            if timestamp_series.dt.tz is None:
+                timestamp_series = timestamp_series.dt.tz_localize('UTC')
+            
+            # Konvertiere zur Zielzeitzone
+            target_time = timestamp_series.dt.tz_convert(self.target_timezone)
+            
+            logger.info(f"Zeitzonenkonvertierung erfolgreich: UTC -> {self.target_timezone}")
+            return target_time
+            
+        except Exception as e:
+            logger.warning(f"Fehler bei der Zeitzonenkonvertierung: {str(e)}. Verwende ursprüngliche Timestamps.")
+            return timestamp_series
+
     def import_csv_to_db(self, csv_path: str, table_name: str = "calendar_data") -> None:
         """Importiert Daten aus einer CSV-Datei in die Datenbank."""
         try:
@@ -140,14 +171,16 @@ class DatabaseService:
             df_mapped = df[list(column_mapping.keys())].copy()
             df_mapped.columns = [column_mapping[col] for col in df_mapped.columns]
             
-            # Konvertiere Datentypen
+            # Konvertiere Datentypen und Zeitzonen
             for field_name, field_info in self.mapping.items():
                 if field_name in df.columns:
                     pg_field = field_info['pg_field']
                     pg_type = field_info.get('pg_type', 'TEXT')
                     
-                    if pg_type == 'TIMESTAMP':
-                        df_mapped[pg_field] = pd.to_datetime(df_mapped[pg_field], errors='coerce')
+                    if 'timestamp' in pg_type.lower():
+                        # Konvertiere Timestamps von UTC zur Zielzeitzone
+                        df_mapped[pg_field] = self.convert_utc_to_target_timezone(df_mapped[pg_field])
+                        logger.info(f"Timestamp-Feld {pg_field} von UTC zu {self.target_timezone} konvertiert")
                     elif pg_type == 'INTEGER':
                         df_mapped[pg_field] = pd.to_numeric(df_mapped[pg_field], errors='coerce').fillna(0).astype(int)
                     elif pg_type == 'BOOLEAN':
