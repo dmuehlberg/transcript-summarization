@@ -153,14 +153,14 @@ class DatabaseService:
                 # Versuche mit verschiedenen pandas-Optionen
                 try:
                     df = pd.read_csv(file_path, sep=detected_sep, encoding=encoding, 
-                                   engine='python', on_bad_lines='skip', low_memory=False)
+                                   engine='python', on_bad_lines='skip')
                     logger.info(f"Erfolgreich mit pandas engine='python' gelesen")
                     break
                 except Exception as e:
                     logger.warning(f"Fehler mit engine='python': {str(e)}, versuche engine='c'")
                     try:
                         df = pd.read_csv(file_path, sep=detected_sep, encoding=encoding,
-                                       engine='c', on_bad_lines='skip', low_memory=False)
+                                       engine='c', on_bad_lines='skip')
                         logger.info(f"Erfolgreich mit pandas engine='c' gelesen")
                         break
                     except Exception as e2:
@@ -194,51 +194,75 @@ class DatabaseService:
         """Manuelles CSV-Parsing als Fallback."""
         logger.info(f"Starte manuelles CSV-Parsing mit Trennzeichen '{separator}'")
         
-        with open(file_path, 'rb') as f:
-            raw_content = f.read()
-        
-        # Verwende latin-1 mit Fehlerersetzung
-        text_content = raw_content.decode('latin-1', errors='replace')
-        lines = text_content.split('\n')
-        
-        # Finde die erste gültige Zeile (Header)
-        header_line = None
-        data_start = 0
-        
-        for i, line in enumerate(lines):
-            if line.strip() and separator in line:
-                fields = line.split(separator)
-                if len(fields) > 1:
-                    header_line = line
-                    data_start = i + 1
-                    break
-        
-        if header_line is None:
-            raise ValueError("Konnte keine gültige Header-Zeile finden")
-        
-        # Parse Header
-        headers = [h.strip().replace('"', '') for h in header_line.split(separator)]
-        logger.info(f"Gefundene Spalten: {headers}")
-        
-        # Parse Daten
-        data = []
-        for i, line in enumerate(lines[data_start:], data_start):
-            if line.strip():
-                try:
+        try:
+            with open(file_path, 'rb') as f:
+                raw_content = f.read()
+            
+            # Verwende latin-1 mit Fehlerersetzung
+            text_content = raw_content.decode('latin-1', errors='replace')
+            lines = text_content.split('\n')
+            
+            logger.info(f"Datei hat {len(lines)} Zeilen")
+            
+            # Finde die erste gültige Zeile (Header)
+            header_line = None
+            data_start = 0
+            
+            for i, line in enumerate(lines[:100]):  # Begrenze auf erste 100 Zeilen für Header-Suche
+                if line.strip() and separator in line:
                     fields = line.split(separator)
-                    # Stelle sicher, dass wir genug Felder haben
-                    while len(fields) < len(headers):
-                        fields.append('')
-                    # Schneide ab falls zu viele Felder
-                    fields = fields[:len(headers)]
-                    
-                    data.append(fields)
-                except Exception as e:
-                    logger.warning(f"Fehler beim Parsen von Zeile {i}: {str(e)}")
-                    continue
-        
-        logger.info(f"Manuell {len(data)} Zeilen geparst")
-        return pd.DataFrame(data, columns=headers)
+                    if len(fields) > 1:
+                        header_line = line
+                        data_start = i + 1
+                        logger.info(f"Header gefunden in Zeile {i}: {len(fields)} Felder")
+                        break
+            
+            if header_line is None:
+                logger.error("Konnte keine gültige Header-Zeile finden")
+                # Fallback: Erstelle einfache Spaltennamen
+                headers = [f"Column_{i}" for i in range(10)]
+                logger.info(f"Verwende Fallback-Header: {headers}")
+            else:
+                # Parse Header
+                headers = [h.strip().replace('"', '') for h in header_line.split(separator)]
+                logger.info(f"Gefundene Spalten: {headers}")
+            
+            # Parse Daten mit Begrenzung
+            data = []
+            max_lines = min(1000, len(lines))  # Begrenze auf 1000 Zeilen
+            
+            for i, line in enumerate(lines[data_start:max_lines], data_start):
+                if line.strip():
+                    try:
+                        fields = line.split(separator)
+                        # Stelle sicher, dass wir genug Felder haben
+                        while len(fields) < len(headers):
+                            fields.append('')
+                        # Schneide ab falls zu viele Felder
+                        fields = fields[:len(headers)]
+                        
+                        data.append(fields)
+                        
+                        # Logge Fortschritt
+                        if len(data) % 100 == 0:
+                            logger.info(f"{len(data)} Zeilen geparst")
+                            
+                    except Exception as e:
+                        logger.warning(f"Fehler beim Parsen von Zeile {i}: {str(e)}")
+                        continue
+            
+            logger.info(f"Manuell {len(data)} Zeilen geparst")
+            
+            if not data:
+                logger.warning("Keine Daten gefunden, erstelle leeres DataFrame")
+                return pd.DataFrame(columns=headers)
+            
+            return pd.DataFrame(data, columns=headers)
+            
+        except Exception as e:
+            logger.error(f"Kritischer Fehler beim manuellen Parsing: {str(e)}")
+            # Fallback: Leeres DataFrame
+            return pd.DataFrame(columns=[f"Column_{i}" for i in range(5)])
 
     def import_csv_to_db(self, csv_path: str, table_name: str = "calendar_data") -> None:
         """Importiert Daten aus einer CSV-Datei in die Datenbank."""
