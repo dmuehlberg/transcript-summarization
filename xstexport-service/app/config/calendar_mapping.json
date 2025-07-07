@@ -1,0 +1,156 @@
+{
+    "mappings": {
+        "Subject": {
+            "pg_field": "subject",
+            "pg_type": "text"
+        },
+        "Client Submit Time": {
+            "pg_field": "client_submit_time",
+            "pg_type": "timestamp with time zone"
+        },
+        "Sent Representing Name": {
+            "pg_field": "sent_representing_name",
+            "pg_type": "text"
+        },
+        "Start Date": {
+            "pg_field": "start_date",
+            "pg_type": "timestamp with time zone"
+        },
+        "End Date": {
+            "pg_field": "end_date",
+            "pg_type": "timestamp with time zone"
+        },
+        "Conversation Topic": {
+            "pg_field": "conversation_topic",
+            "pg_type": "text"
+        },
+        "Sender Name": {
+            "pg_field": "sender_name",
+            "pg_type": "text"
+        },
+        "Display Cc": {
+            "pg_field": "display_cc",
+            "pg_type": "text"
+        },
+        "Display To": {
+            "pg_field": "display_to",
+            "pg_type": "text"
+        },
+        "Unknown (0x0e05)": {
+            "pg_field": "unknown_0e05",
+            "pg_type": "text"
+        },
+        "Message Delivery Time": {
+            "pg_field": "message_delivery_time",
+            "pg_type": "timestamp with time zone"
+        },
+        "Unknown (0x0f02)": {
+            "pg_field": "unknown_0f02",
+            "pg_type": "timestamp with time zone"
+        },
+        "Unknown (0x0f0a)": {
+            "pg_field": "unknown_0f0a",
+            "pg_type": "timestamp with time zone"
+        },
+        "Last Verb Execution Time": {
+            "pg_field": "last_verb_execution_time",
+            "pg_type": "timestamp with time zone"
+        },
+        "Creation Time": {
+            "pg_field": "creation_time",
+            "pg_type": "timestamp with time zone"
+        },
+        "Last Modification Time": {
+            "pg_field": "last_modification_time",
+            "pg_type": "timestamp with time zone"
+        },
+        "Unknown (0x3fd9)": {
+            "pg_field": "unknown_3fd9",
+            "pg_type": "text"
+        },
+        "Unknown (0x4038)": {
+            "pg_field": "unknown_4038",
+            "pg_type": "text"
+        },
+        "Unknown (0x4039)": {
+            "pg_field": "unknown_4039",
+            "pg_type": "text"
+        },
+        "Sender Smtp Address": {
+            "pg_field": "sender_smtp_address",
+            "pg_type": "text"
+        },
+        "Sent Representing Smtp Address": {
+            "pg_field": "sent_representing_smtp_address",
+            "pg_type": "text"
+        },
+        "User Entry Id": {
+            "pg_field": "user_entry_id",
+            "pg_type": "text"
+        },
+        "Address Book Folder Pathname": {
+            "pg_field": "address_book_folder_pathname",
+            "pg_type": "text"
+        },
+        "Address Book Manager": {
+            "pg_field": "address_book_manager",
+            "pg_type": "text"
+        },
+        "File Under Id": {
+            "pg_field": "file_under_id",
+            "pg_type": "text"
+        },
+        "Contact Item Data": {
+            "pg_field": "contact_item_data",
+            "pg_type": "text"
+        },
+        "Has Picture": {
+            "pg_field": "has_picture",
+            "pg_type": "text"
+        },
+        "Unknown (0x8016)": {
+            "pg_field": "unknown_8016",
+            "pg_type": "text"
+        },
+        "Unknown (0x8021)": {
+            "pg_field": "unknown_8021",
+            "pg_type": "text"
+        },
+        "Postal Address Id": {
+            "pg_field": "postal_address_id",
+            "pg_type": "text"
+        },
+        "Unknown (0x802a)": {
+            "pg_field": "unknown_802a",
+            "pg_type": "text"
+        },
+        "Html": {
+            "pg_field": "html",
+            "pg_type": "text"
+        },
+        "Instant Messaging Address": {
+            "pg_field": "instant_messaging_address",
+            "pg_type": "text"
+        },
+        "Unknown (0x8063)": {
+            "pg_field": "unknown_8063",
+            "pg_type": "text"
+        },
+        "Unknown (0x806c)": {
+            "pg_field": "unknown_806c",
+            "pg_type": "text"
+        },
+        "Unknown (0x80b0)": {
+            "pg_field": "unknown_80b0",
+            "pg_type": "text"
+        },
+        "Unknown (0x816b)": {
+            "pg_field": "unknown_816b",
+            "pg_type": "text"
+        },
+        "Unknown (0x817a)": {
+            "pg_field": "unknown_817a",
+            "pg_type": "text"
+        }
+    }
+} 
