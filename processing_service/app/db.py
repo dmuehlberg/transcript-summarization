@@ -1,7 +1,7 @@
 import os
 import psycopg2
 from dotenv import load_dotenv
-from datetime import datetime
+from datetime import datetime, timedelta
 import re
 
 load_dotenv()
@@ -144,7 +144,12 @@ def upsert_mp3_file(filepath):
 def update_transcription_meeting_info(recording_date, info_dict):
     conn = get_db_connection()
     cur = conn.cursor()
-    # Update-Statement für die neuen Felder und participants
+    
+    # Zeitbereich von ±5 Minuten berechnen
+    time_window_start = recording_date - timedelta(minutes=5)
+    time_window_end = recording_date + timedelta(minutes=5)
+    
+    # Update-Statement für die neuen Felder und participants mit Zeitbereich
     cur.execute("""
         UPDATE transcriptions
         SET meeting_start_date = %s,
@@ -153,7 +158,7 @@ def update_transcription_meeting_info(recording_date, info_dict):
             meeting_location = %s,
             invitation_text = %s,
             participants = %s
-        WHERE recording_date = %s
+        WHERE recording_date BETWEEN %s AND %s
     """, (
         info_dict.get("meeting_start_date"),
         info_dict.get("meeting_end_date"),
@@ -161,7 +166,8 @@ def update_transcription_meeting_info(recording_date, info_dict):
         info_dict.get("meeting_location"),
         info_dict.get("invitation_text"),
         info_dict.get("participants"),
-        recording_date
+        time_window_start,
+        time_window_end
     ))
     conn.commit()
     cur.close()

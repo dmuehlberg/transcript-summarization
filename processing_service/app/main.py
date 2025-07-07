@@ -11,7 +11,7 @@ import json
 import os
 import glob
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 
 app = FastAPI()
 
@@ -180,19 +180,26 @@ def get_meeting_info(request: MeetingInfoRequest):
             recording_date = datetime.strptime(request.recording_date, "%Y-%m-%d %H-%M")
         except Exception:
             raise HTTPException(status_code=400, detail="recording_date muss im Format YYYY-MM-DD HH-MM sein")
+        
+        # Zeitbereich von ±5 Minuten berechnen
+        time_window_start = recording_date - timedelta(minutes=5)
+        time_window_end = recording_date + timedelta(minutes=5)
+        
         conn = get_db_connection()
         cur = conn.cursor()
-        # Suche nach passendem Eintrag in calendar_data
+        # Suche nach passendem Eintrag in calendar_data mit Zeitbereich
         cur.execute("""
             SELECT start_date, end_date, subject, has_picture, user_entry_id, display_to, display_cc
             FROM calendar_data
-            WHERE start_date = %s
-        """, (recording_date,))
+            WHERE start_date BETWEEN %s AND %s
+            ORDER BY ABS(EXTRACT(EPOCH FROM (start_date - %s))) ASC
+            LIMIT 1
+        """, (time_window_start, time_window_end, recording_date))
         row = cur.fetchone()
         if not row:
             cur.close()
             conn.close()
-            raise HTTPException(status_code=404, detail="Kein Meeting mit diesem Startzeitpunkt gefunden.")
+            raise HTTPException(status_code=404, detail="Kein Meeting im Zeitbereich ±5 Minuten um diesen Startzeitpunkt gefunden.")
         start_date, end_date, subject, has_picture, user_entry_id, display_to, display_cc = row
         # Teilnehmernamen kombinieren und deduplizieren (Logik wie in sync_recipient_names)
         import re as _re
