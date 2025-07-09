@@ -13,6 +13,7 @@ from typing import Dict, Any, List, Optional
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
 import tempfile
+import pytz
 
 logger = logging.getLogger(__name__)
 
@@ -146,8 +147,18 @@ class DatabaseService:
                     pg_field = field_info['pg_field']
                     pg_type = field_info.get('pg_type', 'TEXT')
                     
-                    if pg_type == 'TIMESTAMP':
+                    if pg_type == 'TIMESTAMP' or pg_type == 'timestamp with time zone':
+                        # Konvertiere zu datetime und setze UTC Zeitzone
                         df_mapped[pg_field] = pd.to_datetime(df_mapped[pg_field], errors='coerce')
+                        # Setze UTC Zeitzone für alle Datumsfelder (da PST-Daten in UTC+0 kommen)
+                        # Nur setzen wenn noch keine Zeitzone gesetzt ist
+                        if df_mapped[pg_field].dt.tz is None:
+                            df_mapped[pg_field] = df_mapped[pg_field].dt.tz_localize('UTC', ambiguous='infer', nonexistent='shift_forward')
+                            logger.info(f"Zeitzone für {pg_field} auf UTC gesetzt")
+                        else:
+                            # Falls bereits Zeitzone gesetzt ist, konvertiere zu UTC
+                            df_mapped[pg_field] = df_mapped[pg_field].dt.tz_convert('UTC')
+                            logger.info(f"Zeitzone für {pg_field} zu UTC konvertiert")
                     elif pg_type == 'INTEGER':
                         df_mapped[pg_field] = pd.to_numeric(df_mapped[pg_field], errors='coerce').fillna(0).astype(int)
                     elif pg_type == 'BOOLEAN':
