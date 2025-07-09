@@ -37,7 +37,7 @@ def init_db():
             id SERIAL PRIMARY KEY,
             filename TEXT UNIQUE,
             transcription_inputpath TEXT,
-            recording_date TIMESTAMP,
+            recording_date TIMESTAMPTZ,
             detected_language TEXT,
             set_language TEXT,
             transcript_text TEXT,
@@ -98,6 +98,10 @@ def upsert_mp3_file(filepath):
     filename = os.path.basename(filepath)
     transcription_inputpath = filepath  # kompletter Pfad inkl. Dateiname
     
+    # Zeitzone aus .env laden
+    timezone_str = os.getenv("TIMEZONE", "Europe/Berlin")
+    local_tz = pytz.timezone(timezone_str)
+    
     # Zeitstempel aus Dateiname extrahieren
     base_name = os.path.splitext(filename)[0]
     m = re.match(r"(\d{4}-\d{2}-\d{2}) (\d{2}-\d{2}-\d{2})", base_name)
@@ -105,10 +109,12 @@ def upsert_mp3_file(filepath):
         date_str = m.group(1) + " " + m.group(2).replace("-", ":")
         try:
             recording_date = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
+            # Mit lokaler Zeitzone versehen
+            recording_date = local_tz.localize(recording_date)
         except Exception:
-            recording_date = datetime.utcnow()
+            recording_date = datetime.utcnow().replace(tzinfo=pytz.UTC)
     else:
-        recording_date = datetime.utcnow()
+        recording_date = datetime.utcnow().replace(tzinfo=pytz.UTC)
     
     conn = get_db_connection()
     cur = conn.cursor()
@@ -125,7 +131,7 @@ def upsert_mp3_file(filepath):
     """, (
         filename,
         transcription_inputpath,
-        recording_date,  # Jetzt verwenden wir das extrahierte Datum
+        recording_date,  # Jetzt mit Zeitzoneninformation
         None,  # detected_language
         None,  # set_language
         None,  # transcript_text
@@ -146,7 +152,7 @@ def update_transcription_meeting_info(recording_date, info_dict):
     conn = get_db_connection()
     cur = conn.cursor()
     
-    # recording_date ist bereits in der lokalen Zeitzone (wie es in der transcriptions Tabelle gespeichert ist)
+    # recording_date ist jetzt bereits mit Zeitzoneninformation
     # Wir verwenden es direkt für die Suche
     recording_date_for_search = recording_date
     

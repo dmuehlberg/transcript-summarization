@@ -106,6 +106,11 @@ def update_transcript_data():
     base_dir = "/data/shared/transcription_finished"
     json_files = glob.glob(os.path.join(base_dir, "*.json"))
     processed = []
+    
+    # Zeitzone aus .env laden
+    timezone_str = os.getenv("TIMEZONE", "Europe/Berlin")
+    local_tz = pytz.timezone(timezone_str)
+    
     for json_path in json_files:
         base_name = os.path.splitext(os.path.basename(json_path))[0]
         txt_path = os.path.join(base_dir, base_name + ".txt")
@@ -131,10 +136,12 @@ def update_transcript_data():
             date_str = m.group(1) + " " + m.group(2).replace("-", ":")
             try:
                 recording_date = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
+                # Mit lokaler Zeitzone versehen
+                recording_date = local_tz.localize(recording_date)
             except Exception:
-                recording_date = datetime.now()
+                recording_date = datetime.utcnow().replace(tzinfo=pytz.UTC)
         else:
-            recording_date = datetime.now()
+            recording_date = datetime.utcnow().replace(tzinfo=pytz.UTC)
         # Datenbank-Eintrag
         data = {
             "filepath": txt_path,
