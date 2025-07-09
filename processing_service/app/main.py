@@ -206,10 +206,11 @@ def get_meeting_info(request: MeetingInfoRequest):
         cur = conn.cursor()
         
         # Suche nach passendem Eintrag in calendar_data mit UTC-Vergleich
-        # Erweitere die Suche um +/- 5 Minuten für flexiblere Zuordnung
+        # Erweitere die Suche um +/- X Minuten für flexiblere Zuordnung (konfigurierbar über .env)
         from datetime import timedelta
-        time_window_start = recording_date_utc - timedelta(minutes=5)
-        time_window_end = recording_date_utc + timedelta(minutes=5)
+        time_window_minutes = int(os.getenv("MEETING_TIME_WINDOW_MINUTES", "5"))
+        time_window_start = recording_date_utc - timedelta(minutes=time_window_minutes)
+        time_window_end = recording_date_utc + timedelta(minutes=time_window_minutes)
         
         cur.execute("""
             SELECT start_date, end_date, subject, has_picture, user_entry_id, display_to, display_cc
@@ -222,7 +223,7 @@ def get_meeting_info(request: MeetingInfoRequest):
         if not row:
             cur.close()
             conn.close()
-            raise HTTPException(status_code=404, detail="Kein Meeting im Zeitfenster von +/- 5 Minuten um den angegebenen Zeitpunkt gefunden.")
+            raise HTTPException(status_code=404, detail=f"Kein Meeting im Zeitfenster von +/- {time_window_minutes} Minuten um den angegebenen Zeitpunkt gefunden.")
         start_date, end_date, subject, has_picture, user_entry_id, display_to, display_cc = row
         # Teilnehmernamen kombinieren und deduplizieren (Logik wie in sync_recipient_names)
         import re as _re

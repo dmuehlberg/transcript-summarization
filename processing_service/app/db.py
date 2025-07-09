@@ -156,10 +156,11 @@ def update_transcription_meeting_info(recording_date, info_dict):
     # Wir verwenden es direkt für die Suche
     recording_date_for_search = recording_date
     
-    # Erweitere die Suche um +/- 5 Minuten für flexiblere Zuordnung
+    # Erweitere die Suche um +/- X Minuten für flexiblere Zuordnung (konfigurierbar über .env)
     from datetime import timedelta
-    time_window_start = recording_date_for_search - timedelta(minutes=5)
-    time_window_end = recording_date_for_search + timedelta(minutes=5)
+    time_window_minutes = int(os.getenv("MEETING_TIME_WINDOW_MINUTES", "5"))
+    time_window_start = recording_date_for_search - timedelta(minutes=time_window_minutes)
+    time_window_end = recording_date_for_search + timedelta(minutes=time_window_minutes)
     
     # Update-Statement für die neuen Felder und participants
     # Verwende das gleiche Zeitfenster wie in get_meeting_info
