@@ -156,7 +156,13 @@ def update_transcription_meeting_info(recording_date, info_dict):
     # Wir verwenden es direkt für die Suche
     recording_date_for_search = recording_date
     
+    # Erweitere die Suche um +/- 5 Minuten für flexiblere Zuordnung
+    from datetime import timedelta
+    time_window_start = recording_date_for_search - timedelta(minutes=5)
+    time_window_end = recording_date_for_search + timedelta(minutes=5)
+    
     # Update-Statement für die neuen Felder und participants
+    # Verwende das gleiche Zeitfenster wie in get_meeting_info
     cur.execute("""
         UPDATE transcriptions
         SET meeting_start_date = %s,
@@ -165,7 +171,7 @@ def update_transcription_meeting_info(recording_date, info_dict):
             meeting_location = %s,
             invitation_text = %s,
             participants = %s
-        WHERE recording_date = %s
+        WHERE recording_date BETWEEN %s AND %s
     """, (
         info_dict.get("meeting_start_date"),
         info_dict.get("meeting_end_date"),
@@ -173,7 +179,8 @@ def update_transcription_meeting_info(recording_date, info_dict):
         info_dict.get("meeting_location"),
         info_dict.get("invitation_text"),
         info_dict.get("participants"),
-        recording_date_for_search
+        time_window_start,
+        time_window_end
     ))
     conn.commit()
     cur.close()
