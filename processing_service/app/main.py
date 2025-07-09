@@ -12,6 +12,10 @@ import os
 import glob
 import re
 from datetime import datetime
+import pytz
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI()
 
@@ -180,14 +184,26 @@ def get_meeting_info(request: MeetingInfoRequest):
             recording_date = datetime.strptime(request.recording_date, "%Y-%m-%d %H-%M")
         except Exception:
             raise HTTPException(status_code=400, detail="recording_date muss im Format YYYY-MM-DD HH-MM sein")
+        
+        # Zeitzone aus .env laden
+        timezone_str = os.getenv("TIMEZONE", "Europe/Berlin")
+        local_tz = pytz.timezone(timezone_str)
+        
+        # recording_date mit lokaler Zeitzone versehen
+        recording_date_local = local_tz.localize(recording_date)
+        
+        # In UTC konvertieren für Vergleich mit Datenbank (die in UTC+0 gespeichert sind)
+        recording_date_utc = recording_date_local.astimezone(pytz.UTC)
+        
         conn = get_db_connection()
         cur = conn.cursor()
-        # Suche nach passendem Eintrag in calendar_data
+        
+        # Suche nach passendem Eintrag in calendar_data mit UTC-Vergleich
         cur.execute("""
             SELECT start_date, end_date, subject, has_picture, user_entry_id, display_to, display_cc
             FROM calendar_data
             WHERE start_date = %s
-        """, (recording_date,))
+        """, (recording_date_utc,))
         row = cur.fetchone()
         if not row:
             cur.close()
@@ -216,7 +232,7 @@ def get_meeting_info(request: MeetingInfoRequest):
             "invitation_text": user_entry_id,
             "participants": participants
         }
-        update_transcription_meeting_info(recording_date, info_dict)
+        update_transcription_meeting_info(recording_date_local, info_dict)
         cur.close()
         conn.close()
         return {"status": "success", "meeting_info": info_dict}

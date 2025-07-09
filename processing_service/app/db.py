@@ -3,6 +3,7 @@ import psycopg2
 from dotenv import load_dotenv
 from datetime import datetime
 import re
+import pytz
 
 load_dotenv()
 
@@ -144,6 +145,11 @@ def upsert_mp3_file(filepath):
 def update_transcription_meeting_info(recording_date, info_dict):
     conn = get_db_connection()
     cur = conn.cursor()
+    
+    # recording_date ist bereits in der lokalen Zeitzone (wie es in der transcriptions Tabelle gespeichert ist)
+    # Wir verwenden es direkt für die Suche
+    recording_date_for_search = recording_date
+    
     # Update-Statement für die neuen Felder und participants
     cur.execute("""
         UPDATE transcriptions
@@ -161,7 +167,7 @@ def update_transcription_meeting_info(recording_date, info_dict):
         info_dict.get("meeting_location"),
         info_dict.get("invitation_text"),
         info_dict.get("participants"),
-        recording_date
+        recording_date_for_search
     ))
     conn.commit()
     cur.close()
