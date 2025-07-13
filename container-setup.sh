@@ -8,27 +8,26 @@ set -e
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+RED='\033[0;31m'
 NC='\033[0m'
 
 log() { echo -e "${GREEN}[$(date +'%H:%M:%S')] $1${NC}"; }
 warning() { echo -e "${YELLOW}[WARNING] $1${NC}"; }
 info() { echo -e "${BLUE}[INFO] $1${NC}"; }
+error() { echo -e "${RED}[ERROR] $1${NC}"; }
 
 main() {
     log "🚀 WhisperX Container Setup gestartet"
     
-    # Repository klonen/aktualisieren
-    if [ -d "transcript-summarization" ]; then
-        warning "Repository existiert bereits"
-        cd transcript-summarization
-        git pull origin main || git pull origin master || true
-        cd ..
-    else
-        log "Klone Repository..."
-        git clone https://github.com/dmuehlberg/transcript-summarization.git
-    fi
+    # Repository-Klon wird vom aufrufenden Skript übernommen
+    # Wir sind bereits im richtigen Verzeichnis
+    log "Verwende bereits geklontes Repository..."
     
-    cd transcript-summarization
+    # Prüfe, ob wir im richtigen Verzeichnis sind
+    if [ ! -f "docker-compose.yml" ]; then
+        error "docker-compose.yml nicht gefunden. Bitte stellen Sie sicher, dass Sie im transcript-summarization Verzeichnis sind."
+        exit 1
+    fi
     
     # Docker Compose installieren falls nicht vorhanden
     if ! command -v docker-compose &> /dev/null; then
