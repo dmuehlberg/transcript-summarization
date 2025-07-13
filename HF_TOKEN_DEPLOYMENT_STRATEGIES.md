@@ -14,9 +14,10 @@ Dieses Dokument beschreibt verschiedene sichere Methoden, um den Hugging Face To
 - **Einfach**: Nur wenige Zeilen Code
 - **Sicher**: Token wird direkt übertragen, nicht in AWS gespeichert
 - **Kontrolliert**: Sie haben volle Kontrolle über den Transfer
-- **Optimiert**: Token wird erst übertragen, wenn die API bereit ist
+- **Optimiert**: Token wird vor Container-Build übertragen
 - **Keine AWS-Abhängigkeiten**: Funktioniert ohne zusätzliche AWS-Services
-- **Verifiziert**: Erfolgreiche Übertragung wird bestätigt
+- **Schnell**: Keine Container-Neustarts nötig
+- **Zuverlässig**: Container startet direkt mit HF_TOKEN
 
 ### 🔧 Implementierung
 
@@ -24,13 +25,13 @@ Dieses Dokument beschreibt verschiedene sichere Methoden, um den Hugging Face To
 Das `create_aws_instance.sh` Skript:
 - Erstellt die AWS-Instanz wie gewohnt
 - Wartet auf SSH-Verfügbarkeit
-- **Wartet auf WhisperX-API-Bereitschaft** (max. 10 Minuten)
-- Überträgt dann die lokale `.env`-Datei per SCP
-- Startet den Container neu mit HF_TOKEN
-- Verifiziert den erfolgreichen Neustart
+- **Überträgt SOFORT die lokale `.env`-Datei per SCP** nach `/tmp/.env`
+- Das User-Data-Skript kopiert die `.env`-Datei vor dem Container-Build
+- Container wird mit HF_TOKEN gebaut und gestartet
+- API ist sofort mit Token verfügbar
 
-**Warum nach API-Bereitschaft?**
-Der HF_TOKEN wird nur für Diarization benötigt, nicht für den Container-Build. Die Übertragung erfolgt erst, wenn die API vollständig läuft.
+**Warum vor Container-Build?**
+Der HF_TOKEN wird nur für Diarization benötigt, aber Docker-Compose liest die `.env`-Datei beim Build. Durch die frühe Übertragung wird der Token direkt beim Container-Start verfügbar.
 
 #### 2. Manuelle Token-Übertragung auf bestehende Instanzen
 ```bash
@@ -162,14 +163,14 @@ docker-compose up -d whisperx_cuda
    echo "HF_TOKEN=your_token_here" >> .env
    ```
 
-2. **Instanz erstellen** (Token wird automatisch übertragen):
+2. **Instanz erstellen** (Token wird vor Container-Build übertragen):
    ```bash
    ./create_aws_instance.sh --action create --gpu-type t4
    ```
 
 3. **Verifizieren**:
    ```bash
-   # API testen
+   # API testen (Token ist sofort verfügbar)
    curl http://instance-ip:8000/health
    ```
 
