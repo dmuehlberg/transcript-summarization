@@ -247,7 +247,7 @@ if [ -f "/tmp/.env" ]; then
     echo "✅ .env-Datei mit HF_TOKEN kopiert"
 else
     echo "⚠️ .env-Datei nicht verfügbar - erstelle Standard .env"
-    cat > .env << EOF
+    cat > .env << 'ENVEOF'
 POSTGRES_USER=root
 POSTGRES_PASSWORD=postgres
 POSTGRES_DB=n8n
@@ -256,7 +256,7 @@ N8N_USER_MANAGEMENT_JWT_SECRET=sombrero
 TIMEZONE=Europe/Berlin
 MEETING_TIME_WINDOW_MINUTES=5
 TARGETPLATFORM=linux/amd64
-EOF
+ENVEOF
 fi
 
 # container-setup.sh ausführen
