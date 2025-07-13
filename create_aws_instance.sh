@@ -293,7 +293,6 @@ EOF
     fi
     
     echo "=== EC2-USER SETUP ABGESCHLOSSEN ==="
-"
 
 # Final Status
 echo "=== INSTALLATION STATUS ==="
