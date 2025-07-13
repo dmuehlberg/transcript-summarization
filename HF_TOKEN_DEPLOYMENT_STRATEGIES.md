@@ -14,8 +14,9 @@ Dieses Dokument beschreibt verschiedene sichere Methoden, um den Hugging Face To
 - **Einfach**: Nur wenige Zeilen Code
 - **Sicher**: Token wird direkt übertragen, nicht in AWS gespeichert
 - **Kontrolliert**: Sie haben volle Kontrolle über den Transfer
-- **Sofort**: Token ist sofort verfügbar, keine AWS-API-Aufrufe nötig
+- **Optimiert**: Token wird erst übertragen, wenn die API bereit ist
 - **Keine AWS-Abhängigkeiten**: Funktioniert ohne zusätzliche AWS-Services
+- **Verifiziert**: Erfolgreiche Übertragung wird bestätigt
 
 ### 🔧 Implementierung
 
@@ -23,8 +24,13 @@ Dieses Dokument beschreibt verschiedene sichere Methoden, um den Hugging Face To
 Das `create_aws_instance.sh` Skript:
 - Erstellt die AWS-Instanz wie gewohnt
 - Wartet auf SSH-Verfügbarkeit
-- Überträgt automatisch die lokale `.env`-Datei per SCP
-- Startet den Container neu, falls bereits läuft
+- **Wartet auf WhisperX-API-Bereitschaft** (max. 10 Minuten)
+- Überträgt dann die lokale `.env`-Datei per SCP
+- Startet den Container neu mit HF_TOKEN
+- Verifiziert den erfolgreichen Neustart
+
+**Warum nach API-Bereitschaft?**
+Der HF_TOKEN wird nur für Diarization benötigt, nicht für den Container-Build. Die Übertragung erfolgt erst, wenn die API vollständig läuft.
 
 #### 2. Manuelle Token-Übertragung auf bestehende Instanzen
 ```bash

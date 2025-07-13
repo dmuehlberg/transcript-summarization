@@ -366,29 +366,53 @@ EOF
     done
     echo
 
-    # .env-Datei mit HF_TOKEN übertragen
+    # .env-Datei mit HF_TOKEN übertragen (nach API-Bereitschaft)
     if [[ -f ".env" ]]; then
-        log "Übertrage .env-Datei mit HF_TOKEN auf die Instanz..."
+        log "Warte auf WhisperX-API-Bereitschaft für HF_TOKEN-Übertragung..."
         
-        # Warte kurz, bis das Repository geklont wurde
-        sleep 30
+        # Warte bis die API verfügbar ist (max. 10 Minuten)
+        API_READY=false
+        for i in {1..20}; do
+            if curl -s http://$PUBLIC_IP:8000/health 2>/dev/null | grep -q "ok"; then
+                log "✅ WhisperX-API ist bereit"
+                API_READY=true
+                break
+            fi
+            log "Warte auf API-Bereitschaft... (Versuch $i/20)"
+            sleep 30
+        done
         
-        # Versuche die .env-Datei zu übertragen
-        if scp -i "$KEY_FILE" -o StrictHostKeyChecking=no .env ec2-user@$PUBLIC_IP:/home/ec2-user/transcript-summarization/ 2>/dev/null; then
-            log "✅ .env-Datei erfolgreich übertragen"
+        if [[ "$API_READY" == "true" ]]; then
+            log "Übertrage .env-Datei mit HF_TOKEN auf die Instanz..."
             
-            # Container neu starten, falls bereits läuft
-            ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@$PUBLIC_IP "
-                cd /home/ec2-user/transcript-summarization
-                if docker-compose ps whisperx_cuda | grep -q 'Up'; then
-                    echo 'Container läuft bereits, starte neu mit HF_TOKEN...'
+            # Versuche die .env-Datei zu übertragen
+            if scp -i "$KEY_FILE" -o StrictHostKeyChecking=no .env ec2-user@$PUBLIC_IP:/home/ec2-user/transcript-summarization/ 2>/dev/null; then
+                log "✅ .env-Datei erfolgreich übertragen"
+                
+                # Container neu starten mit HF_TOKEN
+                ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@$PUBLIC_IP "
+                    cd /home/ec2-user/transcript-summarization
+                    echo 'Starte Container neu mit HF_TOKEN...'
                     docker-compose restart whisperx_cuda
+                    echo 'Container neu gestartet'
+                " 2>/dev/null || true
+                
+                # Verifizierung
+                sleep 10
+                if curl -s http://$PUBLIC_IP:8000/health 2>/dev/null | grep -q "ok"; then
+                    log "✅ Container erfolgreich mit HF_TOKEN neu gestartet"
+                else
+                    warn "⚠️  Container-Start mit HF_TOKEN könnte fehlgeschlagen sein"
                 fi
-            " 2>/dev/null || true
+            else
+                warn "⚠️  .env-Datei konnte nicht übertragen werden"
+                warn "   Sie können die .env-Datei später manuell übertragen:"
+                warn "   scp -i $KEY_FILE .env ec2-user@$PUBLIC_IP:/home/ec2-user/transcript-summarization/"
+            fi
         else
-            warn "⚠️  .env-Datei konnte nicht übertragen werden (Repository noch nicht bereit)"
+            warn "⚠️  API wurde nicht rechtzeitig bereit. HF_TOKEN-Übertragung übersprungen."
             warn "   Sie können die .env-Datei später manuell übertragen:"
-            warn "   scp -i $KEY_FILE .env ec2-user@$PUBLIC_IP:/home/ec2-user/transcript-summarization/"
+            warn "   ./transfer_env.sh eu-central-1 whisperx-server"
         fi
     else
         warn "⚠️  .env-Datei nicht gefunden. HF_TOKEN wird nicht übertragen."
