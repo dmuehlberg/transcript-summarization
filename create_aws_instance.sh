@@ -293,25 +293,25 @@ EOF
     fi
     
     echo "=== EC2-USER SETUP ABGESCHLOSSEN ==="
-'
+"
 
 # Final Status
 echo "=== INSTALLATION STATUS ==="
-echo "Datum: $(date)"
+echo "Datum: \$(date)"
 
 # Docker Container Status
 echo "Docker Container:"
 sudo -u ec2-user bash -c 'cd /home/ec2-user/transcript-summarization && docker-compose ps 2>/dev/null || echo "Container Status nicht verfügbar"'
 
 # API Test
-PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
-echo "Public IP: $PUBLIC_IP"
-echo "API URL: http://$PUBLIC_IP:8000/docs"
+PUBLIC_IP=\$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
+echo "Public IP: \$PUBLIC_IP"
+echo "API URL: http://\$PUBLIC_IP:8000/docs"
 
 # Health Check (falls API läuft)
 curl -s http://localhost:8000/health 2>/dev/null && echo "API Health Check: OK" || echo "API Health Check: Nicht verfügbar"
 
-echo "WhisperX-Setup abgeschlossen um $(date)"
+echo "WhisperX-Setup abgeschlossen um \$(date)"
 echo "=== INSTALLATION LOG ENDE ==="
 
 EOF
