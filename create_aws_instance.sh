@@ -218,36 +218,36 @@ docker --version 2>&1
 echo "Wechsle zu ec2-user für Repository Setup..."
 
 # Setup als ec2-user ausführen
-sudo -u ec2-user bash -c '
-    echo "=== EC2-USER SETUP GESTARTET ==="
+sudo -u ec2-user bash -c "
+    echo \"=== EC2-USER SETUP GESTARTET ===\"
     cd /home/ec2-user
     
     # Repository klonen (falls nicht vorhanden)
-    if [ ! -d "transcript-summarization" ]; then
-        echo "Klone Repository..."
+    if [ ! -d \"transcript-summarization\" ]; then
+        echo \"Klone Repository...\"
         git clone https://github.com/dmuehlberg/transcript-summarization.git 2>&1
         if [ $? -eq 0 ]; then
-            echo "Repository erfolgreich geklont"
+            echo \"Repository erfolgreich geklont\"
         else
-            echo "FEHLER: Repository konnte nicht geklont werden"
+            echo \"FEHLER: Repository konnte nicht geklont werden\"
             exit 1
         fi
     else
-        echo "Repository bereits vorhanden"
+        echo \"Repository bereits vorhanden\"
         cd transcript-summarization
-        git pull 2>&1 || echo "Git pull fehlgeschlagen"
+        git pull 2>&1 || echo \"Git pull fehlgeschlagen\"
         cd ..
     fi
     
     cd transcript-summarization
     
     # .env-Datei aus /tmp kopieren (falls verfügbar)
-    if [ -f "/tmp/.env" ]; then
-        echo "Kopiere .env-Datei mit HF_TOKEN..."
+    if [ -f \"/tmp/.env\" ]; then
+        echo \"Kopiere .env-Datei mit HF_TOKEN...\"
         cp /tmp/.env .env
-        echo "✅ .env-Datei mit HF_TOKEN kopiert"
+        echo \"✅ .env-Datei mit HF_TOKEN kopiert\"
     else
-        echo "⚠️ .env-Datei nicht verfügbar - erstelle Standard .env"
+        echo \"⚠️ .env-Datei nicht verfügbar - erstelle Standard .env\"
         cat > .env << EOF
 POSTGRES_USER=root
 POSTGRES_PASSWORD=postgres
@@ -261,38 +261,38 @@ EOF
     fi
     
     # container-setup.sh ausführen
-    if [ -f "./container-setup.sh" ]; then
-        echo "Führe container-setup.sh aus..."
+    if [ -f \"./container-setup.sh\" ]; then
+        echo \"Führe container-setup.sh aus...\"
         chmod +x ./container-setup.sh
         
         # Setup ohne Interaktion ausführen
-        echo "n" | timeout 1800 ./container-setup.sh 2>&1
+        echo \"n\" | timeout 1800 ./container-setup.sh 2>&1
         SETUP_EXIT_CODE=$?
         
         if [ $SETUP_EXIT_CODE -eq 0 ]; then
-            echo "container-setup.sh erfolgreich abgeschlossen"
+            echo \"container-setup.sh erfolgreich abgeschlossen\"
         elif [ $SETUP_EXIT_CODE -eq 124 ]; then
-            echo "WARNUNG: container-setup.sh Timeout nach 30 Minuten"
+            echo \"WARNUNG: container-setup.sh Timeout nach 30 Minuten\"
         else
-            echo "FEHLER: container-setup.sh fehlgeschlagen (Exit Code: $SETUP_EXIT_CODE)"
+            echo \"FEHLER: container-setup.sh fehlgeschlagen (Exit Code: $SETUP_EXIT_CODE)\"
         fi
     else
-        echo "FEHLER: container-setup.sh nicht gefunden!"
-        echo "Verfügbare Dateien:"
+        echo \"FEHLER: container-setup.sh nicht gefunden!\"
+        echo \"Verfügbare Dateien:\"
         ls -la 2>&1
         
         # Fallback: Lade das Skript herunter
-        echo "Fallback: Lade container-setup.sh herunter..."
+        echo \"Fallback: Lade container-setup.sh herunter...\"
         wget https://raw.githubusercontent.com/dmuehlberg/transcript-summarization/main/container-setup.sh -O ./container-setup.sh 2>&1
-        if [ -f "./container-setup.sh" ]; then
+        if [ -f \"./container-setup.sh\" ]; then
             chmod +x ./container-setup.sh
-            echo "n" | timeout 1800 ./container-setup.sh 2>&1
+            echo \"n\" | timeout 1800 ./container-setup.sh 2>&1
         else
-            echo "FEHLER: Fallback fehlgeschlagen"
+            echo \"FEHLER: Fallback fehlgeschlagen\"
         fi
     fi
     
-    echo "=== EC2-USER SETUP ABGESCHLOSSEN ==="
+    echo \"=== EC2-USER SETUP ABGESCHLOSSEN ===\"
 
 # Final Status
 echo "=== INSTALLATION STATUS ==="
