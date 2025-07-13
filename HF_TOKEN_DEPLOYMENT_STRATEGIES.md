@@ -8,43 +8,41 @@ Dieses Dokument beschreibt verschiedene sichere Methoden, um den Hugging Face To
 - Der Token wird automatisch invalidated, wenn er öffentlich wird
 - Verwenden Sie immer sichere Methoden zur Token-Übertragung
 
-## 📋 Implementierte Lösung: AWS Systems Manager Parameter Store
+## 📋 Implementierte Lösung: SCP-basierte Token-Übertragung
 
 ### ✅ Vorteile
-- **Sicher**: Token wird verschlüsselt gespeichert
-- **AWS-Nativ**: Integriert in AWS IAM und Security
-- **Automatisch**: Token wird beim Deployment automatisch bereitgestellt
-- **Zentral**: Token kann von mehreren Instanzen verwendet werden
+- **Einfach**: Nur wenige Zeilen Code
+- **Sicher**: Token wird direkt übertragen, nicht in AWS gespeichert
+- **Kontrolliert**: Sie haben volle Kontrolle über den Transfer
+- **Sofort**: Token ist sofort verfügbar, keine AWS-API-Aufrufe nötig
+- **Keine AWS-Abhängigkeiten**: Funktioniert ohne zusätzliche AWS-Services
 
 ### 🔧 Implementierung
 
-#### 1. Token im Parameter Store speichern
+#### 1. Automatische Token-Übertragung beim Deployment
+Das `create_aws_instance.sh` Skript:
+- Erstellt die AWS-Instanz wie gewohnt
+- Wartet auf SSH-Verfügbarkeit
+- Überträgt automatisch die lokale `.env`-Datei per SCP
+- Startet den Container neu, falls bereits läuft
+
+#### 2. Manuelle Token-Übertragung auf bestehende Instanzen
 ```bash
-# Token aus .env lesen und im Parameter Store speichern
-./update_hf_token.sh eu-central-1
+# .env-Datei auf bestehende Instanz übertragen
+./transfer_env.sh eu-central-1 whisperx-server
 ```
 
-#### 2. Automatisches Deployment
-Das `create_aws_instance.sh` Skript:
-- Liest den HF_TOKEN aus der lokalen `.env`-Datei
-- Speichert ihn sicher im AWS Parameter Store
-- Die AWS-Instanz ruft den Token beim Start automatisch ab
-- Erstellt die `.env`-Datei mit dem Token
-
-#### 3. Token auf bestehenden Instanzen aktualisieren
+#### 3. Manuelle Token-Übertragung (direkt)
 ```bash
-# Token im Parameter Store aktualisieren
-./update_hf_token.sh eu-central-1
-
-# Optional: Token auch auf laufenden Instanzen aktualisieren
-# (Wird interaktiv angeboten)
+# Direkte SCP-Übertragung
+scp -i whisperx-key.pem .env ec2-user@INSTANCE_IP:/home/ec2-user/transcript-summarization/
 ```
 
 ### 🔐 Sicherheitsfeatures
-- **Verschlüsselung**: Token wird als `SecureString` gespeichert
-- **IAM-Berechtigungen**: Nur autorisierte Benutzer können auf den Parameter zugreifen
-- **Audit-Logging**: Alle Zugriffe werden protokolliert
-- **Automatische Rotation**: Token kann einfach aktualisiert werden
+- **Direkte Übertragung**: Token wird nur zwischen Ihrem System und der Instanz übertragen
+- **SSH-Verschlüsselung**: Sichere Übertragung über SSH
+- **Lokale Kontrolle**: Token bleibt unter Ihrer Kontrolle
+- **Keine AWS-Speicherung**: Token wird nicht in AWS gespeichert
 
 ## 🔄 Alternative Strategien
 
@@ -104,32 +102,29 @@ scp -i key.pem .env ec2-user@instance-ip:/home/ec2-user/transcript-summarization
 
 ## 🛠️ Troubleshooting
 
-### Token wird nicht abgerufen
+### Token wird nicht übertragen
 ```bash
-# Parameter Store Status prüfen
-aws ssm describe-parameters --region eu-central-1 \
-    --parameter-filters "Key=Name,Values=/whisperx/hf_token"
+# SSH-Verbindung testen
+ssh -i whisperx-key.pem ec2-user@INSTANCE_IP 'echo "SSH OK"'
 
-# Parameter Wert prüfen (nur für Debugging)
-aws ssm get-parameter --region eu-central-1 \
-    --name "/whisperx/hf_token" --with-decryption
+# Repository-Verzeichnis prüfen
+ssh -i whisperx-key.pem ec2-user@INSTANCE_IP 'ls -la /home/ec2-user/transcript-summarization/'
+
+# .env-Datei manuell übertragen
+scp -i whisperx-key.pem .env ec2-user@INSTANCE_IP:/home/ec2-user/transcript-summarization/
 ```
 
-### IAM-Berechtigungen prüfen
-```json
-{
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Effect": "Allow",
-            "Action": [
-                "ssm:GetParameter",
-                "ssm:PutParameter"
-            ],
-            "Resource": "arn:aws:ssm:eu-central-1:*:parameter/whisperx/*"
-        }
-    ]
-}
+### Container startet nicht
+```bash
+# Logs prüfen
+docker-compose logs whisperx_cuda
+
+# .env-Datei prüfen
+cat .env | grep HF_TOKEN
+
+# Token manuell setzen
+export HF_TOKEN="your_token_here"
+docker-compose up -d whisperx_cuda
 ```
 
 ### Container startet nicht
@@ -161,17 +156,31 @@ docker-compose up -d whisperx_cuda
    echo "HF_TOKEN=your_token_here" >> .env
    ```
 
-2. **Parameter Store aktualisieren**:
-   ```bash
-   ./update_hf_token.sh eu-central-1
-   ```
-
-3. **Instanz erstellen**:
+2. **Instanz erstellen** (Token wird automatisch übertragen):
    ```bash
    ./create_aws_instance.sh --action create --gpu-type t4
    ```
 
-4. **Verifizieren**:
+3. **Verifizieren**:
+   ```bash
+   # API testen
+   curl http://instance-ip:8000/health
+   ```
+
+## 🔄 Workflow für bestehende Instanzen
+
+1. **Token vorbereiten** (falls noch nicht geschehen):
+   ```bash
+   # Token in .env-Datei definieren
+   echo "HF_TOKEN=your_token_here" >> .env
+   ```
+
+2. **Token übertragen**:
+   ```bash
+   ./transfer_env.sh eu-central-1 whisperx-server
+   ```
+
+3. **Verifizieren**:
    ```bash
    # API testen
    curl http://instance-ip:8000/health

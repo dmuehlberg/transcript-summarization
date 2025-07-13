@@ -366,6 +366,35 @@ EOF
     done
     echo
 
+    # .env-Datei mit HF_TOKEN übertragen
+    if [[ -f ".env" ]]; then
+        log "Übertrage .env-Datei mit HF_TOKEN auf die Instanz..."
+        
+        # Warte kurz, bis das Repository geklont wurde
+        sleep 30
+        
+        # Versuche die .env-Datei zu übertragen
+        if scp -i "$KEY_FILE" -o StrictHostKeyChecking=no .env ec2-user@$PUBLIC_IP:/home/ec2-user/transcript-summarization/ 2>/dev/null; then
+            log "✅ .env-Datei erfolgreich übertragen"
+            
+            # Container neu starten, falls bereits läuft
+            ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@$PUBLIC_IP "
+                cd /home/ec2-user/transcript-summarization
+                if docker-compose ps whisperx_cuda | grep -q 'Up'; then
+                    echo 'Container läuft bereits, starte neu mit HF_TOKEN...'
+                    docker-compose restart whisperx_cuda
+                fi
+            " 2>/dev/null || true
+        else
+            warn "⚠️  .env-Datei konnte nicht übertragen werden (Repository noch nicht bereit)"
+            warn "   Sie können die .env-Datei später manuell übertragen:"
+            warn "   scp -i $KEY_FILE .env ec2-user@$PUBLIC_IP:/home/ec2-user/transcript-summarization/"
+        fi
+    else
+        warn "⚠️  .env-Datei nicht gefunden. HF_TOKEN wird nicht übertragen."
+        warn "   Erstellen Sie eine .env-Datei mit HF_TOKEN=your_token"
+    fi
+
     log "Live-Monitoring gestartet - verschiedene Log-Quellen:"
     
     # Intelligentes Log-Monitoring
