@@ -148,13 +148,30 @@ async def extract_calendar_data(
         
         # Führe den dotnet-Befehl mit den Umgebungsvariablen aus
         logger.info(f"Führe Befehl aus: {' '.join(cmd)}")
+        
+        # Prüfe Dateigröße für spezielle Behandlung großer Dateien
+        file_size_gb = os.path.getsize(file_path) / (1024**3)
+        logger.info(f"Dateigröße: {file_size_gb:.2f} GB")
+        
+        # Für sehr große Dateien (>2GB) verwende längere Timeouts und spezielle Umgebungsvariablen
+        if file_size_gb > 2.0:
+            logger.info("Große Datei erkannt (>2GB), verwende erweiterte Konfiguration")
+            # Erhöhe Timeout für große Dateien
+            timeout_seconds = 1800  # 30 Minuten
+            # Füge spezielle .NET-Umgebungsvariablen für große Dateien hinzu
+            dotnet_env["DOTNET_GCHeapHardLimit"] = "0x8000000"  # 2GB Heap-Limit
+            dotnet_env["DOTNET_GCAllowVeryLargeObjects"] = "1"
+            dotnet_env["DOTNET_GCHeapHardLimitPercent"] = "80"
+        else:
+            timeout_seconds = 300  # 5 Minuten für normale Dateien
+        
         try:
             process = subprocess.run(
                 cmd, 
                 capture_output=True,
                 text=False,  # Binärmodus
                 env=dotnet_env,
-                timeout=300  # Füge ein Timeout von 5 Minuten hinzu
+                timeout=timeout_seconds
             )
             
             # Protokolliere detaillierte Debug-Informationen
@@ -168,9 +185,70 @@ async def extract_calendar_data(
                 error_msg = f"Extraktion fehlgeschlagen: {stderr_text}"
                 logger.error(error_msg)
                 
+                # Spezielle Behandlung für Array-Index-Fehler bei großen Dateien
+                if "Index was outside the bounds of the array" in stderr_text and file_size_gb > 2.0:
+                    logger.warning("Array-Index-Fehler bei großer Datei erkannt, versuche alternative Strategie")
+                    
+                    # Strategie 1: Versuche mit spezifischem Ordner statt extract_all
+                    if extract_all:
+                        logger.info("Versuche Extraktion mit spezifischem Ordner 'Calendar'")
+                        return await extract_calendar_data(
+                            file=file,
+                            format=format,
+                            target_folder=target_folder,
+                            pst_folder="Calendar",
+                            extract_all=False
+                        )
+                    else:
+                        # Strategie 2: Versuche mit anderen Ordnernamen
+                        alternative_folders = ["Kalender", "Inbox", "Posteingang"]
+                        for alt_folder in alternative_folders:
+                            logger.info(f"Versuche Extraktion mit alternativem Ordner '{alt_folder}'")
+                            try:
+                                return await extract_calendar_data(
+                                    file=file,
+                                    format=format,
+                                    target_folder=target_folder,
+                                    pst_folder=alt_folder,
+                                    extract_all=False
+                                )
+                            except HTTPException as e:
+                                if "Index was outside the bounds of the array" in str(e.detail):
+                                    logger.warning(f"Array-Index-Fehler auch mit Ordner '{alt_folder}'")
+                                    continue
+                                else:
+                                    # Anderer Fehler, weiterwerfen
+                                    raise e
+                        
+                        # Strategie 3: Versuche mit reduzierter Speichernutzung
+                        logger.info("Versuche Extraktion mit reduzierter Speichernutzung")
+                        dotnet_env["DOTNET_GCHeapHardLimit"] = "0x4000000"  # 1GB Heap-Limit
+                        dotnet_env["DOTNET_GCAllowVeryLargeObjects"] = "0"
+                        
+                        # Erneut versuchen mit extract_all=False
+                        cmd_reduced = ["dotnet", dll_path, export_option, f"-f=Calendar", "-t=" + result_dir, file_path]
+                        logger.info(f"Führe reduzierten Befehl aus: {' '.join(cmd_reduced)}")
+                        
+                        process_reduced = subprocess.run(
+                            cmd_reduced,
+                            capture_output=True,
+                            text=False,
+                            env=dotnet_env,
+                            timeout=timeout_seconds
+                        )
+                        
+                        if process_reduced.returncode == 0:
+                            logger.info("Extraktion mit reduzierter Speichernutzung erfolgreich")
+                            # Weiter mit der normalen Verarbeitung
+                        else:
+                            stderr_reduced = process_reduced.stderr.decode('utf-8', errors='replace')
+                            error_msg = f"Extraktion mit reduzierter Speichernutzung fehlgeschlagen: {stderr_reduced}"
+                            logger.error(error_msg)
+                            raise HTTPException(status_code=500, detail=error_msg)
+                
                 # Wenn der Fehler "Cannot find folder" ist und wir nicht extract_all verwenden,
                 # versuchen wir es erneut mit extract_all=True
-                if not extract_all and "Cannot find folder" in stderr_text:
+                elif not extract_all and "Cannot find folder" in stderr_text:
                     logger.info(f"Ordner '{pst_folder}' nicht gefunden, versuche alle Elemente zu extrahieren")
                     return await extract_calendar_data(
                         file=file,
@@ -178,13 +256,13 @@ async def extract_calendar_data(
                         target_folder=target_folder,
                         extract_all=True
                     )
-                
-                raise HTTPException(
-                    status_code=500, 
-                    detail=error_msg
-                )
+                else:
+                    raise HTTPException(
+                        status_code=500, 
+                        detail=error_msg
+                    )
         except subprocess.TimeoutExpired:
-            error_msg = "Extraktionsprozess nach 5 Minuten abgelaufen"
+            error_msg = f"Extraktionsprozess nach {timeout_seconds} Sekunden abgelaufen"
             logger.error(error_msg)
             raise HTTPException(status_code=500, detail=error_msg)
         
@@ -228,3 +306,89 @@ async def extract_calendar_data(
         # Temporäres Verzeichnis aufräumen, aber nur wenn wir nicht die Quelldatei verwenden
         if 'file_path' in locals() and file_path != source_path:
             cleanup_temp_dir(temp_dir)
+
+def cleanup_temp_dir(temp_dir: str):
+    """Bereinigt ein temporäres Verzeichnis."""
+    try:
+        if os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir)
+            logger.debug(f"Temporäres Verzeichnis bereinigt: {temp_dir}")
+    except Exception as e:
+        logger.warning(f"Fehler beim Bereinigen des temporären Verzeichnisses {temp_dir}: {e}")
+
+async def extract_large_file_with_chunking(
+    file_path: str,
+    dll_path: str,
+    result_dir: str,
+    format: str = "csv",
+    pst_folder: str = "Calendar"
+) -> bool:
+    """
+    Spezielle Funktion für die Extraktion sehr großer PST/OST-Dateien.
+    Verwendet optimierte .NET-Umgebungsvariablen und längere Timeouts.
+    
+    Args:
+        file_path: Pfad zur PST/OST-Datei
+        dll_path: Pfad zur .NET DLL
+        result_dir: Zielverzeichnis für die Extraktion
+        format: Export-Format ('csv' oder 'native')
+        pst_folder: Name des zu extrahierenden Ordners
+        
+    Returns:
+        bool: True wenn erfolgreich, False wenn fehlgeschlagen
+    """
+    logger.info(f"Starte optimierte Extraktion für große Datei: {file_path}")
+    
+    # Optimierte .NET-Umgebungsvariablen für große Dateien
+    dotnet_env = os.environ.copy()
+    dotnet_env["DOTNET_CLI_UI_LANGUAGE"] = "en"
+    dotnet_env["DOTNET_SYSTEM_GLOBALIZATION_INVARIANT"] = "true"
+    
+    # Spezielle Konfiguration für große Dateien
+    dotnet_env["DOTNET_GCHeapHardLimit"] = "0x8000000"  # 2GB Heap-Limit
+    dotnet_env["DOTNET_GCAllowVeryLargeObjects"] = "1"
+    dotnet_env["DOTNET_GCHeapHardLimitPercent"] = "80"
+    dotnet_env["DOTNET_GCHeapHardLimitSOH"] = "0x4000000"  # 1GB für Small Object Heap
+    dotnet_env["DOTNET_GCHeapHardLimitLOH"] = "0x4000000"  # 1GB für Large Object Heap
+    
+    # Erhöhte Timeouts für große Dateien
+    timeout_seconds = 3600  # 1 Stunde
+    
+    # Export-Option
+    export_option = "-e" if format == "native" else "-p"
+    
+    # Befehl mit spezifischem Ordner (weniger Speicherverbrauch als extract_all)
+    cmd = [
+        "dotnet", 
+        dll_path, 
+        export_option,
+        f"-f={pst_folder}",
+        "-t=" + result_dir,
+        file_path
+    ]
+    
+    logger.info(f"Führe optimierten Befehl aus: {' '.join(cmd)}")
+    
+    try:
+        process = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=False,
+            env=dotnet_env,
+            timeout=timeout_seconds
+        )
+        
+        if process.returncode == 0:
+            logger.info("Optimierte Extraktion erfolgreich")
+            return True
+        else:
+            stderr_text = process.stderr.decode('utf-8', errors='replace')
+            logger.error(f"Optimierte Extraktion fehlgeschlagen: {stderr_text}")
+            return False
+            
+    except subprocess.TimeoutExpired:
+        logger.error(f"Optimierte Extraktion nach {timeout_seconds} Sekunden abgelaufen")
+        return False
+    except Exception as e:
+        logger.error(f"Unerwarteter Fehler bei optimierter Extraktion: {str(e)}")
+        return False
