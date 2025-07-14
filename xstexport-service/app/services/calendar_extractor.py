@@ -37,7 +37,8 @@ async def extract_calendar_data(
     format: str = "csv",
     target_folder: Optional[str] = None,
     pst_folder: str = "Calendar",  # Standardwert für Kompatibilität
-    extract_all: bool = False  # Neue Option zum Extrahieren aller Elemente
+    extract_all: bool = False,  # Neue Option zum Extrahieren aller Elemente
+    retry_count: int = 0  # Zähler für Rekursionsvermeidung
 ) -> ExtractionResult:
     """
     Extrahiert Kalenderdaten oder alle Daten aus einer PST/OST-Datei.
@@ -189,6 +190,51 @@ async def extract_calendar_data(
                 if "Index was outside the bounds of the array" in stderr_text and file_size_gb > 2.0:
                     logger.warning("Array-Index-Fehler bei großer Datei erkannt, versuche alternative Strategie")
                     
+                    # Verhindere Endlosschleife durch Rekursionszähler
+                    if retry_count >= 3:
+                        logger.error("Maximale Anzahl von Wiederholungsversuchen erreicht, versuche alternative Lösung")
+                        
+                        # Versuche die spezielle Funktion für große Dateien
+                        logger.info("Versuche optimierte Extraktion für große Dateien")
+                        success = await extract_large_file_with_chunking(
+                            file_path=file_path,
+                            dll_path=dll_path,
+                            result_dir=result_dir,
+                            format=format,
+                            pst_folder="Calendar"
+                        )
+                        
+                        if success:
+                            logger.info("Optimierte Extraktion erfolgreich")
+                            # Weiter mit der normalen Verarbeitung
+                        else:
+                            # Letzte Option: Versuche mit minimaler Konfiguration
+                            logger.info("Versuche letzte Option mit minimaler Konfiguration")
+                            dotnet_env_minimal = os.environ.copy()
+                            dotnet_env_minimal["DOTNET_GCHeapHardLimit"] = "0x2000000"  # 512MB Heap-Limit
+                            dotnet_env_minimal["DOTNET_GCAllowVeryLargeObjects"] = "0"
+                            dotnet_env_minimal["DOTNET_GCHeapHardLimitPercent"] = "50"
+                            
+                            cmd_minimal = ["dotnet", dll_path, export_option, f"-f=Calendar", "-t=" + result_dir, file_path]
+                            logger.info(f"Führe minimalen Befehl aus: {' '.join(cmd_minimal)}")
+                            
+                            process_minimal = subprocess.run(
+                                cmd_minimal,
+                                capture_output=True,
+                                text=False,
+                                env=dotnet_env_minimal,
+                                timeout=timeout_seconds
+                            )
+                            
+                            if process_minimal.returncode == 0:
+                                logger.info("Minimale Extraktion erfolgreich")
+                                # Weiter mit der normalen Verarbeitung
+                            else:
+                                stderr_minimal = process_minimal.stderr.decode('utf-8', errors='replace')
+                                error_msg = f"Datei zu groß für die Verarbeitung. Alle Versuche fehlgeschlagen. Letzter Fehler: {stderr_minimal}"
+                                logger.error(error_msg)
+                                raise HTTPException(status_code=500, detail=error_msg)
+                    
                     # Strategie 1: Versuche mit spezifischem Ordner statt extract_all
                     if extract_all:
                         logger.info("Versuche Extraktion mit spezifischem Ordner 'Calendar'")
@@ -197,7 +243,8 @@ async def extract_calendar_data(
                             format=format,
                             target_folder=target_folder,
                             pst_folder="Calendar",
-                            extract_all=False
+                            extract_all=False,
+                            retry_count=retry_count + 1
                         )
                     else:
                         # Strategie 2: Versuche mit anderen Ordnernamen
@@ -210,7 +257,8 @@ async def extract_calendar_data(
                                     format=format,
                                     target_folder=target_folder,
                                     pst_folder=alt_folder,
-                                    extract_all=False
+                                    extract_all=False,
+                                    retry_count=retry_count + 1
                                 )
                             except HTTPException as e:
                                 if "Index was outside the bounds of the array" in str(e.detail):
@@ -254,7 +302,8 @@ async def extract_calendar_data(
                         file=file,
                         format=format,
                         target_folder=target_folder,
-                        extract_all=True
+                        extract_all=True,
+                        retry_count=retry_count + 1
                     )
                 else:
                     raise HTTPException(
