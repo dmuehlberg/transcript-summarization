@@ -189,12 +189,12 @@ echo "Starte WhisperX-Installation auf Amazon Linux 2 mit NVIDIA Treibern..."
 sleep 30
 
 # System Update für Amazon Linux 2
-echo "System Update..."
-yum update -y 2>&1
+# echo "System Update..."
+# yum update -y 2>&1
 
 # Git und htop installieren falls nicht vorhanden
-echo "Git und htop Installation..."
-yum install -y git htop 2>&1
+echo "Git und htop sowie nano und mc (midnight commander) Installation..."
+yum install -y git htop nano mc 2>&1
 
 # Docker installieren falls nicht vorhanden
 if ! command -v docker &> /dev/null; then
