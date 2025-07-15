@@ -1,9 +1,0 @@
-fastapi
-uvicorn
-psycopg2-binary
-cologne-phonetics
-jellyfish
-rapidfuzz
-python-dotenv
-python-multipart
-pytz 
