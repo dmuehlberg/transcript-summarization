@@ -117,7 +117,7 @@ async def extract_with_dynamic_runtime_selection(
     pst_folder: str = "Calendar"
 ) -> bool:
     """
-    Versucht Extraktion mit dynamisch ausgewählten .NET-Runtimes.
+    Versucht Extraktion mit verschiedenen .NET-Konfigurationen.
     
     Args:
         file_path: Pfad zur PST/OST-Datei
@@ -129,20 +129,20 @@ async def extract_with_dynamic_runtime_selection(
     Returns:
         bool: True wenn erfolgreich, False wenn fehlgeschlagen
     """
-    logger.info(f"Versuche Extraktion mit dynamischer Runtime-Auswahl: {file_path}")
-    
-    # Verfügbare Runtimes ermitteln
-    available_runtimes = get_available_dotnet_runtimes()
-    
-    if not available_runtimes:
-        logger.warning("Keine .NET-Runtimes verfügbar, verwende Standard")
-        available_runtimes = ["default"]
+    logger.info(f"Versuche Extraktion mit verschiedenen .NET-Konfigurationen: {file_path}")
     
     # Export-Option
     export_option = "-e" if format == "native" else "-p"
     
-    # Verschiedene Konfigurationen für jede verfügbare Runtime
+    # Verschiedene Konfigurationen testen
     configurations = [
+        {
+            "name": "Standard-Konfiguration",
+            "env": {
+                "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT": "1",
+                "DOTNET_CLI_UI_LANGUAGE": "en"
+            }
+        },
         {
             "name": "Konservative Konfiguration",
             "env": {
@@ -162,22 +162,32 @@ async def extract_with_dynamic_runtime_selection(
                 "DOTNET_GCAllowVeryLargeObjects": "0",
                 "DOTNET_GCHeapHardLimitPercent": "10"
             }
+        },
+        {
+            "name": "Erweiterte Konfiguration",
+            "env": {
+                "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT": "1",
+                "DOTNET_CLI_UI_LANGUAGE": "en",
+                "DOTNET_GCHeapHardLimit": "0x1000000",  # 256MB
+                "DOTNET_GCAllowVeryLargeObjects": "1",
+                "DOTNET_GCHeapHardLimitPercent": "30"
+            }
         }
     ]
     
-    for runtime in available_runtimes:
-        for config in configurations:
-            logger.info(f"Versuche Runtime '{runtime}' mit Konfiguration '{config['name']}'")
+    # Verschiedene Ordner-Namen testen
+    folder_names = [pst_folder, "Kalender", "Calendar", "Inbox", "Posteingang"]
+    
+    for config in configurations:
+        for folder in folder_names:
+            logger.info(f"Versuche Konfiguration '{config['name']}' mit Ordner '{folder}'")
             
             # Umgebungsvariablen setzen
             dotnet_env = os.environ.copy()
             dotnet_env.update(config["env"])
             
             # Befehl erstellen
-            if runtime == "default":
-                cmd = ["dotnet", dll_path, export_option, f"-f={pst_folder}", "-t=" + result_dir, file_path]
-            else:
-                cmd = ["dotnet", "--runtime", runtime, dll_path, export_option, f"-f={pst_folder}", "-t=" + result_dir, file_path]
+            cmd = ["dotnet", dll_path, export_option, f"-f={folder}", "-t=" + result_dir, file_path]
             
             try:
                 process = subprocess.run(
@@ -189,46 +199,67 @@ async def extract_with_dynamic_runtime_selection(
                 )
                 
                 if process.returncode == 0:
-                    logger.info(f"Runtime '{runtime}' mit Konfiguration '{config['name']}' erfolgreich")
+                    logger.info(f"Konfiguration '{config['name']}' mit Ordner '{folder}' erfolgreich")
                     return True
                 else:
                     stderr_text = process.stderr.decode('utf-8', errors='replace')
-                    logger.warning(f"Runtime '{runtime}' mit Konfiguration '{config['name']}' fehlgeschlagen: {stderr_text}")
+                    stdout_text = process.stdout.decode('utf-8', errors='replace')
                     
-                    # Wenn es ein CoreCLR-Fehler ist, versuche Runtime-Konfiguration
-                    if "Failed to create CoreCLR" in stderr_text:
-                        runtime_config_path = os.path.join(os.path.dirname(dll_path), "runtimeconfig.json")
-                        if os.path.exists(runtime_config_path):
-                            logger.info("Versuche mit expliziter Runtime-Konfiguration")
-                            
-                            cmd_runtime = [
-                                "dotnet",
-                                "--runtime-config", runtime_config_path
-                            ] + cmd[1:]  # Entferne 'dotnet' und füge Runtime-Konfiguration hinzu
-                            
-                            process_runtime = subprocess.run(
-                                cmd_runtime,
-                                capture_output=True,
-                                text=False,
-                                env=dotnet_env,
-                                timeout=1800
-                            )
-                            
-                            if process_runtime.returncode == 0:
-                                logger.info(f"Runtime-Konfigurations-Strategie '{runtime}' mit '{config['name']}' erfolgreich")
-                                return True
-                            else:
-                                stderr_runtime = process_runtime.stderr.decode('utf-8', errors='replace')
-                                logger.warning(f"Runtime-Konfigurations-Strategie '{runtime}' mit '{config['name']}' fehlgeschlagen: {stderr_runtime}")
-                
-                continue
-                
+                    # Prüfe auf spezifische Fehler
+                    if "Cannot find folder" in stderr_text:
+                        logger.info(f"Ordner '{folder}' nicht gefunden, versuche nächsten")
+                        continue
+                    elif "Index was outside the bounds of the array" in stderr_text:
+                        logger.warning(f"Array-Index-Fehler mit Konfiguration '{config['name']}', versuche nächste")
+                        continue
+                    elif "Failed to create CoreCLR" in stderr_text:
+                        logger.warning(f"CoreCLR-Fehler mit Konfiguration '{config['name']}', versuche nächste")
+                        continue
+                    else:
+                        logger.warning(f"Konfiguration '{config['name']}' mit Ordner '{folder}' fehlgeschlagen: {stderr_text}")
+                        
             except subprocess.TimeoutExpired:
-                logger.warning(f"Runtime '{runtime}' mit Konfiguration '{config['name']}' nach 30 Minuten abgelaufen")
+                logger.warning(f"Timeout mit Konfiguration '{config['name']}' und Ordner '{folder}'")
                 continue
             except Exception as e:
-                logger.warning(f"Unerwarteter Fehler bei Runtime '{runtime}' mit Konfiguration '{config['name']}': {str(e)}")
+                logger.warning(f"Fehler mit Konfiguration '{config['name']}' und Ordner '{folder}': {str(e)}")
                 continue
+    
+    # Wenn alle Konfigurationen fehlgeschlagen sind, versuche ohne Ordner-Spezifikation
+    logger.info("Alle Konfigurationen fehlgeschlagen, versuche Extraktion ohne Ordner-Spezifikation")
+    
+    for config in configurations:
+        logger.info(f"Versuche Konfiguration '{config['name']}' ohne Ordner-Spezifikation")
+        
+        # Umgebungsvariablen setzen
+        dotnet_env = os.environ.copy()
+        dotnet_env.update(config["env"])
+        
+        # Befehl ohne Ordner-Spezifikation
+        cmd = ["dotnet", dll_path, export_option, "-t=" + result_dir, file_path]
+        
+        try:
+            process = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=False,
+                env=dotnet_env,
+                timeout=1800  # 30 Minuten
+            )
+            
+            if process.returncode == 0:
+                logger.info(f"Konfiguration '{config['name']}' ohne Ordner-Spezifikation erfolgreich")
+                return True
+            else:
+                stderr_text = process.stderr.decode('utf-8', errors='replace')
+                logger.warning(f"Konfiguration '{config['name']}' ohne Ordner-Spezifikation fehlgeschlagen: {stderr_text}")
+                
+        except subprocess.TimeoutExpired:
+            logger.warning(f"Timeout mit Konfiguration '{config['name']}' ohne Ordner-Spezifikation")
+            continue
+        except Exception as e:
+            logger.warning(f"Fehler mit Konfiguration '{config['name']}' ohne Ordner-Spezifikation: {str(e)}")
+            continue
     
     logger.error("Alle dynamischen Runtime-Strategien fehlgeschlagen")
     return False
@@ -423,147 +454,29 @@ async def extract_calendar_data(
                 logger.error(error_msg)
                 
                 # Spezielle Behandlung für Array-Index-Fehler bei großen Dateien
-                if "Index was outside the bounds of the array" in stderr_text and file_size_gb > 2.0:
-                    logger.warning("Array-Index-Fehler bei großer Datei erkannt, versuche alternative Strategie")
+                if "Index was outside the bounds of the array" in stderr_text:
+                    logger.warning("Array-Index-Fehler erkannt, versuche alternative Strategie")
                     
                     # Verhindere Endlosschleife durch Rekursionszähler
                     if retry_count >= 3:
                         logger.error("Maximale Anzahl von Wiederholungsversuchen erreicht, versuche alternative Lösung")
                         
-                        # Prüfe Dateigröße für spezielle Behandlung
-                        file_size_gb = os.path.getsize(file_path) / (1024**3)
-                        
-                        if file_size_gb > 3.0:
-                            # Für sehr große Dateien (>3GB) verwende spezielle Funktion
-                            logger.info("Sehr große Datei erkannt (>3GB), verwende spezielle Extraktion")
-                            success = await extract_very_large_file(
-                                file_path=file_path,
-                                dll_path=dll_path,
-                                result_dir=result_dir,
-                                format=format
-                            )
-                        else:
-                            # Für große Dateien (2-3GB) verwende optimierte Extraktion
-                            logger.info("Versuche optimierte Extraktion für große Dateien")
-                            success = await extract_large_file_with_chunking(
-                                file_path=file_path,
-                                dll_path=dll_path,
-                                result_dir=result_dir,
-                                format=format,
-                                pst_folder="Calendar"
-                            )
-                        
-                        # Wenn die normale optimierte Extraktion fehlschlägt, versuche alternative Runtimes
-                        if not success:
-                            logger.info("Optimierte Extraktion fehlgeschlagen, versuche alternative Runtimes")
-                            success = await extract_with_alternative_runtime(
-                                file_path=file_path,
-                                dll_path=dll_path,
-                                result_dir=result_dir,
-                                format=format,
-                                pst_folder="Calendar"
-                            )
-                        
-                        # Wenn auch alternative Runtimes fehlschlagen, versuche dynamische Runtime-Auswahl
-                        if not success:
-                            logger.info("Alternative Runtimes fehlgeschlagen, versuche dynamische Runtime-Auswahl")
-                            success = await extract_with_dynamic_runtime_selection(
-                                file_path=file_path,
-                                dll_path=dll_path,
-                                result_dir=result_dir,
-                                format=format,
-                                pst_folder="Calendar"
-                            )
-                        
-                        # Wenn auch dynamische Runtime-Auswahl fehlschlägt, versuche Chunking
-                        if not success:
-                            logger.info("Dynamische Runtime-Auswahl fehlgeschlagen, versuche Datei-Chunking")
-                            success = await extract_with_file_chunking(
-                                file_path=file_path,
-                                dll_path=dll_path,
-                                result_dir=result_dir,
-                                format=format,
-                                pst_folder="Calendar"
-                            )
+                        # Verwende die neue dynamische Runtime-Auswahl
+                        success = await extract_with_dynamic_runtime_selection(
+                            file_path=file_path,
+                            dll_path=dll_path,
+                            result_dir=result_dir,
+                            format=format,
+                            pst_folder=pst_folder
+                        )
                         
                         if success:
                             logger.info("Alternative Extraktion erfolgreich")
                             # Weiter mit der normalen Verarbeitung
                         else:
-                            # Letzte Option: Versuche mit minimaler Konfiguration
-                            logger.info("Versuche letzte Option mit minimaler Konfiguration")
-                            dotnet_env_minimal = os.environ.copy()
-                            dotnet_env_minimal["DOTNET_GCHeapHardLimit"] = "0x2000000"  # 512MB Heap-Limit
-                            dotnet_env_minimal["DOTNET_GCAllowVeryLargeObjects"] = "0"
-                            dotnet_env_minimal["DOTNET_GCHeapHardLimitPercent"] = "50"
-                            # Kritische Globalisierungseinstellungen
-                            dotnet_env_minimal["DOTNET_SYSTEM_GLOBALIZATION_INVARIANT"] = "1"
-                            # Zusätzliche .NET-Konfiguration
-                            dotnet_env_minimal["DOTNET_CLI_UI_LANGUAGE"] = "en"
-                            
-                            cmd_minimal = ["dotnet", dll_path, export_option, f"-f=Calendar", "-t=" + result_dir, file_path]
-                            logger.info(f"Führe minimalen Befehl aus: {' '.join(cmd_minimal)}")
-                            
-                            process_minimal = subprocess.run(
-                                cmd_minimal,
-                                capture_output=True,
-                                text=False,
-                                env=dotnet_env_minimal,
-                                timeout=timeout_seconds
-                            )
-                            
-                            if process_minimal.returncode == 0:
-                                logger.info("Minimale Extraktion erfolgreich")
-                                # Weiter mit der normalen Verarbeitung
-                            else:
-                                stderr_minimal = process_minimal.stderr.decode('utf-8', errors='replace')
-                                
-                                # Wenn es ein ICU-Fehler ist, versuche eine andere Lösung
-                                if "ICU" in stderr_minimal or "libicu" in stderr_minimal:
-                                    logger.info("ICU-Fehler erkannt, versuche .NET-Konfigurationsdatei zu erstellen")
-                                    
-                                    # Erstelle eine .NET-Konfigurationsdatei
-                                    runtime_config_path = os.path.join(os.path.dirname(dll_path), "runtimeconfig.json")
-                                    if os.path.exists(runtime_config_path):
-                                        logger.info(f"Runtime-Konfiguration gefunden: {runtime_config_path}")
-                                        
-                                        # Versuche mit expliziter Runtime-Konfiguration
-                                        cmd_runtime = [
-                                            "dotnet", 
-                                            "--runtime-config", runtime_config_path,
-                                            dll_path, 
-                                            export_option, 
-                                            f"-f=Calendar", 
-                                            "-t=" + result_dir, 
-                                            file_path
-                                        ]
-                                        
-                                        logger.info(f"Führe Runtime-Konfigurationsbefehl aus: {' '.join(cmd_runtime)}")
-                                        
-                                        process_runtime = subprocess.run(
-                                            cmd_runtime,
-                                            capture_output=True,
-                                            text=False,
-                                            env=dotnet_env_minimal,
-                                            timeout=timeout_seconds
-                                        )
-                                        
-                                        if process_runtime.returncode == 0:
-                                            logger.info("Runtime-Konfigurations-Extraktion erfolgreich")
-                                            # Weiter mit der normalen Verarbeitung
-                                        else:
-                                            stderr_runtime = process_runtime.stderr.decode('utf-8', errors='replace')
-                                            error_msg = f"Datei zu groß für die Verarbeitung. ICU-Fehler konnte nicht behoben werden. Letzter Fehler: {stderr_runtime}"
-                                            logger.error(error_msg)
-                                            raise HTTPException(status_code=500, detail=error_msg)
-                                    else:
-                                        error_msg = f"Datei zu groß für die Verarbeitung. ICU-Fehler und keine Runtime-Konfiguration gefunden. Letzter Fehler: {stderr_minimal}"
-                                        logger.error(error_msg)
-                                        raise HTTPException(status_code=500, detail=error_msg)
-                                else:
-                                    error_msg = f"Datei zu groß für die Verarbeitung. Alle Versuche fehlgeschlagen. Letzter Fehler: {stderr_minimal}"
-                                    logger.error(error_msg)
-                                    raise HTTPException(status_code=500, detail=error_msg)
+                            error_msg = f"Datei zu groß für die Verarbeitung. Alle Versuche fehlgeschlagen. Letzter Fehler: {stderr_text}"
+                            logger.error(error_msg)
+                            raise HTTPException(status_code=500, detail=error_msg)
                     
                     # Strategie 1: Versuche mit spezifischem Ordner statt extract_all
                     if extract_all:
@@ -616,13 +529,30 @@ async def extract_calendar_data(
                         )
                         
                         if process_reduced.returncode == 0:
-                            logger.info("Extraktion mit reduzierter Speichernutzung erfolgreich")
+                            logger.info("Reduzierte Extraktion erfolgreich")
                             # Weiter mit der normalen Verarbeitung
                         else:
                             stderr_reduced = process_reduced.stderr.decode('utf-8', errors='replace')
-                            error_msg = f"Extraktion mit reduzierter Speichernutzung fehlgeschlagen: {stderr_reduced}"
-                            logger.error(error_msg)
-                            raise HTTPException(status_code=500, detail=error_msg)
+                            logger.error(f"Reduzierte Extraktion fehlgeschlagen: {stderr_reduced}")
+                            
+                            # Wenn alle Strategien fehlgeschlagen sind, verwende die neue dynamische Runtime-Auswahl
+                            logger.info("Alle Standard-Strategien fehlgeschlagen, versuche dynamische Runtime-Auswahl")
+                            success = await extract_with_dynamic_runtime_selection(
+                                file_path=file_path,
+                                dll_path=dll_path,
+                                result_dir=result_dir,
+                                format=format,
+                                pst_folder="Calendar"
+                            )
+                            
+                            if success:
+                                logger.info("Dynamische Runtime-Auswahl erfolgreich")
+                                # Weiter mit der normalen Verarbeitung
+                            else:
+                                error_msg = f"Datei zu groß für die Verarbeitung. Alle Versuche fehlgeschlagen. Letzter Fehler: {stderr_reduced}"
+                                logger.error(error_msg)
+                                raise HTTPException(status_code=500, detail=error_msg)
+
                 
                 # Wenn der Fehler "Cannot find folder" ist und wir nicht extract_all verwenden,
                 # versuchen wir es erneut mit extract_all=True
