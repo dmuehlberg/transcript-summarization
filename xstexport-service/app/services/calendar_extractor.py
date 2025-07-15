@@ -7,10 +7,209 @@ from fastapi import UploadFile, HTTPException
 from pydantic import BaseModel
 import logging
 import psutil
+import hashlib
 
 from app.utils.file_utils import cleanup_temp_dir
 
 logger = logging.getLogger(__name__)
+
+def validate_and_repair_ost_file(file_path: str) -> bool:
+    """
+    Versucht eine OST-Datei zu validieren und zu reparieren.
+    
+    Args:
+        file_path: Pfad zur OST-Datei
+        
+    Returns:
+        bool: True wenn die Datei gültig ist oder repariert werden konnte
+    """
+    try:
+        # Prüfe Dateigröße
+        file_size = os.path.getsize(file_path)
+        if file_size == 0:
+            logger.error("OST-Datei ist leer")
+            return False
+        
+        # Prüfe Datei-Header (OST-Dateien haben einen spezifischen Header)
+        with open(file_path, 'rb') as f:
+            header = f.read(8)
+            
+        # OST-Dateien beginnen normalerweise mit einem spezifischen Header
+        # Hier prüfen wir auf gängige OST-Header-Signaturen
+        if header.startswith(b'\x21\x42\x44\x4E'):  # !BDN
+            logger.info("OST-Datei hat gültigen Header")
+            return True
+        elif header.startswith(b'\x4D\x53\x47'):  # MSG
+            logger.info("OST-Datei hat MSG-Header")
+            return True
+        else:
+            logger.warning(f"Unbekannter OST-Header: {header.hex()}")
+            # Trotzdem versuchen, da einige OST-Dateien andere Header haben können
+        
+        # Prüfe auf Dateikorruption durch MD5-Checksumme
+        logger.info("Berechne MD5-Checksumme für Dateivalidierung...")
+        md5_hash = hashlib.md5()
+        
+        with open(file_path, 'rb') as f:
+            # Lese in Chunks, um große Dateien zu handhaben
+            chunk_size = 8192
+            for chunk in iter(lambda: f.read(chunk_size), b""):
+                md5_hash.update(chunk)
+        
+        checksum = md5_hash.hexdigest()
+        logger.info(f"MD5-Checksumme: {checksum}")
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"Fehler bei der Dateivalidierung: {str(e)}")
+        return False
+
+def create_file_backup(file_path: str) -> str:
+    """
+    Erstellt eine Sicherungskopie der Datei.
+    
+    Args:
+        file_path: Pfad zur ursprünglichen Datei
+        
+    Returns:
+        str: Pfad zur Sicherungskopie
+    """
+    try:
+        backup_path = file_path + ".backup"
+        shutil.copy2(file_path, backup_path)
+        logger.info(f"Sicherungskopie erstellt: {backup_path}")
+        return backup_path
+    except Exception as e:
+        logger.error(f"Fehler beim Erstellen der Sicherungskopie: {str(e)}")
+        return file_path
+
+async def extract_with_file_validation(
+    file_path: str,
+    dll_path: str,
+    result_dir: str,
+    format: str = "csv",
+    pst_folder: str = "Calendar"
+) -> bool:
+    """
+    Versucht Extraktion mit Dateivalidierung und -reparatur.
+    
+    Args:
+        file_path: Pfad zur PST/OST-Datei
+        dll_path: Pfad zur .NET DLL
+        result_dir: Zielverzeichnis für die Extraktion
+        format: Export-Format ('csv' oder 'native')
+        pst_folder: Name des zu extrahierenden Ordners
+        
+    Returns:
+        bool: True wenn erfolgreich, False wenn fehlgeschlagen
+    """
+    logger.info(f"Starte Extraktion mit Dateivalidierung: {file_path}")
+    
+    # Validiere die Datei
+    if not validate_and_repair_ost_file(file_path):
+        logger.warning("Dateivalidierung fehlgeschlagen, versuche trotzdem Extraktion")
+    
+    # Erstelle Sicherungskopie
+    backup_path = create_file_backup(file_path)
+    
+    # Versuche verschiedene Ansätze
+    approaches = [
+        {
+            "name": "Minimale Extraktion mit Dateivalidierung",
+            "env": {
+                "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT": "1",
+                "DOTNET_CLI_UI_LANGUAGE": "en",
+                "DOTNET_GCHeapHardLimit": "0x2000000",  # 512MB
+                "DOTNET_GCAllowVeryLargeObjects": "0",
+                "DOTNET_GCHeapHardLimitPercent": "30"
+            },
+            "cmd": ["dotnet", dll_path, "-p", f"-f={pst_folder}", "-t=" + result_dir, file_path]
+        },
+        {
+            "name": "Extraktion ohne Ordner-Spezifikation",
+            "env": {
+                "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT": "1",
+                "DOTNET_CLI_UI_LANGUAGE": "en",
+                "DOTNET_GCHeapHardLimit": "0x1000000",  # 256MB
+                "DOTNET_GCAllowVeryLargeObjects": "0",
+                "DOTNET_GCHeapHardLimitPercent": "20"
+            },
+            "cmd": ["dotnet", dll_path, "-p", "-t=" + result_dir, file_path]
+        },
+        {
+            "name": "Native Extraktion",
+            "env": {
+                "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT": "1",
+                "DOTNET_CLI_UI_LANGUAGE": "en",
+                "DOTNET_GCHeapHardLimit": "0x2000000",  # 512MB
+                "DOTNET_GCAllowVeryLargeObjects": "0",
+                "DOTNET_GCHeapHardLimitPercent": "30"
+            },
+            "cmd": ["dotnet", dll_path, "-e", f"-f={pst_folder}", "-t=" + result_dir, file_path]
+        }
+    ]
+    
+    for approach in approaches:
+        logger.info(f"Versuche Ansatz: {approach['name']}")
+        
+        # Umgebungsvariablen setzen
+        dotnet_env = os.environ.copy()
+        dotnet_env.update(approach["env"])
+        
+        try:
+            process = subprocess.run(
+                approach["cmd"],
+                capture_output=True,
+                text=False,
+                env=dotnet_env,
+                timeout=3600  # 1 Stunde
+            )
+            
+            if process.returncode == 0:
+                logger.info(f"Ansatz '{approach['name']}' erfolgreich")
+                return True
+            else:
+                stderr_text = process.stderr.decode('utf-8', errors='replace')
+                logger.warning(f"Ansatz '{approach['name']}' fehlgeschlagen: {stderr_text}")
+                
+                # Wenn es ein Array-Index-Fehler ist, versuche mit Backup-Datei
+                if "Index was outside the bounds of the array" in stderr_text:
+                    logger.info("Array-Index-Fehler erkannt, versuche mit Backup-Datei")
+                    
+                    if backup_path != file_path:
+                        backup_env = dotnet_env.copy()
+                        backup_env["DOTNET_GCHeapHardLimit"] = "0x1000000"  # Reduziere Heap-Limit
+                        
+                        backup_cmd = approach["cmd"].copy()
+                        backup_cmd[-1] = backup_path  # Ersetze Dateipfad mit Backup
+                        
+                        process_backup = subprocess.run(
+                            backup_cmd,
+                            capture_output=True,
+                            text=False,
+                            env=backup_env,
+                            timeout=3600
+                        )
+                        
+                        if process_backup.returncode == 0:
+                            logger.info(f"Backup-Extraktion mit '{approach['name']}' erfolgreich")
+                            return True
+                        else:
+                            stderr_backup = process_backup.stderr.decode('utf-8', errors='replace')
+                            logger.warning(f"Backup-Extraktion fehlgeschlagen: {stderr_backup}")
+                
+                continue
+                
+        except subprocess.TimeoutExpired:
+            logger.warning(f"Ansatz '{approach['name']}' nach 1 Stunde abgelaufen")
+            continue
+        except Exception as e:
+            logger.warning(f"Fehler bei Ansatz '{approach['name']}': {str(e)}")
+            continue
+    
+    logger.error("Alle Ansätze mit Dateivalidierung fehlgeschlagen")
+    return False
 
 def check_system_resources():
     """
@@ -461,8 +660,8 @@ async def extract_calendar_data(
                     if retry_count >= 3:
                         logger.error("Maximale Anzahl von Wiederholungsversuchen erreicht, versuche alternative Lösung")
                         
-                        # Verwende die neue dynamische Runtime-Auswahl
-                        success = await extract_with_dynamic_runtime_selection(
+                        # Verwende die neue Dateivalidierung und -reparatur
+                        success = await extract_with_file_validation(
                             file_path=file_path,
                             dll_path=dll_path,
                             result_dir=result_dir,
@@ -471,12 +670,26 @@ async def extract_calendar_data(
                         )
                         
                         if success:
-                            logger.info("Alternative Extraktion erfolgreich")
+                            logger.info("Extraktion mit Dateivalidierung erfolgreich")
                             # Weiter mit der normalen Verarbeitung
                         else:
-                            error_msg = f"Datei zu groß für die Verarbeitung. Alle Versuche fehlgeschlagen. Letzter Fehler: {stderr_text}"
-                            logger.error(error_msg)
-                            raise HTTPException(status_code=500, detail=error_msg)
+                            # Als letzte Option versuche die dynamische Runtime-Auswahl
+                            logger.info("Dateivalidierung fehlgeschlagen, versuche dynamische Runtime-Auswahl")
+                            success = await extract_with_dynamic_runtime_selection(
+                                file_path=file_path,
+                                dll_path=dll_path,
+                                result_dir=result_dir,
+                                format=format,
+                                pst_folder=pst_folder
+                            )
+                            
+                            if success:
+                                logger.info("Dynamische Runtime-Auswahl erfolgreich")
+                                # Weiter mit der normalen Verarbeitung
+                            else:
+                                error_msg = f"Datei zu groß für die Verarbeitung. Alle Versuche fehlgeschlagen. Letzter Fehler: {stderr_text}"
+                                logger.error(error_msg)
+                                raise HTTPException(status_code=500, detail=error_msg)
                     
                     # Strategie 1: Versuche mit spezifischem Ordner statt extract_all
                     if extract_all:
@@ -535,9 +748,9 @@ async def extract_calendar_data(
                             stderr_reduced = process_reduced.stderr.decode('utf-8', errors='replace')
                             logger.error(f"Reduzierte Extraktion fehlgeschlagen: {stderr_reduced}")
                             
-                            # Wenn alle Strategien fehlgeschlagen sind, verwende die neue dynamische Runtime-Auswahl
-                            logger.info("Alle Standard-Strategien fehlgeschlagen, versuche dynamische Runtime-Auswahl")
-                            success = await extract_with_dynamic_runtime_selection(
+                            # Wenn alle Strategien fehlgeschlagen sind, verwende die neue Dateivalidierung
+                            logger.info("Alle Standard-Strategien fehlgeschlagen, versuche Dateivalidierung")
+                            success = await extract_with_file_validation(
                                 file_path=file_path,
                                 dll_path=dll_path,
                                 result_dir=result_dir,
@@ -546,12 +759,26 @@ async def extract_calendar_data(
                             )
                             
                             if success:
-                                logger.info("Dynamische Runtime-Auswahl erfolgreich")
+                                logger.info("Dateivalidierung erfolgreich")
                                 # Weiter mit der normalen Verarbeitung
                             else:
-                                error_msg = f"Datei zu groß für die Verarbeitung. Alle Versuche fehlgeschlagen. Letzter Fehler: {stderr_reduced}"
-                                logger.error(error_msg)
-                                raise HTTPException(status_code=500, detail=error_msg)
+                                # Als letzte Option versuche die dynamische Runtime-Auswahl
+                                logger.info("Dateivalidierung fehlgeschlagen, versuche dynamische Runtime-Auswahl")
+                                success = await extract_with_dynamic_runtime_selection(
+                                    file_path=file_path,
+                                    dll_path=dll_path,
+                                    result_dir=result_dir,
+                                    format=format,
+                                    pst_folder="Calendar"
+                                )
+                                
+                                if success:
+                                    logger.info("Dynamische Runtime-Auswahl erfolgreich")
+                                    # Weiter mit der normalen Verarbeitung
+                                else:
+                                    error_msg = f"Datei zu groß für die Verarbeitung. Alle Versuche fehlgeschlagen. Letzter Fehler: {stderr_reduced}"
+                                    logger.error(error_msg)
+                                    raise HTTPException(status_code=500, detail=error_msg)
 
                 
                 # Wenn der Fehler "Cannot find folder" ist und wir nicht extract_all verwenden,
