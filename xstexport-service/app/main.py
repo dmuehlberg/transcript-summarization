@@ -9,6 +9,8 @@ import json
 import shutil
 import tempfile
 import zipfile
+import pandas as pd
+from sqlalchemy import text
 
 from app.services.calendar_extractor import extract_calendar_data, find_dll
 from app.services.file_extractor import extract_calendar_from_existing_file, extract_calendar_from_zip
@@ -222,6 +224,127 @@ async def extract_calendar(
     except Exception as e:
         logger.error(f"Fehler bei der Extraktion: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if file.file:
+            file.file.close()
+        # Sicherstellen, dass alle temporären Verzeichnisse bereinigt werden
+        if temp_dir and os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir)
+            logger.info(f"Temporäres Verzeichnis bereinigt: {temp_dir}")
+
+@app.post("/import-csv-to-db")
+async def import_csv_to_database(
+    file: UploadFile = File(..., description="Die CSV-Datei, die in die Datenbank importiert werden soll"),
+    table_name: str = Form("calendar_data", description="Name der Zieltabelle in der Datenbank"),
+    truncate_table: bool = Form(True, description="Ob vorhandene Daten in der Tabelle gelöscht werden sollen")
+):
+    """
+    Importiert Daten aus einer CSV-Datei direkt in die Datenbank.
+    
+    Args:
+        file: Die CSV-Datei mit Kalenderdaten
+        table_name: Name der Zieltabelle (Standard: "calendar_data")
+        truncate_table: Ob vorhandene Daten gelöscht werden sollen (Standard: True)
+    
+    Returns:
+        JSON-Antwort mit Status und Anzahl der importierten Datensätze
+    """
+    if not file:
+        raise HTTPException(status_code=400, detail="Keine Datei hochgeladen")
+        
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Kein Dateiname angegeben")
+    
+    if not file.filename.lower().endswith('.csv'):
+        raise HTTPException(status_code=400, detail="Nur CSV-Dateien werden unterstützt")
+    
+    temp_dir = None
+    try:
+        # Temporäres Verzeichnis erstellen
+        temp_dir = tempfile.mkdtemp()
+        logger.info(f"Temporäres Verzeichnis erstellt: {temp_dir}")
+        
+        # Datei speichern
+        file_path = os.path.join(temp_dir, file.filename)
+        logger.info(f"Speichere CSV-Datei: {file_path}")
+        
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        # CSV-Datei einlesen und Anzahl der Zeilen ermitteln
+        df = db_service.read_csv_safely(file_path)
+        row_count = len(df)
+        logger.info(f"CSV-Datei enthält {row_count} Zeilen")
+        
+        # Daten in die Datenbank importieren
+        if truncate_table:
+            logger.info(f"Lösche vorhandene Daten in Tabelle {table_name}")
+            with db_service.engine.connect() as conn:
+                conn.execute(text(f"TRUNCATE TABLE {table_name}"))
+                conn.commit()
+        
+        # Import durchführen - wenn truncate_table=False, dann append statt replace
+        if truncate_table:
+            db_service.import_csv_to_db(file_path, table_name)
+        else:
+            # Für append müssen wir die Methode leicht modifizieren
+            logger.info(f"Füge Daten zu bestehender Tabelle {table_name} hinzu")
+            # Lese CSV-Datei
+            df = db_service.read_csv_safely(file_path)
+            
+            # Erstelle Tabelle, falls sie noch nicht existiert
+            db_service.create_table_if_not_exists(table_name)
+            
+            # Finde übereinstimmende Spalten
+            column_mapping = {}
+            for csv_col in df.columns:
+                if csv_col in db_service.mapping:
+                    column_mapping[csv_col] = db_service.mapping[csv_col]['pg_field']
+            
+            if not column_mapping:
+                raise ValueError("Keine übereinstimmenden Spalten zwischen CSV und Mapping gefunden")
+            
+            # Wähle nur die gemappten Spalten aus
+            df_mapped = df[list(column_mapping.keys())].copy()
+            df_mapped.columns = [column_mapping[col] for col in df_mapped.columns]
+            
+            # Konvertiere Datentypen (wie in der ursprünglichen Methode)
+            for field_name, field_info in db_service.mapping.items():
+                if field_name in df.columns:
+                    pg_field = field_info['pg_field']
+                    pg_type = field_info.get('pg_type', 'TEXT')
+                    
+                    if pg_type == 'TIMESTAMP' or pg_type == 'timestamp with time zone':
+                        df_mapped[pg_field] = pd.to_datetime(df_mapped[pg_field], errors='coerce')
+                        if df_mapped[pg_field].dt.tz is None:
+                            df_mapped[pg_field] = df_mapped[pg_field].dt.tz_localize('UTC', ambiguous='infer', nonexistent='shift_forward')
+                        else:
+                            df_mapped[pg_field] = df_mapped[pg_field].dt.tz_convert('UTC')
+                    elif pg_type == 'INTEGER':
+                        df_mapped[pg_field] = pd.to_numeric(df_mapped[pg_field], errors='coerce').fillna(0).astype(int)
+                    elif pg_type == 'BOOLEAN':
+                        df_mapped[pg_field] = df_mapped[pg_field].map({'true': True, 'false': False, 'True': True, 'False': False})
+            
+            # Importiere in die Datenbank mit append
+            df_mapped.to_sql(table_name, db_service.engine, if_exists='append', index=False)
+        
+        return JSONResponse(
+            content={
+                "status": "success",
+                "message": f"CSV-Datei erfolgreich in die Datenbank importiert",
+                "filename": file.filename,
+                "table_name": table_name,
+                "imported_rows": row_count,
+                "truncated_table": truncate_table
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Importieren der CSV-Datei: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Fehler beim Importieren der CSV-Datei: {str(e)}"
+        )
     finally:
         if file.file:
             file.file.close()
