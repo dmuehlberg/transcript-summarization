@@ -145,7 +145,9 @@ async def extract_calendar_data(
         # Füge Umgebungsvariable für .NET-Debug-Ausgabe hinzu
         dotnet_env = os.environ.copy()
         dotnet_env["DOTNET_CLI_UI_LANGUAGE"] = "en"  # Erzwinge englische Fehlermeldungen
-        dotnet_env["DOTNET_SYSTEM_GLOBALIZATION_INVARIANT"] = "true"  # Setze unveränderliche Globalisierung
+        dotnet_env["DOTNET_SYSTEM_GLOBALIZATION_INVARIANT"] = "1"  # Setze unveränderliche Globalisierung (1 statt "true")
+        dotnet_env["DOTNET_SYSTEM_GLOBALIZATION_INVARIANT"] = "true"  # Alternative Schreibweise
+        dotnet_env["DOTNET_SYSTEM_GLOBALIZATION_INVARIANT"] = "1"  # Nochmal sicherstellen
         
         # Führe den dotnet-Befehl mit den Umgebungsvariablen aus
         logger.info(f"Führe Befehl aus: {' '.join(cmd)}")
@@ -214,6 +216,13 @@ async def extract_calendar_data(
                             dotnet_env_minimal["DOTNET_GCHeapHardLimit"] = "0x2000000"  # 512MB Heap-Limit
                             dotnet_env_minimal["DOTNET_GCAllowVeryLargeObjects"] = "0"
                             dotnet_env_minimal["DOTNET_GCHeapHardLimitPercent"] = "50"
+                            # Kritische Globalisierungseinstellungen
+                            dotnet_env_minimal["DOTNET_SYSTEM_GLOBALIZATION_INVARIANT"] = "1"
+                            dotnet_env_minimal["DOTNET_SYSTEM_GLOBALIZATION_INVARIANT"] = "true"
+                            dotnet_env_minimal["DOTNET_SYSTEM_GLOBALIZATION_INVARIANT"] = "1"
+                            # Zusätzliche .NET-Konfiguration
+                            dotnet_env_minimal["DOTNET_CLI_UI_LANGUAGE"] = "en"
+                            dotnet_env_minimal["DOTNET_SYSTEM_GLOBALIZATION_INVARIANT"] = "1"
                             
                             cmd_minimal = ["dotnet", dll_path, export_option, f"-f=Calendar", "-t=" + result_dir, file_path]
                             logger.info(f"Führe minimalen Befehl aus: {' '.join(cmd_minimal)}")
@@ -231,9 +240,53 @@ async def extract_calendar_data(
                                 # Weiter mit der normalen Verarbeitung
                             else:
                                 stderr_minimal = process_minimal.stderr.decode('utf-8', errors='replace')
-                                error_msg = f"Datei zu groß für die Verarbeitung. Alle Versuche fehlgeschlagen. Letzter Fehler: {stderr_minimal}"
-                                logger.error(error_msg)
-                                raise HTTPException(status_code=500, detail=error_msg)
+                                
+                                # Wenn es ein ICU-Fehler ist, versuche eine andere Lösung
+                                if "ICU" in stderr_minimal or "libicu" in stderr_minimal:
+                                    logger.info("ICU-Fehler erkannt, versuche .NET-Konfigurationsdatei zu erstellen")
+                                    
+                                    # Erstelle eine .NET-Konfigurationsdatei
+                                    runtime_config_path = os.path.join(os.path.dirname(dll_path), "runtimeconfig.json")
+                                    if os.path.exists(runtime_config_path):
+                                        logger.info(f"Runtime-Konfiguration gefunden: {runtime_config_path}")
+                                        
+                                        # Versuche mit expliziter Runtime-Konfiguration
+                                        cmd_runtime = [
+                                            "dotnet", 
+                                            "--runtime-config", runtime_config_path,
+                                            dll_path, 
+                                            export_option, 
+                                            f"-f=Calendar", 
+                                            "-t=" + result_dir, 
+                                            file_path
+                                        ]
+                                        
+                                        logger.info(f"Führe Runtime-Konfigurationsbefehl aus: {' '.join(cmd_runtime)}")
+                                        
+                                        process_runtime = subprocess.run(
+                                            cmd_runtime,
+                                            capture_output=True,
+                                            text=False,
+                                            env=dotnet_env_minimal,
+                                            timeout=timeout_seconds
+                                        )
+                                        
+                                        if process_runtime.returncode == 0:
+                                            logger.info("Runtime-Konfigurations-Extraktion erfolgreich")
+                                            # Weiter mit der normalen Verarbeitung
+                                        else:
+                                            stderr_runtime = process_runtime.stderr.decode('utf-8', errors='replace')
+                                            error_msg = f"Datei zu groß für die Verarbeitung. ICU-Fehler konnte nicht behoben werden. Letzter Fehler: {stderr_runtime}"
+                                            logger.error(error_msg)
+                                            raise HTTPException(status_code=500, detail=error_msg)
+                                    else:
+                                        error_msg = f"Datei zu groß für die Verarbeitung. ICU-Fehler und keine Runtime-Konfiguration gefunden. Letzter Fehler: {stderr_minimal}"
+                                        logger.error(error_msg)
+                                        raise HTTPException(status_code=500, detail=error_msg)
+                                else:
+                                    error_msg = f"Datei zu groß für die Verarbeitung. Alle Versuche fehlgeschlagen. Letzter Fehler: {stderr_minimal}"
+                                    logger.error(error_msg)
+                                    raise HTTPException(status_code=500, detail=error_msg)
                     
                     # Strategie 1: Versuche mit spezifischem Ordner statt extract_all
                     if extract_all:
@@ -391,7 +444,9 @@ async def extract_large_file_with_chunking(
     # Optimierte .NET-Umgebungsvariablen für große Dateien
     dotnet_env = os.environ.copy()
     dotnet_env["DOTNET_CLI_UI_LANGUAGE"] = "en"
-    dotnet_env["DOTNET_SYSTEM_GLOBALIZATION_INVARIANT"] = "true"
+    dotnet_env["DOTNET_SYSTEM_GLOBALIZATION_INVARIANT"] = "1"  # Setze unveränderliche Globalisierung
+    dotnet_env["DOTNET_SYSTEM_GLOBALIZATION_INVARIANT"] = "true"  # Alternative Schreibweise
+    dotnet_env["DOTNET_SYSTEM_GLOBALIZATION_INVARIANT"] = "1"  # Nochmal sicherstellen
     
     # Spezielle Konfiguration für große Dateien
     dotnet_env["DOTNET_GCHeapHardLimit"] = "0x8000000"  # 2GB Heap-Limit

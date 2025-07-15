@@ -8,6 +8,8 @@ RUN apt-get update && apt-get install -y \
     libpst-dev \
     wget \
     gnupg \
+    libicu-dev \
+    libicu67 \
     && rm -rf /var/lib/apt/lists/*
 
 # Installiere .NET SDK für beide Architekturen
@@ -42,6 +44,10 @@ RUN pip install -r requirements.txt
 
 # Erstelle Verzeichnis für PST/OST-Dateien
 RUN mkdir -p /data/ost
+
+# Setze .NET-Umgebungsvariablen für Globalisierung
+ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
+ENV DOTNET_CLI_UI_LANGUAGE=en
 
 # Exponiere den Port
 EXPOSE 8200
