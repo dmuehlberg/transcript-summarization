@@ -593,21 +593,15 @@ async def extract_calendar_data(
         # CMD erzeugen je nach extract_all Option
         cmd = ["dotnet", dll_path, export_option]
         
-        if extract_all:
-            # Wenn alle Elemente extrahiert werden sollen, verwenden wir keinen -f Parameter
-            cmd.extend([
-                "-t=" + result_dir,
-                file_path
-            ])
-            extraction_type = "all items"
-        else:
-            # Wenn nur ein bestimmter Ordner extrahiert werden soll
-            cmd.extend([
-                f"-f={pst_folder}",
-                "-t=" + result_dir,
-                file_path
-            ])
-            extraction_type = pst_folder
+        # Für Speicherprobleme immer mit spezifischem Ordner extrahieren
+        # extract_all wird ignoriert, um Speicherverbrauch zu reduzieren
+        cmd.extend([
+            f"-f={pst_folder}",
+            "-t=" + result_dir,
+            file_path
+        ])
+        extraction_type = pst_folder
+        logger.info(f"Extrahiere spezifischen Ordner: {pst_folder} (extract_all wird ignoriert)")
         
         # Füge Umgebungsvariable für .NET-Debug-Ausgabe hinzu
         dotnet_env = os.environ.copy()
@@ -631,19 +625,19 @@ async def extract_calendar_data(
             dotnet_env["DOTNET_GCAllowVeryLargeObjects"] = "1"
             dotnet_env["DOTNET_GCHeapHardLimitPercent"] = "80"
         elif file_size_gb > 1.0:
-            logger.info("Mittlere Datei erkannt (1-2GB), verwende moderate Konfiguration")
+            logger.info("Mittlere Datei erkannt (1-2GB), verwende konservative Konfiguration")
             timeout_seconds = 900  # 15 Minuten
-            # Moderate Speicherlimits für mittlere Dateien
-            dotnet_env["DOTNET_GCHeapHardLimit"] = "0x4000000"  # 1GB Heap-Limit
+            # Konservative Speicherlimits für mittlere Dateien
+            dotnet_env["DOTNET_GCHeapHardLimit"] = "0x2000000"  # 512MB Heap-Limit
             dotnet_env["DOTNET_GCAllowVeryLargeObjects"] = "0"
-            dotnet_env["DOTNET_GCHeapHardLimitPercent"] = "50"
+            dotnet_env["DOTNET_GCHeapHardLimitPercent"] = "25"
         else:
             logger.info("Kleine Datei erkannt (<1GB), verwende Standard-Konfiguration")
             timeout_seconds = 300  # 5 Minuten für normale Dateien
             # Konservative Speicherlimits für kleine Dateien
-            dotnet_env["DOTNET_GCHeapHardLimit"] = "0x2000000"  # 512MB Heap-Limit
+            dotnet_env["DOTNET_GCHeapHardLimit"] = "0x1000000"  # 256MB Heap-Limit
             dotnet_env["DOTNET_GCAllowVeryLargeObjects"] = "0"
-            dotnet_env["DOTNET_GCHeapHardLimitPercent"] = "30"
+            dotnet_env["DOTNET_GCHeapHardLimitPercent"] = "15"
         
         try:
             process = subprocess.run(
