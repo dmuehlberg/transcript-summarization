@@ -1,0 +1,45 @@
+# Web-Framework und ASGI-Server
+fastapi==0.104.1
+uvicorn==0.24.0
+
+# Für Dateiverarbeitung und Uploads
+python-multipart==0.0.6
+
+# Für Dateiverarbeitung und -konvertierung
+pandas==2.1.3
+numpy==1.26.2
+
+# Für ZIP-Erstellung
+zipfile36>=0.1.3
+
+# Für Umgebungsvariablen
+python-dotenv==1.0.0
+
+# Für CORS-Unterstützung
+starlette>=0.27.0,<0.28.0
+
+# Für Datenbankunterstützung
+sqlalchemy>=2.0.25
+psycopg2-binary==2.9.9
+alembic>=1.13.1
+
+# Für Prozesssteuerung und Subprozesse
+asyncio>=3.4.3
+httpx>=0.27.0
+psutil>=5.9.0
+
+# Für erweiterte Validierung
+pydantic>=2.6.0
+
+# Optional: Für Authentifizierung
+# python-jose[cryptography]>=3.3.0
+# passlib[bcrypt]>=1.7.4
+
+# Für PST-Dateiverarbeitung
+# libpst==0.6.76
+
+# Für Tabellenverarbeitung
+petl>=1.7.0
+
+# Für Zeitzonenbehandlung
+pytz>=2023.3

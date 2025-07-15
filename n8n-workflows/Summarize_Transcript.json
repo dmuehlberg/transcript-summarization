@@ -1,0 +1,229 @@
+{
+  "name": "Summarize Transcript",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        200
+      ],
+      "id": "9f6ddb1a-3c7a-4a7c-8c72-d3ebb557f424",
+      "name": "When clicking ‘Test workflow’"
+    },
+    {
+      "parameters": {
+        "fileSelector": "={{ $json.filePath }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        280,
+        100
+      ],
+      "id": "a15fe609-27f1-4826-aea2-aebf216dbb32",
+      "name": "Read/Write Files from Disk"
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "destinationKey": "transcript",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        540,
+        100
+      ],
+      "id": "06632573-055f-4f9e-9048-0fa331cb7457",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "text",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        1200,
+        100
+      ],
+      "id": "17bac10a-78dd-43ce-b880-648e65b784fc",
+      "name": "Convert to File"
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "=/data/shared/summarize_input/{{ $('Set baseFileName').item.json.baseFileName }}_transformed.txt",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1460,
+        100
+      ],
+      "id": "71a06091-48ce-4659-ada0-6653a132eb5d",
+      "name": "Read/Write Files from Disk1"
+    },
+    {
+      "parameters": {
+        "language": "python",
+        "pythonCode": "import re\n\ndef consolidate_speaker_blocks_with_timestamps(transcript_text):\n    lines = transcript_text.strip().split(\"\\n\")\n    consolidated = []\n    current_speaker = None\n    current_text = []\n    start_time = None\n\n    for line in lines:\n        match = re.match(r\"\\[(\\d{2}:\\d{2}:\\d{2}\\.\\d+)\\] (SPEAKER_\\d+):\\s*(.*)\", line)\n        if match:\n            timestamp, speaker, text = match.groups()\n            if speaker != current_speaker:\n                if current_speaker is not None:\n                    consolidated.append(f\"[{start_time}] {current_speaker}:\\n{' '.join(current_text)}\\n\")\n                current_speaker = speaker\n                current_text = [text]\n                start_time = timestamp\n            else:\n                current_text.append(text)\n        elif current_speaker:\n            current_text.append(line.strip())\n\n    if current_speaker and current_text:\n        consolidated.append(f\"[{start_time}] {current_speaker}:\\n{' '.join(current_text)}\\n\")\n\n    return \"\\n\".join(consolidated)\n\nfor item in items:\n    input_text = item['json'].get('transcript', '')  # <--- hier angepasst!\n    output_text = consolidate_speaker_blocks_with_timestamps(input_text)\n    item['json']['text'] = output_text\n\nreturn items\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        740,
+        100
+      ],
+      "id": "6b643f42-ff9c-458c-9b49-e82043a46fe5",
+      "name": "Consolidate Speaker Sections"
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "6846f305-fb68-46c1-a302-25f5266e18eb",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a0521520-3420-40f7-a617-350413ae2577",
+              "name": "baseFileName",
+              "value": "={{ $('Read/Write Files from Disk').item.json.fileName.split('/').pop().split('.')[0] }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        980,
+        100
+      ],
+      "id": "d8e9750b-8693-4c29-a2b5-f6439cf92f51",
+      "name": "Set baseFileName"
+    }
+  ],
+  "pinData": {
+    "When Executed by Another Workflow": [
+      {
+        "json": {
+          "filePath": "/data/shared/summarize_input/2025-06-17 16-36-00.txt"
+        }
+      },
+      {
+        "json": {
+          "baseFileName": "2025-06-17 16-36-00"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "When clicking ‘Test workflow’": {
+      "main": [
+        [
+          {
+            "node": "Read/Write Files from Disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read/Write Files from Disk": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Consolidate Speaker Sections",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert to File": {
+      "main": [
+        [
+          {
+            "node": "Read/Write Files from Disk1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consolidate Speaker Sections": {
+      "main": [
+        [
+          {
+            "node": "Set baseFileName",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Read/Write Files from Disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set baseFileName": {
+      "main": [
+        [
+          {
+            "node": "Convert to File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "e70c7544-1ecc-417e-a755-c7c596ee9231",
+  "meta": {
+    "instanceId": "ef294ce2c8969143c3f21aeb83a219f5910d5236d8d11193629e117ac6bdff9f"
+  },
+  "id": "Wq20Ouk1zEWnfVQF",
+  "tags": []
+}
