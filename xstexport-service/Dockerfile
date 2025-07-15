@@ -44,10 +44,12 @@ RUN pip install -r requirements.txt
 # Erstelle Verzeichnis für PST/OST-Dateien
 RUN mkdir -p /data/ost
 
-# Setze .NET-Umgebungsvariablen für Globalisierung
+# Setze .NET-Umgebungsvariablen für Globalisierung und große Dateien
 ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
 ENV DOTNET_CLI_UI_LANGUAGE=en
-ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=true
+ENV DOTNET_GCHeapHardLimit=0x8000000
+ENV DOTNET_GCAllowVeryLargeObjects=1
+ENV DOTNET_GCHeapHardLimitPercent=80
 
 # Exponiere den Port
 EXPOSE 8200

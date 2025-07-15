@@ -26,6 +26,7 @@ alembic>=1.13.1
 # Für Prozesssteuerung und Subprozesse
 asyncio>=3.4.3
 httpx>=0.27.0
+psutil>=5.9.0
 
 # Für erweiterte Validierung
 pydantic>=2.6.0

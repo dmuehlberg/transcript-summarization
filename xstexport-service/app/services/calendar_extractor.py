@@ -6,10 +6,43 @@ from typing import Optional, Dict, Any
 from fastapi import UploadFile, HTTPException
 from pydantic import BaseModel
 import logging
+import psutil
 
 from app.utils.file_utils import cleanup_temp_dir
 
 logger = logging.getLogger(__name__)
+
+def check_system_resources():
+    """
+    Überprüft die verfügbaren Systemressourcen und gibt Warnungen aus.
+    """
+    try:
+        # Verfügbarer Speicher
+        memory = psutil.virtual_memory()
+        available_gb = memory.available / (1024**3)
+        total_gb = memory.total / (1024**3)
+        
+        logger.info(f"Verfügbarer Speicher: {available_gb:.2f} GB von {total_gb:.2f} GB")
+        
+        if available_gb < 1.0:
+            logger.warning(f"Wenig verfügbarer Speicher: {available_gb:.2f} GB")
+            return False
+        
+        # Verfügbarer Speicherplatz
+        disk = psutil.disk_usage('/')
+        available_disk_gb = disk.free / (1024**3)
+        
+        logger.info(f"Verfügbarer Speicherplatz: {available_disk_gb:.2f} GB")
+        
+        if available_disk_gb < 5.0:
+            logger.warning(f"Wenig verfügbarer Speicherplatz: {available_disk_gb:.2f} GB")
+            return False
+        
+        return True
+        
+    except Exception as e:
+        logger.warning(f"Konnte Systemressourcen nicht überprüfen: {str(e)}")
+        return True  # Im Zweifelsfall fortfahren
 
 class ExtractionResult(BaseModel):
     zip_path: str
@@ -56,6 +89,17 @@ async def extract_calendar_data(
     Raises:
         HTTPException: Bei Fehlern während der Extraktion
     """
+    # Verhindere Endlosschleife
+    if retry_count > 5:
+        raise HTTPException(
+            status_code=500,
+            detail="Maximale Anzahl von Wiederholungsversuchen erreicht. Die Datei ist möglicherweise zu groß oder beschädigt."
+        )
+    
+    # Überprüfe Systemressourcen
+    if not check_system_resources():
+        logger.warning("Systemressourcen sind knapp, aber versuche Extraktion trotzdem")
+    
     # Bestimmen des Quellverzeichnisses, falls target_folder nicht angegeben ist
     source_dir = "/data/ost"  # Standard-Verzeichnis im Container
     
@@ -145,9 +189,7 @@ async def extract_calendar_data(
         # Füge Umgebungsvariable für .NET-Debug-Ausgabe hinzu
         dotnet_env = os.environ.copy()
         dotnet_env["DOTNET_CLI_UI_LANGUAGE"] = "en"  # Erzwinge englische Fehlermeldungen
-        dotnet_env["DOTNET_SYSTEM_GLOBALIZATION_INVARIANT"] = "1"  # Setze unveränderliche Globalisierung (1 statt "true")
-        dotnet_env["DOTNET_SYSTEM_GLOBALIZATION_INVARIANT"] = "true"  # Alternative Schreibweise
-        dotnet_env["DOTNET_SYSTEM_GLOBALIZATION_INVARIANT"] = "1"  # Nochmal sicherstellen
+        dotnet_env["DOTNET_SYSTEM_GLOBALIZATION_INVARIANT"] = "1"  # Setze unveränderliche Globalisierung
         
         # Führe den dotnet-Befehl mit den Umgebungsvariablen aus
         logger.info(f"Führe Befehl aus: {' '.join(cmd)}")
@@ -196,18 +238,31 @@ async def extract_calendar_data(
                     if retry_count >= 3:
                         logger.error("Maximale Anzahl von Wiederholungsversuchen erreicht, versuche alternative Lösung")
                         
-                        # Versuche die spezielle Funktion für große Dateien
-                        logger.info("Versuche optimierte Extraktion für große Dateien")
-                        success = await extract_large_file_with_chunking(
-                            file_path=file_path,
-                            dll_path=dll_path,
-                            result_dir=result_dir,
-                            format=format,
-                            pst_folder="Calendar"
-                        )
+                        # Prüfe Dateigröße für spezielle Behandlung
+                        file_size_gb = os.path.getsize(file_path) / (1024**3)
+                        
+                        if file_size_gb > 3.0:
+                            # Für sehr große Dateien (>3GB) verwende spezielle Funktion
+                            logger.info("Sehr große Datei erkannt (>3GB), verwende spezielle Extraktion")
+                            success = await extract_very_large_file(
+                                file_path=file_path,
+                                dll_path=dll_path,
+                                result_dir=result_dir,
+                                format=format
+                            )
+                        else:
+                            # Für große Dateien (2-3GB) verwende optimierte Extraktion
+                            logger.info("Versuche optimierte Extraktion für große Dateien")
+                            success = await extract_large_file_with_chunking(
+                                file_path=file_path,
+                                dll_path=dll_path,
+                                result_dir=result_dir,
+                                format=format,
+                                pst_folder="Calendar"
+                            )
                         
                         if success:
-                            logger.info("Optimierte Extraktion erfolgreich")
+                            logger.info("Alternative Extraktion erfolgreich")
                             # Weiter mit der normalen Verarbeitung
                         else:
                             # Letzte Option: Versuche mit minimaler Konfiguration
@@ -218,11 +273,8 @@ async def extract_calendar_data(
                             dotnet_env_minimal["DOTNET_GCHeapHardLimitPercent"] = "50"
                             # Kritische Globalisierungseinstellungen
                             dotnet_env_minimal["DOTNET_SYSTEM_GLOBALIZATION_INVARIANT"] = "1"
-                            dotnet_env_minimal["DOTNET_SYSTEM_GLOBALIZATION_INVARIANT"] = "true"
-                            dotnet_env_minimal["DOTNET_SYSTEM_GLOBALIZATION_INVARIANT"] = "1"
                             # Zusätzliche .NET-Konfiguration
                             dotnet_env_minimal["DOTNET_CLI_UI_LANGUAGE"] = "en"
-                            dotnet_env_minimal["DOTNET_SYSTEM_GLOBALIZATION_INVARIANT"] = "1"
                             
                             cmd_minimal = ["dotnet", dll_path, export_option, f"-f=Calendar", "-t=" + result_dir, file_path]
                             logger.info(f"Führe minimalen Befehl aus: {' '.join(cmd_minimal)}")
@@ -445,8 +497,6 @@ async def extract_large_file_with_chunking(
     dotnet_env = os.environ.copy()
     dotnet_env["DOTNET_CLI_UI_LANGUAGE"] = "en"
     dotnet_env["DOTNET_SYSTEM_GLOBALIZATION_INVARIANT"] = "1"  # Setze unveränderliche Globalisierung
-    dotnet_env["DOTNET_SYSTEM_GLOBALIZATION_INVARIANT"] = "true"  # Alternative Schreibweise
-    dotnet_env["DOTNET_SYSTEM_GLOBALIZATION_INVARIANT"] = "1"  # Nochmal sicherstellen
     
     # Spezielle Konfiguration für große Dateien
     dotnet_env["DOTNET_GCHeapHardLimit"] = "0x8000000"  # 2GB Heap-Limit
@@ -488,6 +538,52 @@ async def extract_large_file_with_chunking(
         else:
             stderr_text = process.stderr.decode('utf-8', errors='replace')
             logger.error(f"Optimierte Extraktion fehlgeschlagen: {stderr_text}")
+            
+            # Wenn es ein CoreCLR-Fehler ist, versuche alternative Strategien
+            if "Failed to create CoreCLR" in stderr_text:
+                logger.info("CoreCLR-Fehler erkannt, versuche alternative .NET-Konfiguration")
+                
+                # Versuche mit expliziter Runtime-Konfiguration
+                runtime_config_path = os.path.join(os.path.dirname(dll_path), "runtimeconfig.json")
+                if os.path.exists(runtime_config_path):
+                    logger.info(f"Runtime-Konfiguration gefunden: {runtime_config_path}")
+                    
+                    # Alternative Umgebungsvariablen für CoreCLR-Probleme
+                    dotnet_env_alt = os.environ.copy()
+                    dotnet_env_alt["DOTNET_SYSTEM_GLOBALIZATION_INVARIANT"] = "1"
+                    dotnet_env_alt["DOTNET_CLI_UI_LANGUAGE"] = "en"
+                    dotnet_env_alt["DOTNET_GCHeapHardLimit"] = "0x4000000"  # 1GB Heap-Limit
+                    dotnet_env_alt["DOTNET_GCAllowVeryLargeObjects"] = "0"
+                    dotnet_env_alt["DOTNET_GCHeapHardLimitPercent"] = "60"
+                    
+                    # Versuche mit expliziter Runtime-Konfiguration
+                    cmd_runtime = [
+                        "dotnet", 
+                        "--runtime-config", runtime_config_path,
+                        dll_path, 
+                        export_option,
+                        f"-f={pst_folder}",
+                        "-t=" + result_dir,
+                        file_path
+                    ]
+                    
+                    logger.info(f"Führe Runtime-Konfigurationsbefehl aus: {' '.join(cmd_runtime)}")
+                    
+                    process_runtime = subprocess.run(
+                        cmd_runtime,
+                        capture_output=True,
+                        text=False,
+                        env=dotnet_env_alt,
+                        timeout=timeout_seconds
+                    )
+                    
+                    if process_runtime.returncode == 0:
+                        logger.info("Runtime-Konfigurations-Extraktion erfolgreich")
+                        return True
+                    else:
+                        stderr_runtime = process_runtime.stderr.decode('utf-8', errors='replace')
+                        logger.error(f"Runtime-Konfigurations-Extraktion fehlgeschlagen: {stderr_runtime}")
+            
             return False
             
     except subprocess.TimeoutExpired:
@@ -496,3 +592,118 @@ async def extract_large_file_with_chunking(
     except Exception as e:
         logger.error(f"Unerwarteter Fehler bei optimierter Extraktion: {str(e)}")
         return False
+
+async def extract_very_large_file(
+    file_path: str,
+    dll_path: str,
+    result_dir: str,
+    format: str = "csv"
+) -> bool:
+    """
+    Spezielle Funktion für die Extraktion sehr großer PST/OST-Dateien (>3GB).
+    Verwendet minimale .NET-Konfiguration und versucht verschiedene Strategien.
+    
+    Args:
+        file_path: Pfad zur PST/OST-Datei
+        dll_path: Pfad zur .NET DLL
+        result_dir: Zielverzeichnis für die Extraktion
+        format: Export-Format ('csv' oder 'native')
+        
+    Returns:
+        bool: True wenn erfolgreich, False wenn fehlgeschlagen
+    """
+    logger.info(f"Starte Extraktion für sehr große Datei: {file_path}")
+    
+    # Minimale .NET-Umgebungsvariablen für sehr große Dateien
+    dotnet_env = os.environ.copy()
+    dotnet_env["DOTNET_SYSTEM_GLOBALIZATION_INVARIANT"] = "1"
+    dotnet_env["DOTNET_CLI_UI_LANGUAGE"] = "en"
+    
+    # Sehr konservative Speicherkonfiguration
+    dotnet_env["DOTNET_GCHeapHardLimit"] = "0x2000000"  # 512MB Heap-Limit
+    dotnet_env["DOTNET_GCAllowVeryLargeObjects"] = "0"
+    dotnet_env["DOTNET_GCHeapHardLimitPercent"] = "40"
+    dotnet_env["DOTNET_GCHeapHardLimitSOH"] = "0x1000000"  # 256MB für Small Object Heap
+    dotnet_env["DOTNET_GCHeapHardLimitLOH"] = "0x1000000"  # 256MB für Large Object Heap
+    
+    # Erhöhte Timeouts für sehr große Dateien
+    timeout_seconds = 7200  # 2 Stunden
+    
+    # Export-Option
+    export_option = "-e" if format == "native" else "-p"
+    
+    # Versuche verschiedene Strategien
+    strategies = [
+        # Strategie 1: Nur Calendar-Ordner mit minimaler Konfiguration
+        {
+            "name": "Calendar-Ordner mit minimaler Konfiguration",
+            "cmd": ["dotnet", dll_path, export_option, "-f=Calendar", "-t=" + result_dir, file_path]
+        },
+        # Strategie 2: Nur Inbox-Ordner
+        {
+            "name": "Inbox-Ordner",
+            "cmd": ["dotnet", dll_path, export_option, "-f=Inbox", "-t=" + result_dir, file_path]
+        },
+        # Strategie 3: Alle Elemente mit minimaler Konfiguration
+        {
+            "name": "Alle Elemente mit minimaler Konfiguration",
+            "cmd": ["dotnet", dll_path, export_option, "-t=" + result_dir, file_path]
+        }
+    ]
+    
+    for strategy in strategies:
+        logger.info(f"Versuche Strategie: {strategy['name']}")
+        
+        try:
+            process = subprocess.run(
+                strategy['cmd'],
+                capture_output=True,
+                text=False,
+                env=dotnet_env,
+                timeout=timeout_seconds
+            )
+            
+            if process.returncode == 0:
+                logger.info(f"Strategie '{strategy['name']}' erfolgreich")
+                return True
+            else:
+                stderr_text = process.stderr.decode('utf-8', errors='replace')
+                logger.warning(f"Strategie '{strategy['name']}' fehlgeschlagen: {stderr_text}")
+                
+                # Wenn es ein CoreCLR-Fehler ist, versuche mit Runtime-Konfiguration
+                if "Failed to create CoreCLR" in stderr_text:
+                    runtime_config_path = os.path.join(os.path.dirname(dll_path), "runtimeconfig.json")
+                    if os.path.exists(runtime_config_path):
+                        logger.info("Versuche mit expliziter Runtime-Konfiguration")
+                        
+                        cmd_runtime = [
+                            "dotnet",
+                            "--runtime-config", runtime_config_path
+                        ] + strategy['cmd'][1:]  # Entferne 'dotnet' und füge Runtime-Konfiguration hinzu
+                        
+                        process_runtime = subprocess.run(
+                            cmd_runtime,
+                            capture_output=True,
+                            text=False,
+                            env=dotnet_env,
+                            timeout=timeout_seconds
+                        )
+                        
+                        if process_runtime.returncode == 0:
+                            logger.info(f"Runtime-Konfigurations-Strategie '{strategy['name']}' erfolgreich")
+                            return True
+                        else:
+                            stderr_runtime = process_runtime.stderr.decode('utf-8', errors='replace')
+                            logger.warning(f"Runtime-Konfigurations-Strategie '{strategy['name']}' fehlgeschlagen: {stderr_runtime}")
+                
+                continue
+                
+        except subprocess.TimeoutExpired:
+            logger.warning(f"Strategie '{strategy['name']}' nach {timeout_seconds} Sekunden abgelaufen")
+            continue
+        except Exception as e:
+            logger.warning(f"Unerwarteter Fehler bei Strategie '{strategy['name']}': {str(e)}")
+            continue
+    
+    logger.error("Alle Strategien für sehr große Datei fehlgeschlagen")
+    return False
