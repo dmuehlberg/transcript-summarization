@@ -60,6 +60,11 @@ def check_available_dotnet_runtimes():
         if process.returncode == 0:
             runtimes = process.stdout.strip()
             logger.info(f"Verfügbare .NET-Runtimes:\n{runtimes}")
+            
+            # Extrahiere auch die spezifischen Versionen
+            available_versions = get_available_dotnet_runtimes()
+            logger.info(f"Verfügbare .NET-Versionen: {available_versions}")
+            
             return runtimes
         else:
             logger.warning("Konnte .NET-Runtimes nicht auflisten")
@@ -68,6 +73,165 @@ def check_available_dotnet_runtimes():
     except Exception as e:
         logger.warning(f"Fehler beim Überprüfen der .NET-Runtimes: {str(e)}")
         return None
+
+def get_available_dotnet_runtimes():
+    """
+    Ermittelt die verfügbaren .NET-Runtimes dynamisch.
+    
+    Returns:
+        list: Liste der verfügbaren Runtime-Versionen
+    """
+    try:
+        process = subprocess.run(
+            ["dotnet", "--list-runtimes"],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        if process.returncode == 0:
+            runtimes = []
+            for line in process.stdout.strip().split('\n'):
+                if 'Microsoft.NETCore.App' in line:
+                    # Extrahiere Version aus Zeile wie "Microsoft.NETCore.App 6.0.25 [/root/.dotnet/shared/Microsoft.NETCore.App]"
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        version = parts[1]
+                        runtimes.append(version)
+            
+            logger.info(f"Verfügbare .NET-Runtimes: {runtimes}")
+            return runtimes
+        else:
+            logger.warning("Konnte .NET-Runtimes nicht auflisten")
+            return []
+            
+    except Exception as e:
+        logger.warning(f"Fehler beim Ermitteln der .NET-Runtimes: {str(e)}")
+        return []
+
+async def extract_with_dynamic_runtime_selection(
+    file_path: str,
+    dll_path: str,
+    result_dir: str,
+    format: str = "csv",
+    pst_folder: str = "Calendar"
+) -> bool:
+    """
+    Versucht Extraktion mit dynamisch ausgewählten .NET-Runtimes.
+    
+    Args:
+        file_path: Pfad zur PST/OST-Datei
+        dll_path: Pfad zur .NET DLL
+        result_dir: Zielverzeichnis für die Extraktion
+        format: Export-Format ('csv' oder 'native')
+        pst_folder: Name des zu extrahierenden Ordners
+        
+    Returns:
+        bool: True wenn erfolgreich, False wenn fehlgeschlagen
+    """
+    logger.info(f"Versuche Extraktion mit dynamischer Runtime-Auswahl: {file_path}")
+    
+    # Verfügbare Runtimes ermitteln
+    available_runtimes = get_available_dotnet_runtimes()
+    
+    if not available_runtimes:
+        logger.warning("Keine .NET-Runtimes verfügbar, verwende Standard")
+        available_runtimes = ["default"]
+    
+    # Export-Option
+    export_option = "-e" if format == "native" else "-p"
+    
+    # Verschiedene Konfigurationen für jede verfügbare Runtime
+    configurations = [
+        {
+            "name": "Konservative Konfiguration",
+            "env": {
+                "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT": "1",
+                "DOTNET_CLI_UI_LANGUAGE": "en",
+                "DOTNET_GCHeapHardLimit": "0x800000",  # 128MB
+                "DOTNET_GCAllowVeryLargeObjects": "0",
+                "DOTNET_GCHeapHardLimitPercent": "20"
+            }
+        },
+        {
+            "name": "Minimale Konfiguration",
+            "env": {
+                "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT": "1",
+                "DOTNET_CLI_UI_LANGUAGE": "en",
+                "DOTNET_GCHeapHardLimit": "0x400000",  # 64MB
+                "DOTNET_GCAllowVeryLargeObjects": "0",
+                "DOTNET_GCHeapHardLimitPercent": "10"
+            }
+        }
+    ]
+    
+    for runtime in available_runtimes:
+        for config in configurations:
+            logger.info(f"Versuche Runtime '{runtime}' mit Konfiguration '{config['name']}'")
+            
+            # Umgebungsvariablen setzen
+            dotnet_env = os.environ.copy()
+            dotnet_env.update(config["env"])
+            
+            # Befehl erstellen
+            if runtime == "default":
+                cmd = ["dotnet", dll_path, export_option, f"-f={pst_folder}", "-t=" + result_dir, file_path]
+            else:
+                cmd = ["dotnet", "--runtime", runtime, dll_path, export_option, f"-f={pst_folder}", "-t=" + result_dir, file_path]
+            
+            try:
+                process = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=False,
+                    env=dotnet_env,
+                    timeout=1800  # 30 Minuten
+                )
+                
+                if process.returncode == 0:
+                    logger.info(f"Runtime '{runtime}' mit Konfiguration '{config['name']}' erfolgreich")
+                    return True
+                else:
+                    stderr_text = process.stderr.decode('utf-8', errors='replace')
+                    logger.warning(f"Runtime '{runtime}' mit Konfiguration '{config['name']}' fehlgeschlagen: {stderr_text}")
+                    
+                    # Wenn es ein CoreCLR-Fehler ist, versuche Runtime-Konfiguration
+                    if "Failed to create CoreCLR" in stderr_text:
+                        runtime_config_path = os.path.join(os.path.dirname(dll_path), "runtimeconfig.json")
+                        if os.path.exists(runtime_config_path):
+                            logger.info("Versuche mit expliziter Runtime-Konfiguration")
+                            
+                            cmd_runtime = [
+                                "dotnet",
+                                "--runtime-config", runtime_config_path
+                            ] + cmd[1:]  # Entferne 'dotnet' und füge Runtime-Konfiguration hinzu
+                            
+                            process_runtime = subprocess.run(
+                                cmd_runtime,
+                                capture_output=True,
+                                text=False,
+                                env=dotnet_env,
+                                timeout=1800
+                            )
+                            
+                            if process_runtime.returncode == 0:
+                                logger.info(f"Runtime-Konfigurations-Strategie '{runtime}' mit '{config['name']}' erfolgreich")
+                                return True
+                            else:
+                                stderr_runtime = process_runtime.stderr.decode('utf-8', errors='replace')
+                                logger.warning(f"Runtime-Konfigurations-Strategie '{runtime}' mit '{config['name']}' fehlgeschlagen: {stderr_runtime}")
+                
+                continue
+                
+            except subprocess.TimeoutExpired:
+                logger.warning(f"Runtime '{runtime}' mit Konfiguration '{config['name']}' nach 30 Minuten abgelaufen")
+                continue
+            except Exception as e:
+                logger.warning(f"Unerwarteter Fehler bei Runtime '{runtime}' mit Konfiguration '{config['name']}': {str(e)}")
+                continue
+    
+    logger.error("Alle dynamischen Runtime-Strategien fehlgeschlagen")
+    return False
 
 class ExtractionResult(BaseModel):
     zip_path: str
@@ -300,9 +464,20 @@ async def extract_calendar_data(
                                 pst_folder="Calendar"
                             )
                         
-                        # Wenn auch alternative Runtimes fehlschlagen, versuche Chunking
+                        # Wenn auch alternative Runtimes fehlschlagen, versuche dynamische Runtime-Auswahl
                         if not success:
-                            logger.info("Alternative Runtimes fehlgeschlagen, versuche Datei-Chunking")
+                            logger.info("Alternative Runtimes fehlgeschlagen, versuche dynamische Runtime-Auswahl")
+                            success = await extract_with_dynamic_runtime_selection(
+                                file_path=file_path,
+                                dll_path=dll_path,
+                                result_dir=result_dir,
+                                format=format,
+                                pst_folder="Calendar"
+                            )
+                        
+                        # Wenn auch dynamische Runtime-Auswahl fehlschlägt, versuche Chunking
+                        if not success:
+                            logger.info("Dynamische Runtime-Auswahl fehlgeschlagen, versuche Datei-Chunking")
                             success = await extract_with_file_chunking(
                                 file_path=file_path,
                                 dll_path=dll_path,
@@ -796,18 +971,7 @@ async def extract_with_alternative_runtime(
                 "DOTNET_GCAllowVeryLargeObjects": "0"
             }
         },
-        # Strategie 2: Explizite .NET 5.0 Runtime
-        {
-            "name": ".NET 5.0 Runtime",
-            "cmd": ["dotnet", "--runtime", "5.0.0", dll_path, export_option, f"-f={pst_folder}", "-t=" + result_dir, file_path],
-            "env": {
-                "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT": "1",
-                "DOTNET_CLI_UI_LANGUAGE": "en",
-                "DOTNET_GCHeapHardLimit": "0x2000000",  # 512MB
-                "DOTNET_GCAllowVeryLargeObjects": "0"
-            }
-        },
-        # Strategie 3: Explizite .NET Core 3.1 Runtime
+        # Strategie 2: Explizite .NET Core 3.1 Runtime
         {
             "name": ".NET Core 3.1 Runtime",
             "cmd": ["dotnet", "--runtime", "3.1.0", dll_path, export_option, f"-f={pst_folder}", "-t=" + result_dir, file_path],
@@ -818,7 +982,7 @@ async def extract_with_alternative_runtime(
                 "DOTNET_GCAllowVeryLargeObjects": "0"
             }
         },
-        # Strategie 4: Ohne spezifische Runtime, aber mit minimaler Konfiguration
+        # Strategie 3: Ohne spezifische Runtime, aber mit minimaler Konfiguration
         {
             "name": "Minimale Konfiguration",
             "cmd": ["dotnet", dll_path, export_option, f"-f={pst_folder}", "-t=" + result_dir, file_path],

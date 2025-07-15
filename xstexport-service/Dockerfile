@@ -16,7 +16,6 @@ RUN if [ "$TARGETPLATFORM" = "linux/arm64/v8" ]; then \
         wget https://dot.net/v1/dotnet-install.sh -O dotnet-install.sh \
         && chmod +x dotnet-install.sh \
         && ./dotnet-install.sh --version 6.0.419 \
-        && ./dotnet-install.sh --version 5.0.417 \
         && ./dotnet-install.sh --version 3.1.426 \
         && rm dotnet-install.sh \
         && ln -s /root/.dotnet/dotnet /usr/local/bin/dotnet; \
