@@ -120,9 +120,12 @@ async def extract_with_file_validation(
             "env": {
                 "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT": "1",
                 "DOTNET_CLI_UI_LANGUAGE": "en",
-                "DOTNET_GCHeapHardLimit": "0x1000000",  # 256MB
+                "DOTNET_GCHeapHardLimit": "0x800000",  # 128MB
                 "DOTNET_GCAllowVeryLargeObjects": "0",
-                "DOTNET_GCHeapHardLimitPercent": "15"
+                "DOTNET_GCHeapHardLimitPercent": "10",
+                "DOTNET_GCHeapHardLimitSOH": "0x400000",  # 64MB
+                "DOTNET_GCHeapHardLimitLOH": "0x400000",  # 64MB
+                "DOTNET_GCHeapHardLimitPOH": "0x200000"   # 32MB
             },
             "cmd": ["dotnet", dll_path, "-p", f"-f={pst_folder}", "-t=" + result_dir, file_path]
         },
@@ -131,9 +134,12 @@ async def extract_with_file_validation(
             "env": {
                 "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT": "1",
                 "DOTNET_CLI_UI_LANGUAGE": "en",
-                "DOTNET_GCHeapHardLimit": "0x800000",  # 128MB
+                "DOTNET_GCHeapHardLimit": "0x400000",  # 64MB
                 "DOTNET_GCAllowVeryLargeObjects": "0",
-                "DOTNET_GCHeapHardLimitPercent": "10"
+                "DOTNET_GCHeapHardLimitPercent": "5",
+                "DOTNET_GCHeapHardLimitSOH": "0x200000",  # 32MB
+                "DOTNET_GCHeapHardLimitLOH": "0x200000",  # 32MB
+                "DOTNET_GCHeapHardLimitPOH": "0x100000"   # 16MB
             },
             "cmd": ["dotnet", dll_path, "-p", "-t=" + result_dir, file_path]
         },
@@ -142,9 +148,12 @@ async def extract_with_file_validation(
             "env": {
                 "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT": "1",
                 "DOTNET_CLI_UI_LANGUAGE": "en",
-                "DOTNET_GCHeapHardLimit": "0x1000000",  # 256MB
+                "DOTNET_GCHeapHardLimit": "0x800000",  # 128MB
                 "DOTNET_GCAllowVeryLargeObjects": "0",
-                "DOTNET_GCHeapHardLimitPercent": "15"
+                "DOTNET_GCHeapHardLimitPercent": "10",
+                "DOTNET_GCHeapHardLimitSOH": "0x400000",  # 64MB
+                "DOTNET_GCHeapHardLimitLOH": "0x400000",  # 64MB
+                "DOTNET_GCHeapHardLimitPOH": "0x200000"   # 32MB
             },
             "cmd": ["dotnet", dll_path, "-e", f"-f={pst_folder}", "-t=" + result_dir, file_path]
         }
@@ -179,8 +188,11 @@ async def extract_with_file_validation(
                     
                     if backup_path != file_path:
                         backup_env = dotnet_env.copy()
-                        backup_env["DOTNET_GCHeapHardLimit"] = "0x800000"  # Reduziere Heap-Limit auf 128MB
-                        backup_env["DOTNET_GCHeapHardLimitPercent"] = "10"
+                        backup_env["DOTNET_GCHeapHardLimit"] = "0x400000"  # Reduziere Heap-Limit auf 64MB
+                        backup_env["DOTNET_GCHeapHardLimitPercent"] = "5"
+                        backup_env["DOTNET_GCHeapHardLimitSOH"] = "0x200000"  # 32MB
+                        backup_env["DOTNET_GCHeapHardLimitLOH"] = "0x200000"  # 32MB
+                        backup_env["DOTNET_GCHeapHardLimitPOH"] = "0x100000"  # 16MB
                         
                         backup_cmd = approach["cmd"].copy()
                         backup_cmd[-1] = backup_path  # Ersetze Dateipfad mit Backup
@@ -625,19 +637,25 @@ async def extract_calendar_data(
             dotnet_env["DOTNET_GCAllowVeryLargeObjects"] = "1"
             dotnet_env["DOTNET_GCHeapHardLimitPercent"] = "80"
         elif file_size_gb > 1.0:
-            logger.info("Mittlere Datei erkannt (1-2GB), verwende konservative Konfiguration")
+            logger.info("Mittlere Datei erkannt (1-2GB), verwende sehr konservative Konfiguration")
             timeout_seconds = 900  # 15 Minuten
-            # Konservative Speicherlimits für mittlere Dateien
-            dotnet_env["DOTNET_GCHeapHardLimit"] = "0x2000000"  # 512MB Heap-Limit
+            # Sehr konservative Speicherlimits für mittlere Dateien
+            dotnet_env["DOTNET_GCHeapHardLimit"] = "0x1000000"  # 256MB Heap-Limit
             dotnet_env["DOTNET_GCAllowVeryLargeObjects"] = "0"
-            dotnet_env["DOTNET_GCHeapHardLimitPercent"] = "25"
+            dotnet_env["DOTNET_GCHeapHardLimitPercent"] = "15"
+            dotnet_env["DOTNET_GCHeapHardLimitSOH"] = "0x800000"  # 128MB für Small Object Heap
+            dotnet_env["DOTNET_GCHeapHardLimitLOH"] = "0x800000"  # 128MB für Large Object Heap
+            dotnet_env["DOTNET_GCHeapHardLimitPOH"] = "0x400000"  # 64MB für Pinned Object Heap
         else:
             logger.info("Kleine Datei erkannt (<1GB), verwende Standard-Konfiguration")
             timeout_seconds = 300  # 5 Minuten für normale Dateien
             # Konservative Speicherlimits für kleine Dateien
-            dotnet_env["DOTNET_GCHeapHardLimit"] = "0x1000000"  # 256MB Heap-Limit
+            dotnet_env["DOTNET_GCHeapHardLimit"] = "0x800000"  # 128MB Heap-Limit
             dotnet_env["DOTNET_GCAllowVeryLargeObjects"] = "0"
-            dotnet_env["DOTNET_GCHeapHardLimitPercent"] = "15"
+            dotnet_env["DOTNET_GCHeapHardLimitPercent"] = "10"
+            dotnet_env["DOTNET_GCHeapHardLimitSOH"] = "0x400000"  # 64MB für Small Object Heap
+            dotnet_env["DOTNET_GCHeapHardLimitLOH"] = "0x400000"  # 64MB für Large Object Heap
+            dotnet_env["DOTNET_GCHeapHardLimitPOH"] = "0x200000"  # 32MB für Pinned Object Heap
         
         try:
             process = subprocess.run(
@@ -733,9 +751,12 @@ async def extract_calendar_data(
                         
                         # Strategie 3: Versuche mit reduzierter Speichernutzung
                         logger.info("Versuche Extraktion mit reduzierter Speichernutzung")
-                        dotnet_env["DOTNET_GCHeapHardLimit"] = "0x2000000"  # 512MB Heap-Limit
+                        dotnet_env["DOTNET_GCHeapHardLimit"] = "0x800000"  # 128MB Heap-Limit
                         dotnet_env["DOTNET_GCAllowVeryLargeObjects"] = "0"
-                        dotnet_env["DOTNET_GCHeapHardLimitPercent"] = "20"
+                        dotnet_env["DOTNET_GCHeapHardLimitPercent"] = "10"
+                        dotnet_env["DOTNET_GCHeapHardLimitSOH"] = "0x400000"  # 64MB für Small Object Heap
+                        dotnet_env["DOTNET_GCHeapHardLimitLOH"] = "0x400000"  # 64MB für Large Object Heap
+                        dotnet_env["DOTNET_GCHeapHardLimitPOH"] = "0x200000"  # 32MB für Pinned Object Heap
                         
                         # Erneut versuchen mit extract_all=False
                         cmd_reduced = ["dotnet", dll_path, export_option, f"-f=Calendar", "-t=" + result_dir, file_path]
