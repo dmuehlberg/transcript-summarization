@@ -310,6 +310,7 @@ def debug_dotnet():
     Testet die .NET-Laufzeit und gibt Debug-Informationen zurück.
     """
     try:
+        # .NET Info
         process = subprocess.run(
             ["dotnet", "--info"],
             capture_output=True,
@@ -319,6 +320,16 @@ def debug_dotnet():
         dotnet_info = process.stdout.decode('utf-8', errors='replace')
         dotnet_error = process.stderr.decode('utf-8', errors='replace') if process.stderr else None
         
+        # Verfügbare Runtimes
+        runtime_process = subprocess.run(
+            ["dotnet", "--list-runtimes"],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        available_runtimes = runtime_process.stdout.strip() if runtime_process.returncode == 0 else "Konnte nicht abrufen"
+        
         # Prüfe DLL-Existenz
         dll_path = find_dll("XstExporter.Portable.dll")
         dll_exists = os.path.exists(dll_path)
@@ -327,10 +338,13 @@ def debug_dotnet():
             "dotnet_info": dotnet_info,
             "dotnet_error": dotnet_error,
             "exit_code": process.returncode,
+            "available_runtimes": available_runtimes,
             "dll_path": dll_path,
             "dll_exists": dll_exists,
             "dotnet_environment": {
-                "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT": os.environ.get("DOTNET_SYSTEM_GLOBALIZATION_INVARIANT", "Nicht gesetzt")
+                "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT": os.environ.get("DOTNET_SYSTEM_GLOBALIZATION_INVARIANT", "Nicht gesetzt"),
+                "DOTNET_GCHeapHardLimit": os.environ.get("DOTNET_GCHeapHardLimit", "Nicht gesetzt"),
+                "DOTNET_GCAllowVeryLargeObjects": os.environ.get("DOTNET_GCAllowVeryLargeObjects", "Nicht gesetzt")
             }
         }
     except Exception as e:

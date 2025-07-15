@@ -44,6 +44,31 @@ def check_system_resources():
         logger.warning(f"Konnte Systemressourcen nicht überprüfen: {str(e)}")
         return True  # Im Zweifelsfall fortfahren
 
+def check_available_dotnet_runtimes():
+    """
+    Überprüft die verfügbaren .NET-Runtimes und gibt sie aus.
+    """
+    try:
+        # Prüfe verfügbare Runtimes
+        process = subprocess.run(
+            ["dotnet", "--list-runtimes"],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        if process.returncode == 0:
+            runtimes = process.stdout.strip()
+            logger.info(f"Verfügbare .NET-Runtimes:\n{runtimes}")
+            return runtimes
+        else:
+            logger.warning("Konnte .NET-Runtimes nicht auflisten")
+            return None
+            
+    except Exception as e:
+        logger.warning(f"Fehler beim Überprüfen der .NET-Runtimes: {str(e)}")
+        return None
+
 class ExtractionResult(BaseModel):
     zip_path: str
     message: str
@@ -99,6 +124,9 @@ async def extract_calendar_data(
     # Überprüfe Systemressourcen
     if not check_system_resources():
         logger.warning("Systemressourcen sind knapp, aber versuche Extraktion trotzdem")
+    
+    # Überprüfe verfügbare .NET-Runtimes
+    check_available_dotnet_runtimes()
     
     # Bestimmen des Quellverzeichnisses, falls target_folder nicht angegeben ist
     source_dir = "/data/ost"  # Standard-Verzeichnis im Container
@@ -254,6 +282,28 @@ async def extract_calendar_data(
                             # Für große Dateien (2-3GB) verwende optimierte Extraktion
                             logger.info("Versuche optimierte Extraktion für große Dateien")
                             success = await extract_large_file_with_chunking(
+                                file_path=file_path,
+                                dll_path=dll_path,
+                                result_dir=result_dir,
+                                format=format,
+                                pst_folder="Calendar"
+                            )
+                        
+                        # Wenn die normale optimierte Extraktion fehlschlägt, versuche alternative Runtimes
+                        if not success:
+                            logger.info("Optimierte Extraktion fehlgeschlagen, versuche alternative Runtimes")
+                            success = await extract_with_alternative_runtime(
+                                file_path=file_path,
+                                dll_path=dll_path,
+                                result_dir=result_dir,
+                                format=format,
+                                pst_folder="Calendar"
+                            )
+                        
+                        # Wenn auch alternative Runtimes fehlschlagen, versuche Chunking
+                        if not success:
+                            logger.info("Alternative Runtimes fehlgeschlagen, versuche Datei-Chunking")
+                            success = await extract_with_file_chunking(
                                 file_path=file_path,
                                 dll_path=dll_path,
                                 result_dir=result_dir,
@@ -706,4 +756,272 @@ async def extract_very_large_file(
             continue
     
     logger.error("Alle Strategien für sehr große Datei fehlgeschlagen")
+    return False
+
+async def extract_with_alternative_runtime(
+    file_path: str,
+    dll_path: str,
+    result_dir: str,
+    format: str = "csv",
+    pst_folder: str = "Calendar"
+) -> bool:
+    """
+    Versucht Extraktion mit alternativen .NET-Runtimes und Konfigurationen.
+    
+    Args:
+        file_path: Pfad zur PST/OST-Datei
+        dll_path: Pfad zur .NET DLL
+        result_dir: Zielverzeichnis für die Extraktion
+        format: Export-Format ('csv' oder 'native')
+        pst_folder: Name des zu extrahierenden Ordners
+        
+    Returns:
+        bool: True wenn erfolgreich, False wenn fehlgeschlagen
+    """
+    logger.info(f"Versuche Extraktion mit alternativer Runtime: {file_path}")
+    
+    # Export-Option
+    export_option = "-e" if format == "native" else "-p"
+    
+    # Verschiedene .NET-Runtime-Strategien
+    strategies = [
+        # Strategie 1: Explizite .NET 6.0 Runtime
+        {
+            "name": ".NET 6.0 Runtime",
+            "cmd": ["dotnet", "--runtime", "6.0.0", dll_path, export_option, f"-f={pst_folder}", "-t=" + result_dir, file_path],
+            "env": {
+                "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT": "1",
+                "DOTNET_CLI_UI_LANGUAGE": "en",
+                "DOTNET_GCHeapHardLimit": "0x4000000",  # 1GB
+                "DOTNET_GCAllowVeryLargeObjects": "0"
+            }
+        },
+        # Strategie 2: Explizite .NET 5.0 Runtime
+        {
+            "name": ".NET 5.0 Runtime",
+            "cmd": ["dotnet", "--runtime", "5.0.0", dll_path, export_option, f"-f={pst_folder}", "-t=" + result_dir, file_path],
+            "env": {
+                "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT": "1",
+                "DOTNET_CLI_UI_LANGUAGE": "en",
+                "DOTNET_GCHeapHardLimit": "0x2000000",  # 512MB
+                "DOTNET_GCAllowVeryLargeObjects": "0"
+            }
+        },
+        # Strategie 3: Explizite .NET Core 3.1 Runtime
+        {
+            "name": ".NET Core 3.1 Runtime",
+            "cmd": ["dotnet", "--runtime", "3.1.0", dll_path, export_option, f"-f={pst_folder}", "-t=" + result_dir, file_path],
+            "env": {
+                "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT": "1",
+                "DOTNET_CLI_UI_LANGUAGE": "en",
+                "DOTNET_GCHeapHardLimit": "0x1000000",  # 256MB
+                "DOTNET_GCAllowVeryLargeObjects": "0"
+            }
+        },
+        # Strategie 4: Ohne spezifische Runtime, aber mit minimaler Konfiguration
+        {
+            "name": "Minimale Konfiguration",
+            "cmd": ["dotnet", dll_path, export_option, f"-f={pst_folder}", "-t=" + result_dir, file_path],
+            "env": {
+                "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT": "1",
+                "DOTNET_CLI_UI_LANGUAGE": "en",
+                "DOTNET_GCHeapHardLimit": "0x1000000",  # 256MB
+                "DOTNET_GCAllowVeryLargeObjects": "0",
+                "DOTNET_GCHeapHardLimitPercent": "30"
+            }
+        }
+    ]
+    
+    for strategy in strategies:
+        logger.info(f"Versuche Strategie: {strategy['name']}")
+        
+        # Umgebungsvariablen setzen
+        dotnet_env = os.environ.copy()
+        dotnet_env.update(strategy["env"])
+        
+        try:
+            process = subprocess.run(
+                strategy['cmd'],
+                capture_output=True,
+                text=False,
+                env=dotnet_env,
+                timeout=1800  # 30 Minuten
+            )
+            
+            if process.returncode == 0:
+                logger.info(f"Strategie '{strategy['name']}' erfolgreich")
+                return True
+            else:
+                stderr_text = process.stderr.decode('utf-8', errors='replace')
+                logger.warning(f"Strategie '{strategy['name']}' fehlgeschlagen: {stderr_text}")
+                
+                # Wenn es ein CoreCLR-Fehler ist, versuche Runtime-Konfiguration
+                if "Failed to create CoreCLR" in stderr_text:
+                    runtime_config_path = os.path.join(os.path.dirname(dll_path), "runtimeconfig.json")
+                    if os.path.exists(runtime_config_path):
+                        logger.info("Versuche mit expliziter Runtime-Konfiguration")
+                        
+                        cmd_runtime = [
+                            "dotnet",
+                            "--runtime-config", runtime_config_path
+                        ] + strategy['cmd'][1:]  # Entferne 'dotnet' und füge Runtime-Konfiguration hinzu
+                        
+                        process_runtime = subprocess.run(
+                            cmd_runtime,
+                            capture_output=True,
+                            text=False,
+                            env=dotnet_env,
+                            timeout=1800
+                        )
+                        
+                        if process_runtime.returncode == 0:
+                            logger.info(f"Runtime-Konfigurations-Strategie '{strategy['name']}' erfolgreich")
+                            return True
+                        else:
+                            stderr_runtime = process_runtime.stderr.decode('utf-8', errors='replace')
+                            logger.warning(f"Runtime-Konfigurations-Strategie '{strategy['name']}' fehlgeschlagen: {stderr_runtime}")
+                
+                continue
+                
+        except subprocess.TimeoutExpired:
+            logger.warning(f"Strategie '{strategy['name']}' nach 30 Minuten abgelaufen")
+            continue
+        except Exception as e:
+            logger.warning(f"Unerwarteter Fehler bei Strategie '{strategy['name']}': {str(e)}")
+            continue
+    
+    logger.error("Alle alternativen Runtime-Strategien fehlgeschlagen")
+    return False
+
+async def extract_with_file_chunking(
+    file_path: str,
+    dll_path: str,
+    result_dir: str,
+    format: str = "csv",
+    pst_folder: str = "Calendar"
+) -> bool:
+    """
+    Versucht Extraktion mit Datei-Chunking für sehr große Dateien.
+    
+    Args:
+        file_path: Pfad zur PST/OST-Datei
+        dll_path: Pfad zur .NET DLL
+        result_dir: Zielverzeichnis für die Extraktion
+        format: Export-Format ('csv' oder 'native')
+        pst_folder: Name des zu extrahierenden Ordners
+        
+    Returns:
+        bool: True wenn erfolgreich, False wenn fehlgeschlagen
+    """
+    logger.info(f"Versuche Extraktion mit Datei-Chunking: {file_path}")
+    
+    # Prüfe, ob die Datei zu groß ist für normale Verarbeitung
+    file_size_gb = os.path.getsize(file_path) / (1024**3)
+    
+    if file_size_gb < 3.0:
+        logger.info("Datei ist nicht groß genug für Chunking")
+        return False
+    
+    # Versuche verschiedene Chunking-Strategien
+    strategies = [
+        # Strategie 1: Sehr konservative .NET-Konfiguration
+        {
+            "name": "Sehr konservative Konfiguration",
+            "env": {
+                "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT": "1",
+                "DOTNET_CLI_UI_LANGUAGE": "en",
+                "DOTNET_GCHeapHardLimit": "0x800000",  # 128MB
+                "DOTNET_GCAllowVeryLargeObjects": "0",
+                "DOTNET_GCHeapHardLimitPercent": "20",
+                "DOTNET_GCHeapHardLimitSOH": "0x400000",  # 64MB
+                "DOTNET_GCHeapHardLimitLOH": "0x400000"   # 64MB
+            }
+        },
+        # Strategie 2: Minimale Konfiguration mit expliziter Runtime
+        {
+            "name": "Minimale Konfiguration mit Runtime",
+            "env": {
+                "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT": "1",
+                "DOTNET_CLI_UI_LANGUAGE": "en",
+                "DOTNET_GCHeapHardLimit": "0x400000",  # 64MB
+                "DOTNET_GCAllowVeryLargeObjects": "0",
+                "DOTNET_GCHeapHardLimitPercent": "10"
+            }
+        }
+    ]
+    
+    export_option = "-e" if format == "native" else "-p"
+    
+    for strategy in strategies:
+        logger.info(f"Versuche Chunking-Strategie: {strategy['name']}")
+        
+        # Umgebungsvariablen setzen
+        dotnet_env = os.environ.copy()
+        dotnet_env.update(strategy["env"])
+        
+        # Versuche verschiedene Befehle
+        commands = [
+            # Befehl 1: Nur Calendar-Ordner
+            ["dotnet", dll_path, export_option, "-f=Calendar", "-t=" + result_dir, file_path],
+            # Befehl 2: Nur Inbox-Ordner
+            ["dotnet", dll_path, export_option, "-f=Inbox", "-t=" + result_dir, file_path],
+            # Befehl 3: Alle Elemente
+            ["dotnet", dll_path, export_option, "-t=" + result_dir, file_path]
+        ]
+        
+        for i, cmd in enumerate(commands):
+            logger.info(f"Versuche Befehl {i+1}: {' '.join(cmd)}")
+            
+            try:
+                process = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=False,
+                    env=dotnet_env,
+                    timeout=3600  # 1 Stunde
+                )
+                
+                if process.returncode == 0:
+                    logger.info(f"Chunking-Strategie '{strategy['name']}' mit Befehl {i+1} erfolgreich")
+                    return True
+                else:
+                    stderr_text = process.stderr.decode('utf-8', errors='replace')
+                    logger.warning(f"Chunking-Strategie '{strategy['name']}' mit Befehl {i+1} fehlgeschlagen: {stderr_text}")
+                    
+                    # Wenn es ein CoreCLR-Fehler ist, versuche Runtime-Konfiguration
+                    if "Failed to create CoreCLR" in stderr_text:
+                        runtime_config_path = os.path.join(os.path.dirname(dll_path), "runtimeconfig.json")
+                        if os.path.exists(runtime_config_path):
+                            logger.info("Versuche mit expliziter Runtime-Konfiguration")
+                            
+                            cmd_runtime = [
+                                "dotnet",
+                                "--runtime-config", runtime_config_path
+                            ] + cmd[1:]  # Entferne 'dotnet' und füge Runtime-Konfiguration hinzu
+                            
+                            process_runtime = subprocess.run(
+                                cmd_runtime,
+                                capture_output=True,
+                                text=False,
+                                env=dotnet_env,
+                                timeout=3600
+                            )
+                            
+                            if process_runtime.returncode == 0:
+                                logger.info(f"Runtime-Konfigurations-Chunking '{strategy['name']}' mit Befehl {i+1} erfolgreich")
+                                return True
+                            else:
+                                stderr_runtime = process_runtime.stderr.decode('utf-8', errors='replace')
+                                logger.warning(f"Runtime-Konfigurations-Chunking '{strategy['name']}' mit Befehl {i+1} fehlgeschlagen: {stderr_runtime}")
+                    
+                    continue
+                    
+            except subprocess.TimeoutExpired:
+                logger.warning(f"Chunking-Strategie '{strategy['name']}' mit Befehl {i+1} nach 1 Stunde abgelaufen")
+                continue
+            except Exception as e:
+                logger.warning(f"Unerwarteter Fehler bei Chunking-Strategie '{strategy['name']}' mit Befehl {i+1}: {str(e)}")
+                continue
+    
+    logger.error("Alle Chunking-Strategien fehlgeschlagen")
     return False
