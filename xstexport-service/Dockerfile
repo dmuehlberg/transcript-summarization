@@ -9,7 +9,6 @@ RUN apt-get update && apt-get install -y \
     wget \
     gnupg \
     libicu-dev \
-    libicu67 \
     && rm -rf /var/lib/apt/lists/*
 
 # Installiere .NET SDK für beide Architekturen
@@ -48,6 +47,7 @@ RUN mkdir -p /data/ost
 # Setze .NET-Umgebungsvariablen für Globalisierung
 ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
 ENV DOTNET_CLI_UI_LANGUAGE=en
+ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=true
 
 # Exponiere den Port
 EXPOSE 8200
