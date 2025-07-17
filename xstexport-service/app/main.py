@@ -337,3 +337,72 @@ def debug_dotnet():
         return {
             "error": str(e)
         }
+
+@app.post("/import-calendar-csv")
+async def import_calendar_csv(
+    file: UploadFile = File(..., description="Die hochgeladene CSV-Datei"),
+    table_name: str = Form("calendar_data", description="Name der Zieltabelle in der Datenbank")
+):
+    """
+    Importiert Kalenderdaten aus einer CSV-Datei direkt in die Datenbank.
+    
+    Args:
+        file: Die hochgeladene CSV-Datei
+        table_name: Name der Zieltabelle (Standard: "calendar_data")
+    
+    Returns:
+        JSON-Antwort mit Status der Import-Operation
+    """
+    if not file:
+        raise HTTPException(status_code=400, detail="Keine Datei hochgeladen")
+        
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Kein Dateiname angegeben")
+    
+    if not file.filename.lower().endswith('.csv'):
+        raise HTTPException(status_code=400, detail="Nur CSV-Dateien werden unterstützt")
+    
+    temp_dir = None
+    temp_file_path = None
+    
+    try:
+        # Temporäres Verzeichnis erstellen
+        temp_dir = tempfile.mkdtemp()
+        logger.info(f"Temporäres Verzeichnis erstellt: {temp_dir}")
+        
+        # Datei in temporärem Verzeichnis speichern
+        temp_file_path = os.path.join(temp_dir, file.filename)
+        logger.info(f"Speichere CSV-Datei: {temp_file_path}")
+        
+        with open(temp_file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        # CSV-Datei in die Datenbank importieren
+        logger.info(f"Importiere CSV-Datei in Tabelle: {table_name}")
+        db_service.import_csv_to_db(temp_file_path, table_name)
+        
+        logger.info("CSV-Import erfolgreich abgeschlossen")
+        return JSONResponse(
+            content={
+                "status": "success",
+                "message": f"CSV-Datei erfolgreich in Tabelle '{table_name}' importiert",
+                "table_name": table_name,
+                "filename": file.filename
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Fehler beim CSV-Import: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Fehler beim CSV-Import: {str(e)}"
+        )
+    finally:
+        # Sicherstellen, dass der File-Handle geschlossen wird
+        if file.file:
+            file.file.close()
+        
+        # Temporäres Verzeichnis aufräumen
+        if temp_dir and os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir)
+            logger.info(f"Temporäres Verzeichnis bereinigt: {temp_dir}")
