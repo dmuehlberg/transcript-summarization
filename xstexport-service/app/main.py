@@ -341,7 +341,8 @@ def debug_dotnet():
 @app.post("/import-calendar-csv")
 async def import_calendar_csv(
     file: UploadFile = File(..., description="Die hochgeladene CSV-Datei"),
-    table_name: str = Form("calendar_data", description="Name der Zieltabelle in der Datenbank")
+    table_name: str = Form("calendar_data", description="Name der Zieltabelle in der Datenbank"),
+    source: str = Form("internal", description="Quelle der CSV-Datei ('internal' oder 'external')")
 ):
     """
     Importiert Kalenderdaten aus einer CSV-Datei direkt in die Datenbank.
@@ -349,6 +350,7 @@ async def import_calendar_csv(
     Args:
         file: Die hochgeladene CSV-Datei
         table_name: Name der Zieltabelle (Standard: "calendar_data")
+        source: Quelle der CSV-Datei ('internal' für intern erzeugte CSVs, 'external' für extern erzeugte CSVs)
     
     Returns:
         JSON-Antwort mit Status der Import-Operation
@@ -378,8 +380,8 @@ async def import_calendar_csv(
             shutil.copyfileobj(file.file, buffer)
         
         # CSV-Datei in die Datenbank importieren
-        logger.info(f"Importiere CSV-Datei in Tabelle: {table_name}")
-        db_service.import_csv_to_db(temp_file_path, table_name)
+        logger.info(f"Importiere CSV-Datei in Tabelle: {table_name} mit Quelle: {source}")
+        db_service.import_csv_to_db(temp_file_path, table_name, source)
         
         logger.info("CSV-Import erfolgreich abgeschlossen")
         return JSONResponse(

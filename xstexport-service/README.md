@@ -35,14 +35,29 @@ Importiert Kalenderdaten direkt aus einer CSV-Datei in die Datenbank.
 **Parameter:**
 - `file`: Die hochgeladene CSV-Datei (UploadFile)
 - `table_name`: Name der Zieltabelle in der Datenbank (Standard: "calendar_data")
+- `source`: Quelle der CSV-Datei ("internal" oder "external", Standard: "internal")
 
-**Beispiel curl-Befehl:**
+**Unterstützte Quellen:**
+- `internal`: Für intern erzeugte CSV-Dateien (Standard-Format)
+- `external`: Für extern erzeugte CSV-Dateien (mit anderen Spaltennamen)
+
+**Beispiel curl-Befehle:**
 ```bash
+# Intern erzeugte CSV-Datei
 curl -X POST "http://localhost:8000/import-calendar-csv" \
   -H "accept: application/json" \
   -H "Content-Type: multipart/form-data" \
   -F "file=@calendar_data.csv" \
-  -F "table_name=calendar_data"
+  -F "table_name=calendar_data" \
+  -F "source=internal"
+
+# Extern erzeugte CSV-Datei
+curl -X POST "http://localhost:8000/import-calendar-csv" \
+  -H "accept: application/json" \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@external_calendar.csv" \
+  -F "table_name=calendar_data" \
+  -F "source=external"
 ```
 
 **Antwort:**

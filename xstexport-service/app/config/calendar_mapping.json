@@ -152,5 +152,91 @@
             "pg_field": "unknown_817a",
             "pg_type": "text"
         }
+    },
+    "external_mappings": {
+        "Subject": {
+            "pg_field": "subject",
+            "pg_type": "text"
+        },
+        "ClientSubmitTime": {
+            "pg_field": "client_submit_time",
+            "pg_type": "timestamp with time zone"
+        },
+        "SentRepresentingName": {
+            "pg_field": "sent_representing_name",
+            "pg_type": "text"
+        },
+        "StartDate": {
+            "pg_field": "start_date",
+            "pg_type": "timestamp with time zone"
+        },
+        "EndDate": {
+            "pg_field": "end_date",
+            "pg_type": "timestamp with time zone"
+        },
+        "ConversationTopic": {
+            "pg_field": "conversation_topic",
+            "pg_type": "text"
+        },
+        "SenderName": {
+            "pg_field": "sender_name",
+            "pg_type": "text"
+        },
+        "DisplayCc": {
+            "pg_field": "display_cc",
+            "pg_type": "text"
+        },
+        "DisplayTo": {
+            "pg_field": "display_to",
+            "pg_type": "text"
+        },
+        "undocumented 0x0e05": {
+            "pg_field": "unknown_0e05",
+            "pg_type": "text"
+        },
+        "MessageDeliveryTime": {
+            "pg_field": "message_delivery_time",
+            "pg_type": "timestamp with time zone"
+        },
+        "undocumented 0x0f02": {
+            "pg_field": "unknown_0f02",
+            "pg_type": "timestamp with time zone"
+        },
+        "undocumented 0x0f0a": {
+            "pg_field": "unknown_0f0a",
+            "pg_type": "timestamp with time zone"
+        },
+        "CreationTime": {
+            "pg_field": "creation_time",
+            "pg_type": "timestamp with time zone"
+        },
+        "LastModifierName": {
+            "pg_field": "last_modification_time",
+            "pg_type": "timestamp with time zone"
+        },
+        "CreatorSimpleDisplayName": {
+            "pg_field": "unknown_3fd9",
+            "pg_type": "text"
+        },
+        "SenderSmtpAddress": {
+            "pg_field": "sender_smtp_address",
+            "pg_type": "text"
+        },
+        "SentRepresentingSmtpAddress": {
+            "pg_field": "sent_representing_smtp_address",
+            "pg_type": "text"
+        },
+        "UserEntryId": {
+            "pg_field": "user_entry_id",
+            "pg_type": "text"
+        },
+        "PS_PUBLIC_STRINGS: SkypeTeamsMeetingUrl": {
+            "pg_field": "file_under_id",
+            "pg_type": "text"
+        },
+        "PSETID_Appointment: Location": {
+            "pg_field": "has_picture",
+            "pg_type": "text"
+        }
     }
 } 

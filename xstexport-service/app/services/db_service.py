@@ -23,6 +23,7 @@ class DatabaseService:
         self.db_config = db_config
         self.engine = None
         self.mapping = {}
+        self.external_mapping = {}
         self.mapping_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config', 'calendar_mapping.json')
         self.wait_for_db()
         self.load_mapping()
@@ -55,6 +56,7 @@ class DatabaseService:
             with open(self.mapping_file, 'r') as f:
                 mapping_data = json.load(f)
                 self.mapping = mapping_data.get('mappings', {})
+                self.external_mapping = mapping_data.get('external_mappings', {})
             logger.info("Mapping erfolgreich geladen")
         except Exception as e:
             logger.error(f"Fehler beim Laden des Mappings: {str(e)}")
@@ -113,7 +115,7 @@ class DatabaseService:
         
         return df
 
-    def import_csv_to_db(self, csv_path: str, table_name: str = "calendar_data") -> None:
+    def import_csv_to_db(self, csv_path: str, table_name: str = "calendar_data", source: str = "internal") -> None:
         """Importiert Daten aus einer CSV-Datei in die Datenbank."""
         try:
             # Lösche vorhandene Daten
@@ -128,21 +130,29 @@ class DatabaseService:
             # Erstelle Tabelle, falls sie noch nicht existiert
             self.create_table_if_not_exists(table_name)
             
+            # Wähle das entsprechende Mapping basierend auf der Quelle
+            if source == "external":
+                mapping_to_use = self.external_mapping
+                logger.info("Verwende externes Mapping für CSV-Import")
+            else:
+                mapping_to_use = self.mapping
+                logger.info("Verwende internes Mapping für CSV-Import")
+            
             # Finde übereinstimmende Spalten
             column_mapping = {}
             for csv_col in df.columns:
-                if csv_col in self.mapping:
-                    column_mapping[csv_col] = self.mapping[csv_col]['pg_field']
+                if csv_col in mapping_to_use:
+                    column_mapping[csv_col] = mapping_to_use[csv_col]['pg_field']
             
             if not column_mapping:
-                raise ValueError("Keine übereinstimmenden Spalten zwischen CSV und Mapping gefunden")
+                raise ValueError(f"Keine übereinstimmenden Spalten zwischen CSV und {source}-Mapping gefunden")
             
             # Wähle nur die gemappten Spalten aus
             df_mapped = df[list(column_mapping.keys())].copy()
             df_mapped.columns = [column_mapping[col] for col in df_mapped.columns]
             
             # Konvertiere Datentypen
-            for field_name, field_info in self.mapping.items():
+            for field_name, field_info in mapping_to_use.items():
                 if field_name in df.columns:
                     pg_field = field_info['pg_field']
                     pg_type = field_info.get('pg_type', 'TEXT')
