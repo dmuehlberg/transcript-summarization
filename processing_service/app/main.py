@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from .sync import sync_recipient_names
 from .transcript import tokenize_transcript, replace_tokens
 from .matcher import match_tokens
-from .db import init_db, upsert_transcription, upsert_mp3_file, get_db_connection, update_transcription_meeting_info
+from .db import init_db, upsert_transcription, upsert_mp3_file, get_db_connection, update_transcription_meeting_info, get_pending_transcriptions
 from typing import Optional
 import json
 import os
@@ -43,7 +43,7 @@ class CorrectionRequest(BaseModel):
     options: dict = {}
 
 class MeetingInfoRequest(BaseModel):
-    recording_date: str
+    recording_date: Optional[str] = None
 
 @app.post("/correct-transcript")
 async def correct_transcript(
@@ -186,71 +186,133 @@ def import_mp3_files():
 @app.post("/get_meeting_info")
 def get_meeting_info(request: MeetingInfoRequest):
     try:
-        # Timestamp parsen
-        try:
-            recording_date = datetime.strptime(request.recording_date, "%Y-%m-%d %H-%M")
-        except Exception:
-            raise HTTPException(status_code=400, detail="recording_date muss im Format YYYY-MM-DD HH-MM sein")
-        
         # Zeitzone aus .env laden
         timezone_str = os.getenv("TIMEZONE", "Europe/Berlin")
         local_tz = pytz.timezone(timezone_str)
         
-        # recording_date mit lokaler Zeitzone versehen
-        recording_date_local = local_tz.localize(recording_date)
+        # Wenn recording_date angegeben ist, verarbeite nur dieses Datum
+        if request.recording_date:
+            try:
+                recording_date = datetime.strptime(request.recording_date, "%Y-%m-%d %H-%M")
+                recording_date_local = local_tz.localize(recording_date)
+                recording_date_utc = recording_date_local.astimezone(pytz.UTC)
+                
+                conn = get_db_connection()
+                cur = conn.cursor()
+                
+                # Suche nach passendem Eintrag in calendar_data mit UTC-Vergleich
+                from datetime import timedelta
+                time_window_minutes = int(os.getenv("MEETING_TIME_WINDOW_MINUTES", "5"))
+                time_window_start = recording_date_utc - timedelta(minutes=time_window_minutes)
+                time_window_end = recording_date_utc + timedelta(minutes=time_window_minutes)
+                
+                cur.execute("""
+                    SELECT start_date, end_date, subject, has_picture, user_entry_id, display_to, display_cc
+                    FROM calendar_data
+                    WHERE start_date BETWEEN %s AND %s
+                    ORDER BY ABS(EXTRACT(EPOCH FROM (start_date - %s))) ASC
+                    LIMIT 1
+                """, (time_window_start, time_window_end, recording_date_utc))
+                row = cur.fetchone()
+                if not row:
+                    cur.close()
+                    conn.close()
+                    raise HTTPException(status_code=404, detail=f"Kein Meeting im Zeitfenster von +/- {time_window_minutes} Minuten um den angegebenen Zeitpunkt gefunden.")
+                start_date, end_date, subject, has_picture, user_entry_id, display_to, display_cc = row
+                # Teilnehmernamen kombinieren und deduplizieren
+                import re as _re
+                tokens = set()
+                for field in [display_to, display_cc]:
+                    if not field:
+                        continue
+                    parts = _re.split(r"[;,]", field)
+                    for part in parts:
+                        words = part.strip().split()
+                        for word in words:
+                            clean = _re.sub(r"[^\wäöüÄÖÜß-]", "", word)
+                            if clean:
+                                tokens.add(clean)
+                participants = ";".join(sorted(tokens))
+                info_dict = {
+                    "meeting_start_date": start_date,
+                    "meeting_end_date": end_date,
+                    "meeting_title": subject,
+                    "meeting_location": has_picture,
+                    "invitation_text": user_entry_id,
+                    "participants": participants
+                }
+                update_transcription_meeting_info(recording_date_local, info_dict)
+                cur.close()
+                conn.close()
+                return {"status": "success", "meeting_info": info_dict}
+            except Exception:
+                raise HTTPException(status_code=400, detail="recording_date muss im Format YYYY-MM-DD HH-MM sein")
         
-        # In UTC konvertieren für Vergleich mit Datenbank (die in UTC+0 gespeichert sind)
-        recording_date_utc = recording_date_local.astimezone(pytz.UTC)
+        # Wenn kein recording_date angegeben ist, verarbeite alle pending Transkriptionen
+        pending_transcriptions = get_pending_transcriptions()
+        results = []
         
-        conn = get_db_connection()
-        cur = conn.cursor()
+        for transcription_id, recording_date in pending_transcriptions:
+            try:
+                # recording_date ist bereits ein datetime-Objekt mit Zeitzoneninformation
+                recording_date_local = recording_date.astimezone(local_tz)
+                recording_date_utc = recording_date_local.astimezone(pytz.UTC)
+                
+                conn = get_db_connection()
+                cur = conn.cursor()
+                
+                # Suche nach passendem Eintrag in calendar_data mit UTC-Vergleich
+                from datetime import timedelta
+                time_window_minutes = int(os.getenv("MEETING_TIME_WINDOW_MINUTES", "5"))
+                time_window_start = recording_date_utc - timedelta(minutes=time_window_minutes)
+                time_window_end = recording_date_utc + timedelta(minutes=time_window_minutes)
+                
+                cur.execute("""
+                    SELECT start_date, end_date, subject, has_picture, user_entry_id, display_to, display_cc
+                    FROM calendar_data
+                    WHERE start_date BETWEEN %s AND %s
+                    ORDER BY ABS(EXTRACT(EPOCH FROM (start_date - %s))) ASC
+                    LIMIT 1
+                """, (time_window_start, time_window_end, recording_date_utc))
+                row = cur.fetchone()
+                
+                if row:
+                    start_date, end_date, subject, has_picture, user_entry_id, display_to, display_cc = row
+                    # Teilnehmernamen kombinieren und deduplizieren
+                    import re as _re
+                    tokens = set()
+                    for field in [display_to, display_cc]:
+                        if not field:
+                            continue
+                        parts = _re.split(r"[;,]", field)
+                        for part in parts:
+                            words = part.strip().split()
+                            for word in words:
+                                clean = _re.sub(r"[^\wäöüÄÖÜß-]", "", word)
+                                if clean:
+                                    tokens.add(clean)
+                    participants = ";".join(sorted(tokens))
+                    info_dict = {
+                        "meeting_start_date": start_date,
+                        "meeting_end_date": end_date,
+                        "meeting_title": subject,
+                        "meeting_location": has_picture,
+                        "invitation_text": user_entry_id,
+                        "participants": participants
+                    }
+                    update_transcription_meeting_info(recording_date_local, info_dict)
+                    results.append({"id": transcription_id, "meeting_info": info_dict})
+                else:
+                    results.append({"id": transcription_id, "error": f"Kein Meeting im Zeitfenster von +/- {time_window_minutes} Minuten gefunden"})
+                
+                cur.close()
+                conn.close()
+                
+            except Exception as e:
+                results.append({"id": transcription_id, "error": str(e)})
         
-        # Suche nach passendem Eintrag in calendar_data mit UTC-Vergleich
-        # Erweitere die Suche um +/- X Minuten für flexiblere Zuordnung (konfigurierbar über .env)
-        from datetime import timedelta
-        time_window_minutes = int(os.getenv("MEETING_TIME_WINDOW_MINUTES", "5"))
-        time_window_start = recording_date_utc - timedelta(minutes=time_window_minutes)
-        time_window_end = recording_date_utc + timedelta(minutes=time_window_minutes)
+        return {"status": "success", "processed": len(results), "details": results}
         
-        cur.execute("""
-            SELECT start_date, end_date, subject, has_picture, user_entry_id, display_to, display_cc
-            FROM calendar_data
-            WHERE start_date BETWEEN %s AND %s
-            ORDER BY ABS(EXTRACT(EPOCH FROM (start_date - %s))) ASC
-            LIMIT 1
-        """, (time_window_start, time_window_end, recording_date_utc))
-        row = cur.fetchone()
-        if not row:
-            cur.close()
-            conn.close()
-            raise HTTPException(status_code=404, detail=f"Kein Meeting im Zeitfenster von +/- {time_window_minutes} Minuten um den angegebenen Zeitpunkt gefunden.")
-        start_date, end_date, subject, has_picture, user_entry_id, display_to, display_cc = row
-        # Teilnehmernamen kombinieren und deduplizieren (Logik wie in sync_recipient_names)
-        import re as _re
-        tokens = set()
-        for field in [display_to, display_cc]:
-            if not field:
-                continue
-            parts = _re.split(r"[;,]", field)
-            for part in parts:
-                words = part.strip().split()
-                for word in words:
-                    clean = _re.sub(r"[^\wäöüÄÖÜß-]", "", word)
-                    if clean:
-                        tokens.add(clean)
-        participants = ";".join(sorted(tokens))
-        info_dict = {
-            "meeting_start_date": start_date,
-            "meeting_end_date": end_date,
-            "meeting_title": subject,
-            "meeting_location": has_picture,
-            "invitation_text": user_entry_id,
-            "participants": participants
-        }
-        update_transcription_meeting_info(recording_date_local, info_dict)
-        cur.close()
-        conn.close()
-        return {"status": "success", "meeting_info": info_dict}
     except HTTPException as e:
         raise e
     except Exception as e:

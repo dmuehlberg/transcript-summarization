@@ -23,16 +23,20 @@ Die folgenden Umgebungsvariablen können in der `.env` Datei konfiguriert werden
 ## Endpoints
 
 ### `POST /get_meeting_info`
-Sucht Meeting-Informationen basierend auf dem Aufnahmezeitpunkt einer Transkription.
+Sucht Meeting-Informationen basierend auf dem Aufnahmezeitpunkt einer Transkription oder verarbeitet automatisch alle Transkriptionen mit Status 'pending'.
 
-**Request Body:**
+**Request Body (optional):**
 ```json
 {
   "recording_date": "2024-01-15 14-30"
 }
 ```
 
-**Response:**
+**Verhalten:**
+- **Mit recording_date**: Verarbeitet nur die angegebene Transkription
+- **Ohne recording_date**: Verarbeitet automatisch alle Transkriptionen mit `transcription_status = 'pending'`
+
+**Response (einzelne Transkription):**
 ```json
 {
   "status": "success",
@@ -47,10 +51,44 @@ Sucht Meeting-Informationen basierend auf dem Aufnahmezeitpunkt einer Transkript
 }
 ```
 
-**Verhalten:**
+**Response (Batch-Verarbeitung):**
+```json
+{
+  "status": "success",
+  "processed": 3,
+  "details": [
+    {
+      "id": 1,
+      "meeting_info": {
+        "meeting_start_date": "2024-01-15T13:30:00Z",
+        "meeting_end_date": "2024-01-15T14:30:00Z",
+        "meeting_title": "Team Meeting",
+        "participants": "Max;Anna;Tom"
+      }
+    },
+    {
+      "id": 2,
+      "error": "Kein Meeting im Zeitfenster von +/- 5 Minuten gefunden"
+    },
+    {
+      "id": 3,
+      "meeting_info": {
+        "meeting_start_date": "2024-01-15T15:00:00Z",
+        "meeting_end_date": "2024-01-15T16:00:00Z",
+        "meeting_title": "Project Review",
+        "participants": "Lisa;John"
+      }
+    }
+  ]
+}
+```
+
+**Funktionsweise:**
 - Sucht nach Meetings im konfigurierten Zeitfenster (±`MEETING_TIME_WINDOW_MINUTES` Minuten)
 - Wählt das Meeting aus, das zeitlich am nächsten am angegebenen Zeitpunkt liegt
-- Falls kein Meeting im Zeitfenster gefunden wird, wird ein 404-Fehler zurückgegeben
+- Bei Batch-Verarbeitung werden alle pending Transkriptionen abgearbeitet
+- Erfolgreiche Zuordnungen werden in der Datenbank gespeichert
+- Fehler werden in der Response dokumentiert, ohne die Verarbeitung zu stoppen
 
 ## Experimentieren mit verschiedenen Zeitfenstern
 

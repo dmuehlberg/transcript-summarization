@@ -186,3 +186,16 @@ def update_transcription_meeting_info(recording_date, info_dict):
     conn.commit()
     cur.close()
     conn.close() 
+
+def get_pending_transcriptions():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT id, recording_date
+        FROM transcriptions
+        WHERE transcription_status = 'pending'
+    """)
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return rows 
