@@ -51,6 +51,21 @@ Sucht Meeting-Informationen basierend auf dem Aufnahmezeitpunkt einer Transkript
 }
 ```
 
+**Response bei mehreren Meetings (einzelne Transkription):**
+```json
+{
+  "status": "success",
+  "meeting_info": {
+    "meeting_start_date": null,
+    "meeting_end_date": null,
+    "meeting_title": "Multiple Meetings found",
+    "meeting_location": null,
+    "invitation_text": null,
+    "participants": null
+  }
+}
+```
+
 **Response (Batch-Verarbeitung):**
 ```json
 {
@@ -78,6 +93,17 @@ Sucht Meeting-Informationen basierend auf dem Aufnahmezeitpunkt einer Transkript
         "meeting_title": "Project Review",
         "participants": "Lisa;John"
       }
+    },
+    {
+      "id": 4,
+      "meeting_info": {
+        "meeting_start_date": null,
+        "meeting_end_date": null,
+        "meeting_title": "Multiple Meetings found",
+        "meeting_location": null,
+        "invitation_text": null,
+        "participants": null
+      }
     }
   ]
 }
@@ -85,7 +111,9 @@ Sucht Meeting-Informationen basierend auf dem Aufnahmezeitpunkt einer Transkript
 
 **Funktionsweise:**
 - Sucht nach Meetings im konfigurierten Zeitfenster (±`MEETING_TIME_WINDOW_MINUTES` Minuten)
-- Wählt das Meeting aus, das zeitlich am nächsten am angegebenen Zeitpunkt liegt
+- **Ein Meeting gefunden**: Wählt das Meeting aus, das zeitlich am nächsten am angegebenen Zeitpunkt liegt
+- **Mehrere Meetings gefunden**: Gibt `meeting_title: "Multiple Meetings found"` zurück, alle anderen Meeting-Infos bleiben leer
+- **Kein Meeting gefunden**: Gibt einen entsprechenden Fehler zurück
 - Bei Batch-Verarbeitung werden alle pending Transkriptionen abgearbeitet
 - Erfolgreiche Zuordnungen werden in der Datenbank gespeichert
 - Fehler werden in der Response dokumentiert, ohne die Verarbeitung zu stoppen

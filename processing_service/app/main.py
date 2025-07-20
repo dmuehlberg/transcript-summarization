@@ -211,14 +211,28 @@ def get_meeting_info(request: MeetingInfoRequest):
                     FROM calendar_data
                     WHERE start_date BETWEEN %s AND %s
                     ORDER BY ABS(EXTRACT(EPOCH FROM (start_date - %s))) ASC
-                    LIMIT 1
                 """, (time_window_start, time_window_end, recording_date_utc))
-                row = cur.fetchone()
-                if not row:
+                rows = cur.fetchall()
+                if not rows:
                     cur.close()
                     conn.close()
                     raise HTTPException(status_code=404, detail=f"Kein Meeting im Zeitfenster von +/- {time_window_minutes} Minuten um den angegebenen Zeitpunkt gefunden.")
-                start_date, end_date, subject, has_picture, user_entry_id, display_to, display_cc = row
+                elif len(rows) > 1:
+                    info_dict = {
+                        "meeting_start_date": None,
+                        "meeting_end_date": None,
+                        "meeting_title": "Multiple Meetings found",
+                        "meeting_location": None,
+                        "invitation_text": None,
+                        "participants": None
+                    }
+                    update_transcription_meeting_info(recording_date_local, info_dict)
+                    cur.close()
+                    conn.close()
+                    return {"status": "success", "meeting_info": info_dict}
+                else:
+                    row = rows[0]
+                    start_date, end_date, subject, has_picture, user_entry_id, display_to, display_cc = row
                 # Teilnehmernamen kombinieren und deduplizieren
                 import re as _re
                 tokens = set()
@@ -272,11 +286,24 @@ def get_meeting_info(request: MeetingInfoRequest):
                     FROM calendar_data
                     WHERE start_date BETWEEN %s AND %s
                     ORDER BY ABS(EXTRACT(EPOCH FROM (start_date - %s))) ASC
-                    LIMIT 1
                 """, (time_window_start, time_window_end, recording_date_utc))
-                row = cur.fetchone()
+                rows = cur.fetchall()
                 
-                if row:
+                if not rows:
+                    results.append({"id": transcription_id, "error": f"Kein Meeting im Zeitfenster von +/- {time_window_minutes} Minuten gefunden"})
+                elif len(rows) > 1:
+                    info_dict = {
+                        "meeting_start_date": None,
+                        "meeting_end_date": None,
+                        "meeting_title": "Multiple Meetings found",
+                        "meeting_location": None,
+                        "invitation_text": None,
+                        "participants": None
+                    }
+                    update_transcription_meeting_info(recording_date_local, info_dict)
+                    results.append({"id": transcription_id, "meeting_info": info_dict})
+                else:
+                    row = rows[0]
                     start_date, end_date, subject, has_picture, user_entry_id, display_to, display_cc = row
                     # Teilnehmernamen kombinieren und deduplizieren
                     import re as _re
@@ -302,8 +329,6 @@ def get_meeting_info(request: MeetingInfoRequest):
                     }
                     update_transcription_meeting_info(recording_date_local, info_dict)
                     results.append({"id": transcription_id, "meeting_info": info_dict})
-                else:
-                    results.append({"id": transcription_id, "error": f"Kein Meeting im Zeitfenster von +/- {time_window_minutes} Minuten gefunden"})
                 
                 cur.close()
                 conn.close()
