@@ -19,7 +19,7 @@
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
       "position": [
-        440,
+        520,
         0
       ],
       "id": "f75cdd82-3116-491b-915a-9ae845188892",
@@ -38,19 +38,6 @@
       "id": "b8aa0a30-29b0-4815-bd0e-8c2855ccc120",
       "name": "List MP3s",
       "onError": "continueErrorOutput"
-    },
-    {
-      "parameters": {
-        "jsCode": "return items.map(item => {\n  return {\n    json: {\n      filePath: item.json.transcription_inputpath,\n      set_language: item.json.set_language\n    }\n  }\n});"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1100,
-        0
-      ],
-      "id": "816b0080-0b46-4fc4-aec5-5cb70a6d296b",
-      "name": "Code"
     },
     {
       "parameters": {
@@ -431,27 +418,6 @@
     },
     {
       "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT transcription_inputpath, set_language\nFROM transcriptions\nWHERE set_language IN ('en', 'de', 'auto') and transcription_status <> 'finished';",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.6,
-      "position": [
-        920,
-        0
-      ],
-      "id": "b57edeba-e3e2-4f34-aba4-31fce4f3cb48",
-      "name": "Postgres",
-      "credentials": {
-        "postgres": {
-          "id": "vETPF55iMKScXl8i",
-          "name": "Postgres account"
-        }
-      }
-    },
-    {
-      "parameters": {
         "operation": "update",
         "schema": {
           "__rl": true,
@@ -664,9 +630,325 @@
       "id": "28a8baeb-7b35-4a80-8b50-2efea25fc317",
       "name": "Webhook start-transcription",
       "webhookId": "7358a242-6c01-40d2-beeb-b2f1ffdd23f3"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "transcriptions",
+          "mode": "list",
+          "cachedResultName": "transcriptions"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "transcription_status": "processing",
+            "filename": "={{ $('Extract filePath & baseFileName').item.json.baseFileName }}.mp3"
+          },
+          "matchingColumns": [
+            "filename"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "filename",
+              "displayName": "filename",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "transcription_inputpath",
+              "displayName": "transcription_inputpath",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "recording_date",
+              "displayName": "recording_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "detected_language",
+              "displayName": "detected_language",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "set_language",
+              "displayName": "set_language",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "transcript_text",
+              "displayName": "transcript_text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "corrected_text",
+              "displayName": "corrected_text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "participants_firstname",
+              "displayName": "participants_firstname",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "participants_lastname",
+              "displayName": "participants_lastname",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "transcription_duration",
+              "displayName": "transcription_duration",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "audio_duration",
+              "displayName": "audio_duration",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "transcription_status",
+              "displayName": "transcription_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "participants",
+              "displayName": "participants",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "meeting_start_date",
+              "displayName": "meeting_start_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "meeting_end_date",
+              "displayName": "meeting_end_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "meeting_title",
+              "displayName": "meeting_title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "meeting_location",
+              "displayName": "meeting_location",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "invitation_text",
+              "displayName": "invitation_text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1940,
+        -120
+      ],
+      "id": "b288b686-5227-44b2-ab1e-8f54f2cbfe73",
+      "name": "Update Status to Processing",
+      "credentials": {
+        "postgres": {
+          "id": "vETPF55iMKScXl8i",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT transcription_inputpath, set_language\nFROM transcriptions\nWHERE set_language IN ('en', 'de', 'auto') and transcription_status <> 'finished';",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        920,
+        0
+      ],
+      "id": "b57edeba-e3e2-4f34-aba4-31fce4f3cb48",
+      "name": "Read MP3s from Database",
+      "credentials": {
+        "postgres": {
+          "id": "vETPF55iMKScXl8i",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  return {\n    json: {\n      filePath: item.json.transcription_inputpath,\n      set_language: item.json.set_language\n    }\n  }\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        0
+      ],
+      "id": "816b0080-0b46-4fc4-aec5-5cb70a6d296b",
+      "name": "Get Filepath and Language"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://processing-service:8300/get_meeting_info",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        360,
+        0
+      ],
+      "id": "8e9ce5b8-6837-4954-9f54-c53dab5d180b",
+      "name": "Get Meeting Infos"
     }
   ],
-  "pinData": {},
+  "pinData": {
+    "Webhook start-transcription": [
+      {
+        "json": {
+          "headers": {
+            "accept": "*/*",
+            "user-agent": "node-fetch/1.0 (+https://github.com/bitinn/node-fetch)",
+            "accept-encoding": "gzip,deflate",
+            "connection": "close",
+            "host": "n8n:5678"
+          },
+          "params": {},
+          "query": {},
+          "body": {},
+          "webhookUrl": "http://localhost:5678/webhook/start-transcription",
+          "executionMode": "production"
+        }
+      }
+    ]
+  },
   "connections": {
     "When clicking ‘Test workflow’": {
       "main": [
@@ -694,18 +976,7 @@
       "main": [
         [
           {
-            "node": "Postgres",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Code": {
-      "main": [
-        [
-          {
-            "node": "Loop Over Items",
+            "node": "Read MP3s from Database",
             "type": "main",
             "index": 0
           }
@@ -727,7 +998,7 @@
       "main": [
         [
           {
-            "node": "Update filePath to Processing",
+            "node": "Update Status to Processing",
             "type": "main",
             "index": 0
           }
@@ -894,17 +1165,6 @@
         ]
       ]
     },
-    "Postgres": {
-      "main": [
-        [
-          {
-            "node": "Code",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Update Status to Finished": {
       "main": [
         [
@@ -920,7 +1180,7 @@
       "main": [
         [
           {
-            "node": "Ensure Folders Exist",
+            "node": "Get Meeting Infos",
             "type": "main",
             "index": 0
           }
@@ -937,13 +1197,57 @@
           }
         ]
       ]
+    },
+    "Update Status to Processing": {
+      "main": [
+        [
+          {
+            "node": "Update filePath to Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read MP3s from Database": {
+      "main": [
+        [
+          {
+            "node": "Get Filepath and Language",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Filepath and Language": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Meeting Infos": {
+      "main": [
+        [
+          {
+            "node": "Ensure Folders Exist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": true,
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "b4e424f2-7730-4ec8-92cb-458e90a4d272",
+  "versionId": "1fcbc198-9b80-4b58-ab65-2664577ec5f4",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "e19a58ffb0fd248efa26d031fe3b9360ad1bd1b828d9ae749d875af6b5124b71"
