@@ -6,6 +6,8 @@ volumes:
   open-webui:
   flowise:
   pgadmin_data:
+  budibase_couchdb:
+  budibase_redis:
 
 networks:
   demo:
@@ -281,13 +283,68 @@ services:
     volumes:
      - ./shared:/data/shared
 
+  # Budibase Studio (Development/Admin Interface)
   budibase:
     image: budibase/budibase:latest
     container_name: budibase
     ports:
       - "8400:80"
     environment:
-      - INTERNAL_POSTGRES_ENABLED=false
+      - COUCH_DB_URL=http://budibase-couchdb:5984
+      - REDIS_URL=redis://budibase-redis:6379
+      - INTERNAL_API_KEY=super-secret-key
     depends_on:
-      - postgres
+      - budibase-couchdb
+      - budibase-redis
+    networks: ['demo']
+
+  # Budibase Apps (Production/Public Mode) für Public Routing
+  budibase-proxy:
+    image: budibase/proxy
+    container_name: budibase-proxy
+    ports:
+      - "10000:10000"  # Public App Modus!
+    environment:
+      - PUBLIC_APP=true
+    depends_on:
+      - budibase-apps
+    networks: ['demo']
+
+  budibase-apps:
+    image: budibase/apps
+    container_name: budibase-apps
+    environment:
+      - COUCH_DB_URL=http://budibase-couchdb:5984
+      - REDIS_URL=redis://budibase-redis:6379
+      - INTERNAL_API_KEY=super-secret-key
+    depends_on:
+      - budibase-couchdb
+      - budibase-redis
+    networks: ['demo']
+
+  budibase-couchdb:
+    image: couchdb:3
+    container_name: budibase-couchdb
+    environment:
+      - COUCHDB_USER=admin
+      - COUCHDB_PASSWORD=password
+    volumes:
+      - budibase_couchdb:/opt/couchdb/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5984/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: ['demo']
+
+  budibase-redis:
+    image: redis
+    container_name: budibase-redis
+    volumes:
+      - budibase_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
     networks: ['demo']
