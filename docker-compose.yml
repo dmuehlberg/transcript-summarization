@@ -290,7 +290,7 @@ services:
     ports:
       - "8400:80"
     environment:
-      - COUCH_DB_URL=http://budibase-couchdb:5984
+      - COUCH_DB_URL=${COUCHDB_URL}
       - REDIS_URL=redis://budibase-redis:6379
       - INTERNAL_API_KEY=super-secret-key
     depends_on:
@@ -314,7 +314,7 @@ services:
     image: budibase/apps
     container_name: budibase-apps
     environment:
-      - COUCH_DB_URL=http://budibase-couchdb:5984
+      - COUCH_DB_URL=${COUCHDB_URL}
       - REDIS_URL=redis://budibase-redis:6379
       - INTERNAL_API_KEY=super-secret-key
     depends_on:
@@ -326,8 +326,8 @@ services:
     image: couchdb:3
     container_name: budibase-couchdb
     environment:
-      - COUCHDB_USER=admin
-      - COUCHDB_PASSWORD=password
+      - COUCHDB_USER=${COUCHDB_USER}
+      - COUCHDB_PASSWORD=${COUCHDB_PASSWORD}
     volumes:
       - budibase_couchdb:/opt/couchdb/data
     healthcheck:
