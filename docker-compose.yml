@@ -293,6 +293,8 @@ services:
       - COUCH_DB_URL=${COUCHDB_URL}
       - REDIS_URL=redis://budibase-redis:6379
       - INTERNAL_API_KEY=super-secret-key
+      - APPS_URL=http://budibase-apps:4002
+      - WORKER_URL=http://budibase-apps:4002
     depends_on:
       - budibase-couchdb
       - budibase-redis
@@ -306,6 +308,8 @@ services:
       - "10000:10000"  # Public App Modus!
     environment:
       - PUBLIC_APP=true
+      - APPS_URL=http://budibase-apps:4002
+      - INTERNAL_API_KEY=super-secret-key
     depends_on:
       - budibase-apps
     networks: ['demo']
@@ -317,6 +321,8 @@ services:
       - COUCH_DB_URL=${COUCHDB_URL}
       - REDIS_URL=redis://budibase-redis:6379
       - INTERNAL_API_KEY=super-secret-key
+      - PORT=4002
+      - STUDIO_URL=http://budibase:80
     depends_on:
       - budibase-couchdb
       - budibase-redis
