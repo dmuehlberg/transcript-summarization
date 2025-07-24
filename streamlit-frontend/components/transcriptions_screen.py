@@ -231,8 +231,10 @@ def delete_selected_transcriptions():
     
     with col2:
         if st.button("🗑️ Endgültig löschen", use_container_width=True, type="primary"):
+            st.write("Debug - Endgültig löschen Button geklickt")
             st.session_state['show_delete_confirm'] = False
             st.session_state['perform_delete'] = True
+            st.write(f"Debug - perform_delete gesetzt: {st.session_state.get('perform_delete')}")
             st.rerun()
 
 def perform_delete_operation():
