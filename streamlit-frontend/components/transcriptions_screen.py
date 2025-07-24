@@ -5,7 +5,7 @@ import streamlit as st
 import pandas as pd
 import logging
 from typing import Dict, Any, Optional
-import streamlit_ag_grid as st_ag_grid
+from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode, DataReturnMode
 
 from database import db_manager
 from utils.workflow_utils import n8n_client
@@ -146,7 +146,7 @@ def render_transcriptions_screen():
     # Zeige gefilterte Daten
     if not filtered_df.empty:
         # AG Grid Konfiguration
-        gb = st_ag_grid.GridOptionsBuilder.from_dataframe(
+        gb = GridOptionsBuilder.from_dataframe(
             filtered_df[['id', 'filename', 'transcription_status', 'set_language', 'meeting_title', 'meeting_start_date']],
             enableRowGroup=True,
             enableValue=True,
@@ -184,11 +184,11 @@ def render_transcriptions_screen():
         grid_options = gb.build()
         
         # Zeige AG Grid
-        grid_response = st_ag_grid.AgGrid(
+        grid_response = AgGrid(
             filtered_df[['id', 'filename', 'transcription_status', 'set_language', 'meeting_title', 'meeting_start_date']],
             gridOptions=grid_options,
-            data_return_mode='AS_INPUT',
-            update_mode='MODEL_CHANGED',
+            data_return_mode=DataReturnMode.AS_INPUT,
+            update_mode=GridUpdateMode.MODEL_CHANGED,
             fit_columns_on_grid_load=True,
             theme='streamlit',
             height=400,
