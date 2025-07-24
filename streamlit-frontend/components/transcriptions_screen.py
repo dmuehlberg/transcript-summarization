@@ -255,76 +255,120 @@ def render_transcriptions_screen():
         current_df = None
         selected_rows = []
         
+        st.write("🔍 DEBUG: Starte Grid-Daten-Extraktion...")
+        
         try:
             # Extrahiere Daten aus AgGridReturn Objekt
+            st.write("🔍 DEBUG: Extrahiere current_df...")
             if hasattr(grid_response, 'data'):
                 current_df = pd.DataFrame(grid_response.data) if grid_response.data is not None else None
+                st.write(f"🔍 DEBUG: current_df extrahiert: {len(current_df) if current_df is not None else 'None'} Zeilen")
             
             # Extrahiere selected_rows aus AgGridReturn Objekt
+            st.write("🔍 DEBUG: Extrahiere selected_rows...")
             if hasattr(grid_response, 'selected_rows'):
                 selected_rows = grid_response.selected_rows if grid_response.selected_rows is not None else []
+                st.write(f"🔍 DEBUG: selected_rows extrahiert: {len(selected_rows)} Zeilen")
             else:
                 selected_rows = []
+                st.write("🔍 DEBUG: selected_rows nicht gefunden, setze leere Liste")
+                
+            st.write("🔍 DEBUG: Grid-Daten-Extraktion abgeschlossen")
                 
         except Exception as e:
             st.error(f"Fehler beim Extrahieren der Grid-Daten: {str(e)}")
+            st.write(f"🔍 DEBUG: Exception in Grid-Daten-Extraktion: {type(e).__name__}")
+            st.write(f"🔍 DEBUG: Exception Details: {str(e)}")
             return
         
         # Zellenbearbeitung deaktiviert für Stabilität
         # current_df und selected_rows sind jetzt verfügbar für die Anzeige
         
         # Zeige ausgewählte Zeilen
+        st.write("🔍 DEBUG: Prüfe selected_rows für Anzeige...")
         if selected_rows and len(selected_rows) > 0:
+            st.write("🔍 DEBUG: Zeige ausgewählte Zeilen...")
             st.subheader(f"📋 Ausgewählte Zeilen ({len(selected_rows)})")
             try:
                 selected_df = pd.DataFrame(selected_rows)
+                st.write(f"🔍 DEBUG: selected_df erstellt: {len(selected_df)} Zeilen")
                 st.dataframe(selected_df[['filename', 'transcription_status', 'set_language', 'meeting_title']])
+                st.write("🔍 DEBUG: Ausgewählte Zeilen angezeigt")
             except Exception as e:
                 st.error(f"Fehler beim Anzeigen der ausgewählten Zeilen: {str(e)}")
+                st.write(f"🔍 DEBUG: Exception in ausgewählte Zeilen: {type(e).__name__}")
+        else:
+            st.write("🔍 DEBUG: Keine selected_rows zum Anzeigen")
         
         # Zeige Details für ausgewählte Zeile
+        st.write("🔍 DEBUG: Prüfe selected_rows für Details...")
         if selected_rows and len(selected_rows) > 0:
+            st.write("🔍 DEBUG: Starte Details-Anzeige...")
             st.subheader("📝 Details")
-            selected_row = selected_rows[0]  # Zeige Details der ersten ausgewählten Zeile
             
-            # Details in Spalten anzeigen
-            col1, col2 = st.columns(2)
-            with col1:
-                st.write("**Dateiname:**", selected_row['filename'])
-                st.write("**Status:**", selected_row['transcription_status'])
-                st.write("**Sprache:**", selected_row['set_language'])
-                st.write("**Meeting Titel:**", selected_row['meeting_title'])
-            
-            with col2:
-                st.write("**Start Datum:**", selected_row['meeting_start_date'])
-                # Hole zusätzliche Details aus der ursprünglichen DataFrame
-                matching_rows = filtered_df[filtered_df['id'] == selected_row['id']]
-                if len(matching_rows) > 0:
-                    original_row = matching_rows.iloc[0]
-                    st.write("**Teilnehmer:**", original_row.get('participants', 'N/A'))
-                    st.write("**Audio Dauer:**", format_duration(original_row.get('audio_duration')))
-                    st.write("**Erstellt:**", original_row.get('created_at', 'N/A'))
-            
-            # Aktionen
-            st.subheader("⚡ Aktionen")
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                # Meeting auswählen
-                if st.button("📅 Meeting auswählen"):
-                    st.session_state.current_screen = 'calendar'
-                    st.session_state.selected_meeting_id = selected_row['id']
-                    st.session_state.selected_meeting_title = selected_row['meeting_title']
-                    st.session_state.selected_start_date = selected_row['meeting_start_date']
-                    st.rerun()
-            
-            with col2:
-                # Weitere Aktionen
-                if st.button("🔄 Details aktualisieren"):
-                    st.rerun()
-            
-            with col3:
-                st.write("")  # Spacer
+            try:
+                selected_row = selected_rows[0]  # Zeige Details der ersten ausgewählten Zeile
+                st.write(f"🔍 DEBUG: selected_row extrahiert: {selected_row.get('filename', 'N/A')}")
+                
+                # Details in Spalten anzeigen
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.write("**Dateiname:**", selected_row['filename'])
+                    st.write("**Status:**", selected_row['transcription_status'])
+                    st.write("**Sprache:**", selected_row['set_language'])
+                    st.write("**Meeting Titel:**", selected_row['meeting_title'])
+                
+                with col2:
+                    st.write("**Start Datum:**", selected_row['meeting_start_date'])
+                    st.write("🔍 DEBUG: Starte zusätzliche Details...")
+                    
+                    # Hole zusätzliche Details aus der ursprünglichen DataFrame
+                    try:
+                        matching_rows = filtered_df[filtered_df['id'] == selected_row['id']]
+                        st.write(f"🔍 DEBUG: matching_rows gefunden: {len(matching_rows)} Zeilen")
+                        
+                        if len(matching_rows) > 0:
+                            original_row = matching_rows.iloc[0]
+                            st.write("**Teilnehmer:**", original_row.get('participants', 'N/A'))
+                            st.write("**Audio Dauer:**", format_duration(original_row.get('audio_duration')))
+                            st.write("**Erstellt:**", original_row.get('created_at', 'N/A'))
+                            st.write("🔍 DEBUG: Zusätzliche Details angezeigt")
+                        else:
+                            st.write("🔍 DEBUG: Keine matching_rows gefunden")
+                    except Exception as e:
+                        st.error(f"Fehler beim Laden zusätzlicher Details: {str(e)}")
+                        st.write(f"🔍 DEBUG: Exception in zusätzliche Details: {type(e).__name__}")
+                
+                st.write("🔍 DEBUG: Starte Aktionen...")
+                # Aktionen
+                st.subheader("⚡ Aktionen")
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    # Meeting auswählen
+                    if st.button("📅 Meeting auswählen"):
+                        st.session_state.current_screen = 'calendar'
+                        st.session_state.selected_meeting_id = selected_row['id']
+                        st.session_state.selected_meeting_title = selected_row['meeting_title']
+                        st.session_state.selected_start_date = selected_row['meeting_start_date']
+                        st.rerun()
+                
+                with col2:
+                    # Weitere Aktionen
+                    if st.button("🔄 Details aktualisieren"):
+                        st.rerun()
+                
+                with col3:
+                    st.write("")  # Spacer
+                
+                st.write("🔍 DEBUG: Details-Anzeige abgeschlossen")
+                
+            except Exception as e:
+                st.error(f"Fehler beim Anzeigen der Details: {str(e)}")
+                st.write(f"🔍 DEBUG: Exception in Details-Anzeige: {type(e).__name__}")
+                st.write(f"🔍 DEBUG: Exception Details: {str(e)}")
+        else:
+            st.write("🔍 DEBUG: Keine selected_rows für Details")
     else:
         st.warning("Keine Transkriptionen mit den gewählten Filtern gefunden.")
 
