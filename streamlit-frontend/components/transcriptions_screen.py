@@ -24,9 +24,6 @@ def render_transcriptions_screen():
     </div>
     """, unsafe_allow_html=True)
     
-    # Führe Delete-Operation aus, falls anstehend
-    perform_delete_operation()
-    
     # Action Buttons
     col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
     
@@ -44,6 +41,9 @@ def render_transcriptions_screen():
     
     with col4:
         st.write("")  # Spacer
+    
+    # Führe Delete-Operation aus, falls anstehend (nach den Buttons)
+    perform_delete_operation()
     
     # Lade Transkriptionsdaten
     with st.spinner("Lade Transkriptionen..."):
@@ -237,43 +237,54 @@ def delete_selected_transcriptions():
 
 def perform_delete_operation():
     """Führt die eigentliche Löschoperation aus."""
+    # Debug: Zeige Session State
+    st.write("Debug - Session State:", {k: v for k, v in st.session_state.items() if k.startswith('delete') or k.startswith('perform')})
+    
     if 'perform_delete' in st.session_state and st.session_state['perform_delete']:
+        st.write("Debug - Perform delete ist True")
         delete_ids = st.session_state.get('delete_ids', [])
+        st.write(f"Debug - Delete IDs: {delete_ids}")
         
         if not delete_ids:
             st.error("Keine IDs zum Löschen gefunden.")
             return
         
-        with st.spinner("Lösche Transkriptionen..."):
-            try:
-                if db_manager:
-                    result = db_manager.delete_transcriptions(delete_ids)
+        st.write("Debug - Starte Löschoperation...")
+        
+        try:
+            if db_manager:
+                st.write("Debug - db_manager verfügbar")
+                result = db_manager.delete_transcriptions(delete_ids)
+                st.write(f"Debug - Delete Ergebnis: {result}")
+                
+                if result:
+                    st.success(f"✅ {len(delete_ids)} Transkription(en) erfolgreich gelöscht!")
                     
-                    if result:
-                        st.success(f"✅ {len(delete_ids)} Transkription(en) erfolgreich gelöscht!")
-                        
-                        # Lösche Checkbox-States
-                        for transcription_id in delete_ids:
-                            checkbox_key = f"checkbox_{transcription_id}"
-                            if checkbox_key in st.session_state:
-                                del st.session_state[checkbox_key]
-                        
-                        # Lösche Delete-States
-                        if 'delete_ids' in st.session_state:
-                            del st.session_state['delete_ids']
-                        if 'perform_delete' in st.session_state:
-                            del st.session_state['perform_delete']
-                        
-                        st.rerun()
-                    else:
-                        st.error("❌ Fehler beim Löschen der Transkriptionen")
+                    # Lösche Checkbox-States
+                    for transcription_id in delete_ids:
+                        checkbox_key = f"checkbox_{transcription_id}"
+                        if checkbox_key in st.session_state:
+                            del st.session_state[checkbox_key]
+                    
+                    # Lösche Delete-States
+                    if 'delete_ids' in st.session_state:
+                        del st.session_state['delete_ids']
+                    if 'perform_delete' in st.session_state:
+                        del st.session_state['perform_delete']
+                    
+                    st.rerun()
                 else:
-                    st.error("❌ Datenbankmanager nicht verfügbar")
-            except Exception as e:
-                st.error(f"❌ Fehler beim Löschen: {str(e)}")
-            finally:
-                # Lösche Delete-States
-                if 'perform_delete' in st.session_state:
-                    del st.session_state['perform_delete']
+                    st.error("❌ Fehler beim Löschen der Transkriptionen")
+            else:
+                st.error("❌ Datenbankmanager nicht verfügbar")
+        except Exception as e:
+            st.error(f"❌ Fehler beim Löschen: {str(e)}")
+            st.write(f"Debug - Exception: {e}")
+        finally:
+            # Lösche Delete-States
+            if 'perform_delete' in st.session_state:
+                del st.session_state['perform_delete']
+    else:
+        st.write("Debug - Perform delete ist False oder nicht vorhanden")
 
  
