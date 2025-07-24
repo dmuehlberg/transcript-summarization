@@ -90,34 +90,41 @@ def render_transcriptions_screen():
     
     # Zeige gefilterte Daten
     if not filtered_df.empty:
-        # Wähle wichtige Spalten für die Anzeige
-        display_columns = ['filename', 'transcription_status', 'set_language', 'meeting_title', 'meeting_start_date']
-        display_df = filtered_df[display_columns].copy()
+        # Erstelle eine erweiterte DataFrame mit Checkbox-Spalte
+        display_df = filtered_df[['filename', 'transcription_status', 'set_language', 'meeting_title', 'meeting_start_date']].copy()
         
-        # Füge Checkboxen für jede Zeile hinzu
-        st.subheader("📋 Transkriptionen auswählen")
+        # Füge eine Checkbox-Spalte hinzu
+        st.subheader("📊 Transkriptionen Tabelle")
         
-        # Erstelle Checkboxen für jede Zeile
-        selected_indices = []
-        for idx, row in filtered_df.iterrows():
-            col1, col2 = st.columns([0.1, 0.9])
-            with col1:
-                if st.checkbox("", key=f"checkbox_{row['id']}"):
-                    selected_indices.append(idx)
-            with col2:
-                st.write(f"**{row['filename']}** - {row['meeting_title']} ({row['transcription_status']})")
+        # Erstelle eine interaktive Tabelle mit Checkboxen
+        col1, col2 = st.columns([0.8, 0.2])
         
-        # Zeige Anzahl ausgewählter Einträge
-        if selected_indices:
-            st.info(f"✅ {len(selected_indices)} Transkription(en) ausgewählt")
+        with col1:
+            # Zeige die Haupttabelle
+            st.dataframe(
+                display_df,
+                use_container_width=True,
+                height=400
+            )
         
-        # Zeige Tabelle für bessere Übersicht
-        st.subheader("📊 Übersicht")
-        st.dataframe(
-            display_df,
-            use_container_width=True,
-            height=400
-        )
+        with col2:
+            # Zeige Checkboxen für jede Zeile
+            st.write("**Auswahl:**")
+            selected_count = 0
+            for idx, row in filtered_df.iterrows():
+                transcription_id = row['id']
+                checkbox_key = f"checkbox_{transcription_id}"
+                if st.checkbox(
+                    f"ID: {transcription_id}",
+                    key=checkbox_key,
+                    help=f"{row['filename']} - {row['meeting_title']}"
+                ):
+                    selected_count += 1
+            
+            if selected_count > 0:
+                st.success(f"✅ {selected_count} ausgewählt")
+            else:
+                st.info("Keine ausgewählt")
         
         # Zeige Details für ausgewählte Zeile
         st.subheader("📝 Details")
