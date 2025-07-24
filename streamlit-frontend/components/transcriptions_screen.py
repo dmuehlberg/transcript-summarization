@@ -178,8 +178,8 @@ def render_transcriptions_screen():
         gb.configure_column("meeting_title", header_name="Meeting Titel", width=250)
         gb.configure_column("meeting_start_date", header_name="Start Datum", width=150)
         
-        # Aktiviere Row Selection
-        gb.configure_selection(selection_mode='multiple', use_checkbox=True)
+        # Aktiviere Row Selection - verwende single selection für bessere Kompatibilität
+        gb.configure_selection(selection_mode='single', use_checkbox=True)
         
         grid_options = gb.build()
         
@@ -203,6 +203,14 @@ def render_transcriptions_screen():
         if 'previous_df' not in st.session_state:
             st.session_state.previous_df = filtered_df[['id', 'filename', 'transcription_status', 'set_language', 'meeting_title', 'meeting_start_date']].copy()
         
+        # Debug: Zeige grid_response Struktur
+        st.write("🔍 Debug Info:")
+        st.write(f"grid_response Typ: {type(grid_response)}")
+        if hasattr(grid_response, '__dict__'):
+            st.write(f"grid_response Attribute: {list(grid_response.__dict__.keys())}")
+        elif isinstance(grid_response, dict):
+            st.write(f"grid_response Keys: {list(grid_response.keys())}")
+        
         # Extrahiere Daten und ausgewählte Zeilen - streamlit-aggrid gibt ein Objekt zurück
         current_df = None
         selected_rows = []
@@ -210,13 +218,17 @@ def render_transcriptions_screen():
         # Prüfe verschiedene mögliche Strukturen
         if hasattr(grid_response, 'data'):
             current_df = pd.DataFrame(grid_response.data) if grid_response.data is not None else None
+            st.write(f"✅ Daten gefunden über .data: {len(current_df) if current_df is not None else 0} Zeilen")
         elif isinstance(grid_response, dict) and 'data' in grid_response:
             current_df = pd.DataFrame(grid_response['data']) if grid_response['data'] is not None else None
+            st.write(f"✅ Daten gefunden über ['data']: {len(current_df) if current_df is not None else 0} Zeilen")
         
         if hasattr(grid_response, 'selected_rows'):
             selected_rows = grid_response.selected_rows or []
+            st.write(f"✅ selected_rows gefunden über .selected_rows: {len(selected_rows)} Zeilen")
         elif isinstance(grid_response, dict) and 'selected_rows' in grid_response:
             selected_rows = grid_response['selected_rows'] or []
+            st.write(f"✅ selected_rows gefunden über ['selected_rows']: {len(selected_rows)} Zeilen")
         
         # Behandle Zellenänderungen
         if current_df is not None and not current_df.equals(st.session_state.previous_df):
