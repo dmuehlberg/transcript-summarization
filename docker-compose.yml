@@ -282,3 +282,22 @@ services:
       - postgres
     volumes:
      - ./shared:/data/shared
+
+  streamlit-dashboard:
+    build:
+      context: ./streamlit-frontend
+    container_name: streamlit-dashboard
+    networks: ['demo']
+    ports:
+      - "8400:8400"
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_PORT=5432
+    depends_on:
+      postgres:
+        condition: service_healthy
+      n8n:
+        condition: service_started
