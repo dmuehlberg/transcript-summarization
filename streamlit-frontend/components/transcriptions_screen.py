@@ -25,9 +25,6 @@ def handle_cell_edit(edited_df, original_df):
 def render_transcriptions_screen():
     """Rendert den Transkriptionen Screen."""
     
-    # Debug: Zeige aktuellen Schritt
-    st.write("🔍 DEBUG: Starte render_transcriptions_screen")
-    
     # Header
     st.markdown("""
     <div style="text-align: center; margin-bottom: 2rem;">
@@ -89,35 +86,28 @@ def render_transcriptions_screen():
         st.write("")  # Spacer
     
     # Lade Transkriptionsdaten
-    st.write("🔍 DEBUG: Lade Transkriptionsdaten...")
     with st.spinner("Lade Transkriptionen..."):
         transcriptions = db_manager.get_transcriptions()
-    
-    st.write(f"🔍 DEBUG: Transkriptionen geladen: {len(transcriptions) if transcriptions else 0}")
     
     if transcriptions is None or len(transcriptions) == 0:
         st.warning("Keine Transkriptionen gefunden.")
         return
     
     # Bereite Daten für AG-Grid vor
-    st.write("🔍 DEBUG: Bereite Daten für AG-Grid vor...")
     try:
         df = prepare_transcriptions_data(transcriptions)
-        st.write(f"🔍 DEBUG: DataFrame erstellt: {len(df)} Zeilen, {len(df.columns)} Spalten")
         
         if df is None or len(df) == 0:
             st.warning("Keine Daten zum Anzeigen verfügbar.")
             return
     except Exception as e:
         st.error(f"Fehler beim Laden der Daten: {str(e)}")
-        st.write(f"🔍 DEBUG: Exception in prepare_transcriptions_data: {type(e).__name__}")
         return
     
     # Erstelle eine interaktive Tabelle mit AG Grid
     st.subheader("📊 Transkriptionen Tabelle")
     
     # Filter-Optionen
-    st.write("🔍 DEBUG: Erstelle Filter-Optionen...")
     col1, col2, col3 = st.columns(3)
     with col1:
         # Sichere Status-Filter-Optionen
@@ -125,10 +115,8 @@ def render_transcriptions_screen():
         if 'transcription_status' in df.columns:
             try:
                 status_options.extend(list(df['transcription_status'].unique()))
-                st.write(f"🔍 DEBUG: Status-Optionen erstellt: {len(status_options)}")
             except Exception as e:
                 st.error(f"Fehler beim Laden der Status-Optionen: {str(e)}")
-                st.write(f"🔍 DEBUG: Exception in Status-Optionen: {type(e).__name__}")
         
         status_filter = st.selectbox("Status Filter", status_options)
     
@@ -147,23 +135,19 @@ def render_transcriptions_screen():
         search_term = st.text_input("🔍 Suche", placeholder="Dateiname oder Meeting-Titel...")
     
     # Filtere Daten
-    st.write("🔍 DEBUG: Starte Datenfilterung...")
     filtered_df = df.copy()
     
     # Status Filter
-    st.write("🔍 DEBUG: Status-Filter...")
     if status_filter != "Alle" and 'transcription_status' in filtered_df.columns:
         status_mask = filtered_df['transcription_status'] == status_filter
         filtered_df = filtered_df[status_mask]
     
     # Language Filter
-    st.write("🔍 DEBUG: Language-Filter...")
     if language_filter != "Alle" and 'set_language' in filtered_df.columns:
         language_mask = filtered_df['set_language'] == language_filter
         filtered_df = filtered_df[language_mask]
     
     # Search Filter
-    st.write("🔍 DEBUG: Search-Filter...")
     if search_term and len(search_term.strip()) > 0:
         try:
             filename_mask = filtered_df['filename'].str.contains(search_term, case=False, na=False)
@@ -172,12 +156,8 @@ def render_transcriptions_screen():
             filtered_df = filtered_df[search_mask]
         except Exception as e:
             st.error(f"Fehler beim Filtern: {str(e)}")
-            st.write(f"🔍 DEBUG: Exception in Search-Filter: {type(e).__name__}")
-    
-    st.write(f"🔍 DEBUG: Filterung abgeschlossen: {len(filtered_df)} Zeilen")
     
     # Zeige gefilterte Daten
-    st.write("🔍 DEBUG: Starte AG Grid Konfiguration...")
     if filtered_df is not None and len(filtered_df) > 0:
                 # AG Grid Konfiguration
         try:
@@ -217,10 +197,8 @@ def render_transcriptions_screen():
             gb.configure_selection(selection_mode='single', use_checkbox=False)
             
             grid_options = gb.build()
-            st.write("🔍 DEBUG: AG Grid Konfiguration abgeschlossen")
         except Exception as e:
             st.error(f"Fehler bei AG Grid Konfiguration: {str(e)}")
-            st.write(f"🔍 DEBUG: Exception in AG Grid Konfiguration: {type(e).__name__}")
             return
         
         # Zeige AG Grid
@@ -255,66 +233,40 @@ def render_transcriptions_screen():
         current_df = None
         selected_rows = []
         
-        st.write("🔍 DEBUG: Starte Grid-Daten-Extraktion...")
-        
         try:
             # Extrahiere Daten aus AgGridReturn Objekt
-            st.write("🔍 DEBUG: Extrahiere current_df...")
             if hasattr(grid_response, 'data'):
                 current_df = pd.DataFrame(grid_response.data) if grid_response.data is not None else None
-                st.write(f"🔍 DEBUG: current_df extrahiert: {len(current_df) if current_df is not None else 'None'} Zeilen")
             
             # Extrahiere selected_rows aus AgGridReturn Objekt
-            st.write("🔍 DEBUG: Extrahiere selected_rows...")
             if hasattr(grid_response, 'selected_rows'):
                 selected_rows = grid_response.selected_rows if grid_response.selected_rows is not None else []
-                st.write(f"🔍 DEBUG: selected_rows extrahiert: {len(selected_rows)} Zeilen")
             else:
                 selected_rows = []
-                st.write("🔍 DEBUG: selected_rows nicht gefunden, setze leere Liste")
-                
-            st.write("🔍 DEBUG: Grid-Daten-Extraktion abgeschlossen")
                 
         except Exception as e:
             st.error(f"Fehler beim Extrahieren der Grid-Daten: {str(e)}")
-            st.write(f"🔍 DEBUG: Exception in Grid-Daten-Extraktion: {type(e).__name__}")
-            st.write(f"🔍 DEBUG: Exception Details: {str(e)}")
             return
         
         # Zellenbearbeitung deaktiviert für Stabilität
         # current_df und selected_rows sind jetzt verfügbar für die Anzeige
         
         # Zeige ausgewählte Zeilen
-        st.write("🔍 DEBUG: Prüfe selected_rows für Anzeige...")
-        st.write(f"🔍 DEBUG: selected_rows Typ: {type(selected_rows)}")
-        st.write(f"🔍 DEBUG: selected_rows Länge: {len(selected_rows) if hasattr(selected_rows, '__len__') else 'keine Länge'}")
-        
-        # Sichere Prüfung für selected_rows
         if selected_rows is not None and hasattr(selected_rows, '__len__') and len(selected_rows) > 0:
-            st.write("🔍 DEBUG: Zeige ausgewählte Zeilen...")
             st.subheader(f"📋 Ausgewählte Zeilen ({len(selected_rows)})")
             try:
                 # selected_rows ist bereits ein DataFrame
-                st.write(f"🔍 DEBUG: selected_rows ist DataFrame mit {len(selected_rows)} Zeilen")
                 st.dataframe(selected_rows[['filename', 'transcription_status', 'set_language', 'meeting_title']])
-                st.write("🔍 DEBUG: Ausgewählte Zeilen angezeigt")
             except Exception as e:
                 st.error(f"Fehler beim Anzeigen der ausgewählten Zeilen: {str(e)}")
-                st.write(f"🔍 DEBUG: Exception in ausgewählte Zeilen: {type(e).__name__}")
-        else:
-            st.write("🔍 DEBUG: Keine selected_rows zum Anzeigen")
         
         # Zeige Details für ausgewählte Zeile
-        st.write("🔍 DEBUG: Prüfe selected_rows für Details...")
-        # Sichere Prüfung für selected_rows
         if selected_rows is not None and hasattr(selected_rows, '__len__') and len(selected_rows) > 0:
-            st.write("🔍 DEBUG: Starte Details-Anzeige...")
             st.subheader("📝 Details")
             
             try:
                 # selected_rows ist ein DataFrame, verwende .iloc[0] für erste Zeile
                 selected_row = selected_rows.iloc[0].to_dict()  # Konvertiere zu Dictionary
-                st.write(f"🔍 DEBUG: selected_row extrahiert: {selected_row.get('filename', 'N/A')}")
                 
                 # Details in Spalten anzeigen
                 col1, col2 = st.columns(2)
@@ -326,26 +278,19 @@ def render_transcriptions_screen():
                 
                 with col2:
                     st.write("**Start Datum:**", selected_row['meeting_start_date'])
-                    st.write("🔍 DEBUG: Starte zusätzliche Details...")
                     
                     # Hole zusätzliche Details aus der ursprünglichen DataFrame
                     try:
                         matching_rows = filtered_df[filtered_df['id'] == selected_row['id']]
-                        st.write(f"🔍 DEBUG: matching_rows gefunden: {len(matching_rows)} Zeilen")
                         
                         if len(matching_rows) > 0:
                             original_row = matching_rows.iloc[0]
                             st.write("**Teilnehmer:**", original_row.get('participants', 'N/A'))
                             st.write("**Audio Dauer:**", format_duration(original_row.get('audio_duration')))
                             st.write("**Erstellt:**", original_row.get('created_at', 'N/A'))
-                            st.write("🔍 DEBUG: Zusätzliche Details angezeigt")
-                        else:
-                            st.write("🔍 DEBUG: Keine matching_rows gefunden")
                     except Exception as e:
                         st.error(f"Fehler beim Laden zusätzlicher Details: {str(e)}")
-                        st.write(f"🔍 DEBUG: Exception in zusätzliche Details: {type(e).__name__}")
                 
-                st.write("🔍 DEBUG: Starte Aktionen...")
                 # Aktionen
                 st.subheader("⚡ Aktionen")
                 col1, col2, col3 = st.columns(3)
@@ -367,14 +312,8 @@ def render_transcriptions_screen():
                 with col3:
                     st.write("")  # Spacer
                 
-                st.write("🔍 DEBUG: Details-Anzeige abgeschlossen")
-                
             except Exception as e:
                 st.error(f"Fehler beim Anzeigen der Details: {str(e)}")
-                st.write(f"🔍 DEBUG: Exception in Details-Anzeige: {type(e).__name__}")
-                st.write(f"🔍 DEBUG: Exception Details: {str(e)}")
-        else:
-            st.write("🔍 DEBUG: Keine selected_rows für Details")
     else:
         st.warning("Keine Transkriptionen mit den gewählten Filtern gefunden.")
 
