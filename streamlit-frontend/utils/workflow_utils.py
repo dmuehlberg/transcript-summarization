@@ -3,6 +3,7 @@ Workflow-Utilities für n8n API-Calls.
 """
 import requests
 import logging
+import os
 from typing import Dict, Any, Optional
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
