@@ -19,7 +19,7 @@ def prepare_transcriptions_data(transcriptions: List[Dict[str, Any]]) -> pd.Data
         DataFrame für AG-Grid
     """
     try:
-        if not transcriptions:
+        if transcriptions is None or len(transcriptions) == 0:
             return pd.DataFrame()
         
         # Erstelle DataFrame
@@ -67,7 +67,7 @@ def prepare_calendar_data(calendar_data: List[Dict[str, Any]]) -> pd.DataFrame:
         DataFrame für AG-Grid
     """
     try:
-        if not calendar_data:
+        if calendar_data is None or len(calendar_data) == 0:
             return pd.DataFrame()
         
         # Erstelle DataFrame

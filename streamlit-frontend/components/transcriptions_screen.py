@@ -110,15 +110,27 @@ def render_transcriptions_screen():
     # Filter-Optionen
     col1, col2, col3 = st.columns(3)
     with col1:
-        status_filter = st.selectbox(
-            "Status Filter",
-            ["Alle"] + list(df['transcription_status'].unique()) if 'transcription_status' in df.columns else ["Alle"]
-        )
+        # Sichere Status-Filter-Optionen
+        status_options = ["Alle"]
+        if 'transcription_status' in df.columns:
+            try:
+                status_options.extend(list(df['transcription_status'].unique()))
+            except Exception as e:
+                st.error(f"Fehler beim Laden der Status-Optionen: {str(e)}")
+        
+        status_filter = st.selectbox("Status Filter", status_options)
+    
     with col2:
-        language_filter = st.selectbox(
-            "Sprache Filter", 
-            ["Alle"] + list(df['set_language'].unique()) if 'set_language' in df.columns else ["Alle"]
-        )
+        # Sichere Language-Filter-Optionen
+        language_options = ["Alle"]
+        if 'set_language' in df.columns:
+            try:
+                language_options.extend(list(df['set_language'].unique()))
+            except Exception as e:
+                st.error(f"Fehler beim Laden der Sprach-Optionen: {str(e)}")
+        
+        language_filter = st.selectbox("Sprache Filter", language_options)
+    
     with col3:
         search_term = st.text_input("🔍 Suche", placeholder="Dateiname oder Meeting-Titel...")
     
