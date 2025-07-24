@@ -15,40 +15,7 @@ logger = logging.getLogger(__name__)
 def render_transcriptions_screen():
     """Rendert den Transkriptionen Screen."""
     
-    # Führe Delete-Operation aus, falls anstehend
-    if 'delete_requested' in st.session_state and st.session_state['delete_requested']:
-        delete_ids = st.session_state.get('delete_ids', [])
-        
-        st.write("Debug - Delete-Operation gestartet")
-        st.write(f"Debug - IDs zum Löschen: {delete_ids}")
-        
-        try:
-            if db_manager:
-                st.write("Debug - db_manager verfügbar")
-                result = db_manager.delete_transcriptions(delete_ids)
-                st.write(f"Debug - Delete Ergebnis: {result}")
-                
-                if result:
-                    st.success(f"✅ {len(delete_ids)} Transkription(en) erfolgreich gelöscht!")
-                    
-                    # Lösche Checkbox-States
-                    for transcription_id in delete_ids:
-                        checkbox_key = f"checkbox_{transcription_id}"
-                        if checkbox_key in st.session_state:
-                            del st.session_state[checkbox_key]
-                else:
-                    st.error("❌ Fehler beim Löschen der Transkriptionen")
-            else:
-                st.error("❌ Datenbankmanager nicht verfügbar")
-        except Exception as e:
-            st.error(f"❌ Fehler beim Löschen: {str(e)}")
-            st.write(f"Debug - Exception: {e}")
-        finally:
-            # Lösche Delete-Flags
-            if 'delete_requested' in st.session_state:
-                del st.session_state['delete_requested']
-            if 'delete_ids' in st.session_state:
-                del st.session_state['delete_ids']
+
     
     # Header
     st.markdown("""
@@ -72,7 +39,40 @@ def render_transcriptions_screen():
     
     with col3:
         if st.button("🗑️ Markierte löschen", use_container_width=True, type="secondary"):
-            delete_selected_transcriptions()
+            # Sammle alle ausgewählten IDs
+            selected_ids = []
+            for key in st.session_state:
+                if key.startswith("checkbox_") and st.session_state[key]:
+                    try:
+                        transcription_id = int(key.replace("checkbox_", ""))
+                        selected_ids.append(transcription_id)
+                    except ValueError:
+                        pass
+            
+            if not selected_ids:
+                st.warning("Keine Transkriptionen zum Löschen ausgewählt.")
+            else:
+                # Führe Delete direkt aus
+                try:
+                    if db_manager:
+                        result = db_manager.delete_transcriptions(selected_ids)
+                        
+                        if result:
+                            st.success(f"✅ {len(selected_ids)} Transkription(en) erfolgreich gelöscht!")
+                            
+                            # Lösche Checkbox-States
+                            for transcription_id in selected_ids:
+                                checkbox_key = f"checkbox_{transcription_id}"
+                                if checkbox_key in st.session_state:
+                                    del st.session_state[checkbox_key]
+                            
+                            st.rerun()
+                        else:
+                            st.error("❌ Fehler beim Löschen der Transkriptionen")
+                    else:
+                        st.error("❌ Datenbankmanager nicht verfügbar")
+                except Exception as e:
+                    st.error(f"❌ Fehler beim Löschen: {str(e)}")
     
     with col4:
         st.write("")  # Spacer
@@ -230,37 +230,6 @@ def start_workflow():
         else:
             st.error(result["message"])
 
-def delete_selected_transcriptions():
-    """Löscht die ausgewählten Transkriptionen."""
-    # Sammle alle ausgewählten IDs
-    selected_ids = []
-    
-    for key in st.session_state:
-        if key.startswith("checkbox_") and st.session_state[key]:
-            try:
-                transcription_id = int(key.replace("checkbox_", ""))
-                selected_ids.append(transcription_id)
-            except ValueError:
-                pass
-    
-    if not selected_ids:
-        st.warning("Keine Transkriptionen zum Löschen ausgewählt.")
-        return
-    
-    # Bestätigungsdialog
-    st.warning(f"⚠️ Möchten Sie wirklich {len(selected_ids)} Transkription(en) löschen?")
-    st.write(f"Zu löschende IDs: {selected_ids}")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("❌ Abbrechen", use_container_width=True):
-            st.rerun()
-    
-    with col2:
-        if st.button("🗑️ Endgültig löschen", use_container_width=True, type="primary"):
-            # Setze Delete-Flag im Session State
-            st.session_state['delete_requested'] = True
-            st.session_state['delete_ids'] = selected_ids
-            st.rerun()
+
 
  
