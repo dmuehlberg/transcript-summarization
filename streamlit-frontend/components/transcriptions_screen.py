@@ -231,17 +231,26 @@ def delete_selected_transcriptions():
     with col2:
         if st.button("🗑️ Endgültig löschen", use_container_width=True, type="primary"):
             with st.spinner("Lösche Transkriptionen..."):
-                if db_manager and db_manager.delete_transcriptions(selected_ids):
-                    st.success(f"✅ {len(selected_ids)} Transkription(en) erfolgreich gelöscht!")
+                st.write(f"Debug - Versuche zu löschen: {selected_ids}")
+                
+                if db_manager:
+                    st.write("Debug - db_manager verfügbar")
+                    result = db_manager.delete_transcriptions(selected_ids)
+                    st.write(f"Debug - Delete Ergebnis: {result}")
                     
-                    # Lösche Checkbox-States
-                    for transcription_id in selected_ids:
-                        checkbox_key = f"checkbox_{transcription_id}"
-                        if checkbox_key in st.session_state:
-                            del st.session_state[checkbox_key]
-                    
-                    st.rerun()
+                    if result:
+                        st.success(f"✅ {len(selected_ids)} Transkription(en) erfolgreich gelöscht!")
+                        
+                        # Lösche Checkbox-States
+                        for transcription_id in selected_ids:
+                            checkbox_key = f"checkbox_{transcription_id}"
+                            if checkbox_key in st.session_state:
+                                del st.session_state[checkbox_key]
+                        
+                        st.rerun()
+                    else:
+                        st.error("❌ Fehler beim Löschen der Transkriptionen")
                 else:
-                    st.error("❌ Fehler beim Löschen der Transkriptionen")
+                    st.error("❌ Datenbankmanager nicht verfügbar")
 
  
