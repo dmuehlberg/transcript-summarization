@@ -82,7 +82,7 @@ class DatabaseManager:
                             transcription_duration, audio_duration, created_at,
                             detected_language, transcript_text, corrected_text,
                             recording_date
-                        FROM n8n.transcriptions
+                        FROM transcriptions
                         ORDER BY created_at DESC
                     """)
                     return [dict(row) for row in cur.fetchall()]
@@ -96,7 +96,7 @@ class DatabaseManager:
             with self.get_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute("""
-                        UPDATE n8n.transcriptions 
+                        UPDATE transcriptions 
                         SET set_language = %s 
                         WHERE id = %s
                     """, (language, transcription_id))
@@ -113,7 +113,7 @@ class DatabaseManager:
                 with conn.cursor() as cur:
                     cur.execute("""
                         SELECT subject, start_date
-                        FROM n8n.calendar_data
+                        FROM calendar_data
                         WHERE DATE(start_date) = %s
                         ORDER BY start_date
                     """, (start_date,))
@@ -129,7 +129,7 @@ class DatabaseManager:
             with self.get_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute("""
-                        UPDATE n8n.transcriptions 
+                        UPDATE transcriptions 
                         SET meeting_title = %s, meeting_start_date = %s, participants = %s
                         WHERE id = %s
                     """, (meeting_title, start_date, participants, transcription_id))
@@ -137,6 +137,23 @@ class DatabaseManager:
                     return cur.rowcount > 0
         except Exception as e:
             logger.error(f"Fehler beim Aktualisieren der Meeting-Daten: {e}")
+            return False
+    
+    def delete_transcriptions(self, transcription_ids: List[int]) -> bool:
+        """Löscht mehrere Transkriptionen."""
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cur:
+                    # Erstelle Platzhalter für IN-Klausel
+                    placeholders = ','.join(['%s'] * len(transcription_ids))
+                    cur.execute(f"""
+                        DELETE FROM transcriptions 
+                        WHERE id IN ({placeholders})
+                    """, transcription_ids)
+                    conn.commit()
+                    return cur.rowcount > 0
+        except Exception as e:
+            logger.error(f"Fehler beim Löschen der Transkriptionen: {e}")
             return False
     
     def close(self) -> None:

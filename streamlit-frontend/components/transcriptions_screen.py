@@ -25,7 +25,7 @@ def render_transcriptions_screen():
     """, unsafe_allow_html=True)
     
     # Action Buttons
-    col1, col2, col3 = st.columns([1, 1, 2])
+    col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
     
     with col1:
         if st.button("🔄 Refresh Table", use_container_width=True, type="primary"):
@@ -36,6 +36,10 @@ def render_transcriptions_screen():
             start_workflow()
     
     with col3:
+        if st.button("🗑️ Markierte löschen", use_container_width=True, type="secondary"):
+            delete_selected_transcriptions()
+    
+    with col4:
         st.write("")  # Spacer
     
     # Lade Transkriptionsdaten
@@ -90,7 +94,25 @@ def render_transcriptions_screen():
         display_columns = ['filename', 'transcription_status', 'set_language', 'meeting_title', 'meeting_start_date']
         display_df = filtered_df[display_columns].copy()
         
-        # Zeige Tabelle
+        # Füge Checkboxen für jede Zeile hinzu
+        st.subheader("📋 Transkriptionen auswählen")
+        
+        # Erstelle Checkboxen für jede Zeile
+        selected_indices = []
+        for idx, row in filtered_df.iterrows():
+            col1, col2 = st.columns([0.1, 0.9])
+            with col1:
+                if st.checkbox("", key=f"checkbox_{row['id']}"):
+                    selected_indices.append(idx)
+            with col2:
+                st.write(f"**{row['filename']}** - {row['meeting_title']} ({row['transcription_status']})")
+        
+        # Zeige Anzahl ausgewählter Einträge
+        if selected_indices:
+            st.info(f"✅ {len(selected_indices)} Transkription(en) ausgewählt")
+        
+        # Zeige Tabelle für bessere Übersicht
+        st.subheader("📊 Übersicht")
         st.dataframe(
             display_df,
             use_container_width=True,
@@ -165,5 +187,43 @@ def start_workflow():
             st.success(result["message"])
         else:
             st.error(result["message"])
+
+def delete_selected_transcriptions():
+    """Löscht die ausgewählten Transkriptionen."""
+    # Sammle alle ausgewählten IDs
+    selected_ids = []
+    for key in st.session_state:
+        if key.startswith("checkbox_") and st.session_state[key]:
+            # Extrahiere ID aus dem Key (checkbox_123 -> 123)
+            transcription_id = int(key.replace("checkbox_", ""))
+            selected_ids.append(transcription_id)
+    
+    if not selected_ids:
+        st.warning("Keine Transkriptionen zum Löschen ausgewählt.")
+        return
+    
+    # Bestätigungsdialog
+    st.warning(f"⚠️ Möchten Sie wirklich {len(selected_ids)} Transkription(en) löschen?")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("❌ Abbrechen", use_container_width=True):
+            st.rerun()
+    
+    with col2:
+        if st.button("🗑️ Endgültig löschen", use_container_width=True, type="primary"):
+            with st.spinner("Lösche Transkriptionen..."):
+                if db_manager and db_manager.delete_transcriptions(selected_ids):
+                    st.success(f"✅ {len(selected_ids)} Transkription(en) erfolgreich gelöscht!")
+                    
+                    # Lösche Checkbox-States
+                    for transcription_id in selected_ids:
+                        checkbox_key = f"checkbox_{transcription_id}"
+                        if checkbox_key in st.session_state:
+                            del st.session_state[checkbox_key]
+                    
+                    st.rerun()
+                else:
+                    st.error("❌ Fehler beim Löschen der Transkriptionen")
 
  
