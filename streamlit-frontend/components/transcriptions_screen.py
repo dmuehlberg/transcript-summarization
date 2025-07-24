@@ -113,10 +113,14 @@ def render_transcriptions_screen():
         return
     
     # Bereite Daten für AG-Grid vor
-    df = prepare_transcriptions_data(transcriptions)
-    
-    if df.empty:
-        st.warning("Keine Daten zum Anzeigen verfügbar.")
+    try:
+        df = prepare_transcriptions_data(transcriptions)
+        
+        if df is None or len(df) == 0:
+            st.warning("Keine Daten zum Anzeigen verfügbar.")
+            return
+    except Exception as e:
+        st.error(f"Fehler beim Laden der Daten: {str(e)}")
         return
     
     # Erstelle eine interaktive Tabelle mit AG Grid
@@ -139,19 +143,33 @@ def render_transcriptions_screen():
     
     # Filtere Daten
     filtered_df = df.copy()
+    
+    # Status Filter
     if status_filter != "Alle" and 'transcription_status' in filtered_df.columns:
-        filtered_df = filtered_df[filtered_df['transcription_status'] == status_filter]
+        status_mask = filtered_df['transcription_status'] == status_filter
+        filtered_df = filtered_df[status_mask]
+    
+    # Language Filter
     if language_filter != "Alle" and 'set_language' in filtered_df.columns:
-        filtered_df = filtered_df[filtered_df['set_language'] == language_filter]
-    if search_term:
-        mask = (
-            filtered_df['filename'].str.contains(search_term, case=False, na=False) |
-            filtered_df['meeting_title'].str.contains(search_term, case=False, na=False)
-        )
-        filtered_df = filtered_df[mask]
+        language_mask = filtered_df['set_language'] == language_filter
+        filtered_df = filtered_df[language_mask]
+    
+    # Search Filter
+    if search_term and len(search_term.strip()) > 0:
+        try:
+            filename_mask = filtered_df['filename'].str.contains(search_term, case=False, na=False)
+            title_mask = filtered_df['meeting_title'].str.contains(search_term, case=False, na=False)
+            search_mask = filename_mask | title_mask
+            filtered_df = filtered_df[search_mask]
+        except Exception as e:
+            st.error(f"Fehler beim Filtern: {str(e)}")
+    
+    # Debug: Zeige DataFrame-Info
+    st.write(f"🔍 Debug: filtered_df Typ: {type(filtered_df)}")
+    st.write(f"🔍 Debug: filtered_df Länge: {len(filtered_df) if filtered_df is not None else 'None'}")
     
     # Zeige gefilterte Daten
-    if not filtered_df.empty:
+    if filtered_df is not None and len(filtered_df) > 0:
         # AG Grid Konfiguration
         gb = GridOptionsBuilder.from_dataframe(
             filtered_df[['id', 'filename', 'transcription_status', 'set_language', 'meeting_title', 'meeting_start_date']],
