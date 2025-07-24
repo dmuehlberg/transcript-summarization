@@ -283,10 +283,10 @@ services:
     volumes:
      - ./shared:/data/shared
 
-  streamlit-dashboard:
+  streamlit-frontend:
     build:
       context: ./streamlit-frontend
-    container_name: streamlit-dashboard
+    container_name: streamlit-frontend
     networks: ['demo']
     ports:
       - "8400:8400"
