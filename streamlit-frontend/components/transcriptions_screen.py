@@ -25,6 +25,9 @@ def handle_cell_edit(edited_df, original_df):
 def render_transcriptions_screen():
     """Rendert den Transkriptionen Screen."""
     
+    # Debug: Zeige aktuellen Schritt
+    st.write("🔍 DEBUG: Starte render_transcriptions_screen")
+    
     # Header
     st.markdown("""
     <div style="text-align: center; margin-bottom: 2rem;">
@@ -86,28 +89,35 @@ def render_transcriptions_screen():
         st.write("")  # Spacer
     
     # Lade Transkriptionsdaten
+    st.write("🔍 DEBUG: Lade Transkriptionsdaten...")
     with st.spinner("Lade Transkriptionen..."):
         transcriptions = db_manager.get_transcriptions()
     
-    if not transcriptions:
+    st.write(f"🔍 DEBUG: Transkriptionen geladen: {len(transcriptions) if transcriptions else 0}")
+    
+    if transcriptions is None or len(transcriptions) == 0:
         st.warning("Keine Transkriptionen gefunden.")
         return
     
     # Bereite Daten für AG-Grid vor
+    st.write("🔍 DEBUG: Bereite Daten für AG-Grid vor...")
     try:
         df = prepare_transcriptions_data(transcriptions)
+        st.write(f"🔍 DEBUG: DataFrame erstellt: {len(df)} Zeilen, {len(df.columns)} Spalten")
         
         if df is None or len(df) == 0:
             st.warning("Keine Daten zum Anzeigen verfügbar.")
             return
     except Exception as e:
         st.error(f"Fehler beim Laden der Daten: {str(e)}")
+        st.write(f"🔍 DEBUG: Exception in prepare_transcriptions_data: {type(e).__name__}")
         return
     
     # Erstelle eine interaktive Tabelle mit AG Grid
     st.subheader("📊 Transkriptionen Tabelle")
     
     # Filter-Optionen
+    st.write("🔍 DEBUG: Erstelle Filter-Optionen...")
     col1, col2, col3 = st.columns(3)
     with col1:
         # Sichere Status-Filter-Optionen
@@ -115,8 +125,10 @@ def render_transcriptions_screen():
         if 'transcription_status' in df.columns:
             try:
                 status_options.extend(list(df['transcription_status'].unique()))
+                st.write(f"🔍 DEBUG: Status-Optionen erstellt: {len(status_options)}")
             except Exception as e:
                 st.error(f"Fehler beim Laden der Status-Optionen: {str(e)}")
+                st.write(f"🔍 DEBUG: Exception in Status-Optionen: {type(e).__name__}")
         
         status_filter = st.selectbox("Status Filter", status_options)
     
@@ -135,19 +147,23 @@ def render_transcriptions_screen():
         search_term = st.text_input("🔍 Suche", placeholder="Dateiname oder Meeting-Titel...")
     
     # Filtere Daten
+    st.write("🔍 DEBUG: Starte Datenfilterung...")
     filtered_df = df.copy()
     
     # Status Filter
+    st.write("🔍 DEBUG: Status-Filter...")
     if status_filter != "Alle" and 'transcription_status' in filtered_df.columns:
         status_mask = filtered_df['transcription_status'] == status_filter
         filtered_df = filtered_df[status_mask]
     
     # Language Filter
+    st.write("🔍 DEBUG: Language-Filter...")
     if language_filter != "Alle" and 'set_language' in filtered_df.columns:
         language_mask = filtered_df['set_language'] == language_filter
         filtered_df = filtered_df[language_mask]
     
     # Search Filter
+    st.write("🔍 DEBUG: Search-Filter...")
     if search_term and len(search_term.strip()) > 0:
         try:
             filename_mask = filtered_df['filename'].str.contains(search_term, case=False, na=False)
@@ -156,46 +172,56 @@ def render_transcriptions_screen():
             filtered_df = filtered_df[search_mask]
         except Exception as e:
             st.error(f"Fehler beim Filtern: {str(e)}")
+            st.write(f"🔍 DEBUG: Exception in Search-Filter: {type(e).__name__}")
+    
+    st.write(f"🔍 DEBUG: Filterung abgeschlossen: {len(filtered_df)} Zeilen")
     
     # Zeige gefilterte Daten
+    st.write("🔍 DEBUG: Starte AG Grid Konfiguration...")
     if filtered_df is not None and len(filtered_df) > 0:
-        # AG Grid Konfiguration
-        gb = GridOptionsBuilder.from_dataframe(
-            filtered_df[['id', 'filename', 'transcription_status', 'set_language', 'meeting_title', 'meeting_start_date']],
-            enableRowGroup=True,
-            enableValue=True,
-            enableRangeSelection=True,
-            enableColResize=True,
-            enableFilter=True,
-            enableSort=True,
-            pagination=True,
-            paginationPageSize=20,
-            domLayout='normal'
-        )
-        
-        # Konfiguriere editierbare set_language Spalte
-        gb.configure_column(
-            "set_language",
-            header_name="Sprache",
-            editable=True,
-            cellEditor='agSelectCellEditor',
-            cellEditorParams={
-                'values': ['de', 'en', 'fr', 'es', 'it']
-            },
-            width=100
-        )
-        
-        # Konfiguriere andere Spalten
-        gb.configure_column("id", header_name="ID", width=80, hide=True)
-        gb.configure_column("filename", header_name="Dateiname", width=200)
-        gb.configure_column("transcription_status", header_name="Status", width=120)
-        gb.configure_column("meeting_title", header_name="Meeting Titel", width=250)
-        gb.configure_column("meeting_start_date", header_name="Start Datum", width=150)
-        
-        # Aktiviere Row Selection - einfacher Klick ohne Checkbox
-        gb.configure_selection(selection_mode='single', use_checkbox=False)
-        
-        grid_options = gb.build()
+                # AG Grid Konfiguration
+        try:
+            gb = GridOptionsBuilder.from_dataframe(
+                filtered_df[['id', 'filename', 'transcription_status', 'set_language', 'meeting_title', 'meeting_start_date']],
+                enableRowGroup=True,
+                enableValue=True,
+                enableRangeSelection=True,
+                enableColResize=True,
+                enableFilter=True,
+                enableSort=True,
+                pagination=True,
+                paginationPageSize=20,
+                domLayout='normal'
+            )
+            
+            # Konfiguriere editierbare set_language Spalte
+            gb.configure_column(
+                "set_language",
+                header_name="Sprache",
+                editable=True,
+                cellEditor='agSelectCellEditor',
+                cellEditorParams={
+                    'values': ['de', 'en', 'fr', 'es', 'it']
+                },
+                width=100
+            )
+            
+            # Konfiguriere andere Spalten
+            gb.configure_column("id", header_name="ID", width=80, hide=True)
+            gb.configure_column("filename", header_name="Dateiname", width=200)
+            gb.configure_column("transcription_status", header_name="Status", width=120)
+            gb.configure_column("meeting_title", header_name="Meeting Titel", width=250)
+            gb.configure_column("meeting_start_date", header_name="Start Datum", width=150)
+            
+            # Aktiviere Row Selection - einfacher Klick ohne Checkbox
+            gb.configure_selection(selection_mode='single', use_checkbox=False)
+            
+            grid_options = gb.build()
+            st.write("🔍 DEBUG: AG Grid Konfiguration abgeschlossen")
+        except Exception as e:
+            st.error(f"Fehler bei AG Grid Konfiguration: {str(e)}")
+            st.write(f"🔍 DEBUG: Exception in AG Grid Konfiguration: {type(e).__name__}")
+            return
         
         # Zeige AG Grid
         try:
