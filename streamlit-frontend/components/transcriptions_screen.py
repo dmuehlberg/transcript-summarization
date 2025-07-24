@@ -15,24 +15,31 @@ logger = logging.getLogger(__name__)
 
 def handle_cell_edit(edited_df, original_df):
     """Behandelt Änderungen in editierbaren Zellen."""
-    if edited_df is not None and not edited_df.equals(original_df):
-        # Finde geänderte Zeilen
-        for index, row in edited_df.iterrows():
-            original_row = original_df.loc[index]
-            if row['set_language'] != original_row['set_language']:
-                # Update in Datenbank
-                transcription_id = row['id']
-                new_language = row['set_language']
-                
-                if db_manager and db_manager.update_transcription_language(transcription_id, new_language):
-                    st.success(f"✅ Sprache für ID {transcription_id} erfolgreich auf '{new_language}' geändert!")
-                else:
-                    st.error(f"❌ Fehler beim Aktualisieren der Sprache für ID {transcription_id}")
-                    # Stelle den ursprünglichen Wert wieder her
-                    edited_df.loc[index, 'set_language'] = original_row['set_language']
-        
-        return edited_df
-    return original_df
+    try:
+        if edited_df is not None and original_df is not None:
+            if len(edited_df) > 0 and len(original_df) > 0:
+                if not edited_df.equals(original_df):
+                    # Finde geänderte Zeilen
+                    for index, row in edited_df.iterrows():
+                        if index in original_df.index:
+                            original_row = original_df.loc[index]
+                            if row['set_language'] != original_row['set_language']:
+                                # Update in Datenbank
+                                transcription_id = row['id']
+                                new_language = row['set_language']
+                                
+                                if db_manager and db_manager.update_transcription_language(transcription_id, new_language):
+                                    st.success(f"✅ Sprache für ID {transcription_id} erfolgreich auf '{new_language}' geändert!")
+                                else:
+                                    st.error(f"❌ Fehler beim Aktualisieren der Sprache für ID {transcription_id}")
+                                    # Stelle den ursprünglichen Wert wieder her
+                                    edited_df.loc[index, 'set_language'] = original_row['set_language']
+                    
+                    return edited_df
+        return original_df
+    except Exception as e:
+        st.error(f"❌ Fehler beim Bearbeiten der Zellen: {str(e)}")
+        return original_df
 
 def render_transcriptions_screen():
     """Rendert den Transkriptionen Screen."""
@@ -219,9 +226,14 @@ def render_transcriptions_screen():
             selected_rows = grid_response['selected_rows'] or []
         
         # Behandle Zellenänderungen
-        if current_df is not None and not current_df.equals(st.session_state.previous_df):
-            updated_df = handle_cell_edit(current_df, st.session_state.previous_df)
-            st.session_state.previous_df = updated_df.copy()
+        if current_df is not None and len(current_df) > 0:
+            if 'previous_df' in st.session_state and st.session_state.previous_df is not None:
+                if not current_df.equals(st.session_state.previous_df):
+                    updated_df = handle_cell_edit(current_df, st.session_state.previous_df)
+                    if updated_df is not None:
+                        st.session_state.previous_df = updated_df.copy()
+            else:
+                st.session_state.previous_df = current_df.copy()
         
         # Zeige ausgewählte Zeilen
         if selected_rows:
