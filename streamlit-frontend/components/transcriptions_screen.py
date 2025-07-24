@@ -286,13 +286,17 @@ def render_transcriptions_screen():
         
         # Zeige ausgewählte Zeilen
         st.write("🔍 DEBUG: Prüfe selected_rows für Anzeige...")
-        if selected_rows and len(selected_rows) > 0:
+        st.write(f"🔍 DEBUG: selected_rows Typ: {type(selected_rows)}")
+        st.write(f"🔍 DEBUG: selected_rows Länge: {len(selected_rows) if hasattr(selected_rows, '__len__') else 'keine Länge'}")
+        
+        # Sichere Prüfung für selected_rows
+        if selected_rows is not None and hasattr(selected_rows, '__len__') and len(selected_rows) > 0:
             st.write("🔍 DEBUG: Zeige ausgewählte Zeilen...")
             st.subheader(f"📋 Ausgewählte Zeilen ({len(selected_rows)})")
             try:
-                selected_df = pd.DataFrame(selected_rows)
-                st.write(f"🔍 DEBUG: selected_df erstellt: {len(selected_df)} Zeilen")
-                st.dataframe(selected_df[['filename', 'transcription_status', 'set_language', 'meeting_title']])
+                # selected_rows ist bereits ein DataFrame
+                st.write(f"🔍 DEBUG: selected_rows ist DataFrame mit {len(selected_rows)} Zeilen")
+                st.dataframe(selected_rows[['filename', 'transcription_status', 'set_language', 'meeting_title']])
                 st.write("🔍 DEBUG: Ausgewählte Zeilen angezeigt")
             except Exception as e:
                 st.error(f"Fehler beim Anzeigen der ausgewählten Zeilen: {str(e)}")
@@ -302,12 +306,14 @@ def render_transcriptions_screen():
         
         # Zeige Details für ausgewählte Zeile
         st.write("🔍 DEBUG: Prüfe selected_rows für Details...")
-        if selected_rows and len(selected_rows) > 0:
+        # Sichere Prüfung für selected_rows
+        if selected_rows is not None and hasattr(selected_rows, '__len__') and len(selected_rows) > 0:
             st.write("🔍 DEBUG: Starte Details-Anzeige...")
             st.subheader("📝 Details")
             
             try:
-                selected_row = selected_rows[0]  # Zeige Details der ersten ausgewählten Zeile
+                # selected_rows ist ein DataFrame, verwende .iloc[0] für erste Zeile
+                selected_row = selected_rows.iloc[0].to_dict()  # Konvertiere zu Dictionary
                 st.write(f"🔍 DEBUG: selected_row extrahiert: {selected_row.get('filename', 'N/A')}")
                 
                 # Details in Spalten anzeigen
