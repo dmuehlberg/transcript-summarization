@@ -299,5 +299,3 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      n8n:
-        condition: service_started

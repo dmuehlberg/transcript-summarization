@@ -1,13 +1,12 @@
 """
-Screen 2: Kalenderauswahl mit gefilterter AG-Grid.
+Screen 2: Kalenderauswahl mit nativen Streamlit-Komponenten.
 """
 import streamlit as st
 import pandas as pd
-from streamlit_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode, DataReturnMode
 import logging
 from typing import Dict, Any, Optional
 from datetime import datetime
-import time # Added missing import for time.sleep
+import time
 
 from database import db_manager
 from utils.db_utils import prepare_calendar_data
@@ -87,59 +86,36 @@ def render_calendar_screen():
                 st.warning("Keine Daten zum Anzeigen verfügbar.")
                 return
             
-            # AG-Grid Konfiguration
-            gb = GridOptionsBuilder.from_dataframe(df)
+            # Zeige Kalenderdaten in einer Tabelle
+            st.subheader("📅 Verfügbare Kalendereinträge")
             
-            # Konfiguriere Spalten
-            gb.configure_column("subject", header_name="Betreff", width=400)
-            gb.configure_column("start_date", header_name="Start Datum", width=200)
-            
-            # Select Button
-            gb.configure_column(
-                "Select",
-                header_name="Aktionen",
-                cellRenderer="buttonRenderer",
-                cellRendererParams={
-                    "buttonText": "Auswählen",
-                    "style": {"backgroundColor": "#ff7f0e", "color": "white", "border": "none", "padding": "8px 16px", "borderRadius": "4px"}
-                },
-                width=120
+            # Zeige Tabelle
+            st.dataframe(
+                df[['subject', 'start_date']],
+                use_container_width=True,
+                height=300
             )
             
-            # Grid-Optionen
-            gb.configure_grid_options(
-                domLayout='normal',
-                rowHeight=50,
-                pagination=True,
-                paginationPageSize=10,
-                suppressRowClickSelection=True,
-                enableRangeSelection=True,
-                enableRangeHandle=True
-            )
-            
-            # Erstelle Grid
-            grid_options = gb.build()
-            
-            # Rendere AG-Grid
-            grid_response = AgGrid(
-                df,
-                gridOptions=grid_options,
-                data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
-                update_mode=GridUpdateMode.MODEL_CHANGED,
-                fit_columns_on_grid_load=True,
-                theme="streamlit",
-                height=400,
-                allow_unsafe_jscode=True,
-                custom_css={
-                    ".ag-row-hover": {"background-color": "#f0f2f6 !important"},
-                    ".ag-header-cell": {"background-color": "#ff7f0e !important", "color": "white !important"},
-                    ".ag-header-cell-label": {"color": "white !important"}
-                }
-            )
-            
-            # Behandle Button-Clicks
-            if grid_response['clicked']:
-                handle_calendar_selection(grid_response['clicked'])
+            # Auswahl für Kalendereintrag
+            if len(df) > 0:
+                st.subheader("🎯 Kalendereintrag auswählen")
+                selected_index = st.selectbox(
+                    "Wähle einen Kalendereintrag:",
+                    range(len(df)),
+                    format_func=lambda x: f"{df.iloc[x]['subject']} - {df.iloc[x]['start_date']}"
+                )
+                
+                if selected_index is not None:
+                    selected_row = df.iloc[selected_index]
+                    
+                    # Zeige Details
+                    st.info(f"**Ausgewählt:** {selected_row['subject']} am {selected_row['start_date']}")
+                    
+                    # Bestätigungsbutton
+                    if st.button("✅ Kalendereintrag zuordnen", type="primary"):
+                        handle_calendar_selection_manual(selected_row)
+            else:
+                st.warning("Keine Kalendereinträge für dieses Datum gefunden.")
                 
         except Exception as e:
             logger.error(f"Fehler beim Laden der Kalenderdaten: {e}")
@@ -147,37 +123,35 @@ def render_calendar_screen():
     else:
         st.error("Kein gültiges Datum für die Kalenderauswahl verfügbar.")
 
-def handle_calendar_selection(clicked_data: Dict[str, Any]):
-    """Behandelt die Auswahl eines Kalendereintrags."""
+def handle_calendar_selection_manual(selected_row: pd.Series):
+    """Behandelt die manuelle Auswahl eines Kalendereintrags."""
     try:
-        if clicked_data and 'row' in clicked_data:
-            row_data = clicked_data['row']
-            subject = row_data.get('subject', '')
-            start_date = row_data.get('start_date', '')
-            transcription_id = st.session_state.get('selected_meeting_id')
+        subject = selected_row.get('subject', '')
+        start_date = selected_row.get('start_date', '')
+        transcription_id = st.session_state.get('selected_meeting_id')
+        
+        if transcription_id:
+            # Update Meeting-Daten in der Datenbank
+            success = db_manager.update_meeting_data(
+                transcription_id=transcription_id,
+                meeting_title=subject,
+                start_date=start_date,
+                participants=""  # Platzhalter - könnte später erweitert werden
+            )
             
-            if transcription_id:
-                # Update Meeting-Daten in der Datenbank
-                success = db_manager.update_meeting_data(
-                    transcription_id=transcription_id,
-                    meeting_title=subject,
-                    start_date=start_date,
-                    participants=""  # Platzhalter - könnte später erweitert werden
-                )
+            if success:
+                st.success(f"Meeting-Daten erfolgreich aktualisiert: {subject}")
                 
-                if success:
-                    st.success(f"Meeting-Daten erfolgreich aktualisiert: {subject}")
-                    
-                    # Optional: Automatische Rücknavigation
-                    st.info("Zurückleitung zu Transkriptionen in 3 Sekunden...")
-                    time.sleep(3)
-                    st.session_state.current_screen = 'transcriptions'
-                    st.rerun()
-                else:
-                    st.error("Fehler beim Aktualisieren der Meeting-Daten")
+                # Optional: Automatische Rücknavigation
+                st.info("Zurückleitung zu Transkriptionen in 3 Sekunden...")
+                time.sleep(3)
+                st.session_state.current_screen = 'transcriptions'
+                st.rerun()
             else:
-                st.error("Keine Transkription-ID verfügbar")
-                
+                st.error("Fehler beim Aktualisieren der Meeting-Daten")
+        else:
+            st.error("Keine Transkription-ID verfügbar")
+            
     except Exception as e:
         logger.error(f"Fehler bei der Kalenderauswahl: {e}")
         st.error("Fehler bei der Verarbeitung der Auswahl") 
