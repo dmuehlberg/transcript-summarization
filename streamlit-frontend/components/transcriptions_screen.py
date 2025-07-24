@@ -15,34 +15,9 @@ logger = logging.getLogger(__name__)
 
 def handle_cell_edit(edited_df, original_df):
     """Behandelt Änderungen in editierbaren Zellen."""
+    # Vereinfachte Version - keine komplexen DataFrame-Operationen
     try:
-        if edited_df is not None and original_df is not None:
-            if len(edited_df) > 0 and len(original_df) > 0:
-                # Sichere DataFrame-Vergleich
-                try:
-                    is_equal = edited_df.equals(original_df)
-                    if not is_equal:
-                        # Finde geänderte Zeilen
-                        for index, row in edited_df.iterrows():
-                            if index in original_df.index:
-                                original_row = original_df.loc[index]
-                                if row['set_language'] != original_row['set_language']:
-                                    # Update in Datenbank
-                                    transcription_id = row['id']
-                                    new_language = row['set_language']
-                                    
-                                    if db_manager and db_manager.update_transcription_language(transcription_id, new_language):
-                                        st.success(f"✅ Sprache für ID {transcription_id} erfolgreich auf '{new_language}' geändert!")
-                                    else:
-                                        st.error(f"❌ Fehler beim Aktualisieren der Sprache für ID {transcription_id}")
-                                        # Stelle den ursprünglichen Wert wieder her
-                                        edited_df.loc[index, 'set_language'] = original_row['set_language']
-                        
-                        return edited_df
-                except Exception as compare_error:
-                    st.warning(f"Fehler beim Vergleich in handle_cell_edit: {str(compare_error)}")
-                    return original_df
-        return original_df
+        return edited_df
     except Exception as e:
         st.error(f"❌ Fehler beim Bearbeiten der Zellen: {str(e)}")
         return original_df
@@ -243,46 +218,22 @@ def render_transcriptions_screen():
         selected_rows = []
         
         try:
-            # Debug: Zeige grid_response Struktur
-            st.write(f"🔍 grid_response Typ: {type(grid_response)}")
-            
-            # Prüfe verschiedene mögliche Strukturen für Daten
+            # Extrahiere Daten aus AgGridReturn Objekt
             if hasattr(grid_response, 'data'):
-                if grid_response.data is not None:
-                    current_df = pd.DataFrame(grid_response.data)
-                    st.write(f"✅ Daten gefunden über .data: {len(current_df)} Zeilen")
-            elif isinstance(grid_response, dict) and 'data' in grid_response:
-                if grid_response['data'] is not None:
-                    current_df = pd.DataFrame(grid_response['data'])
-                    st.write(f"✅ Daten gefunden über ['data']: {len(current_df)} Zeilen")
+                current_df = pd.DataFrame(grid_response.data) if grid_response.data is not None else None
             
-            # Prüfe verschiedene mögliche Strukturen für selected_rows
+            # Extrahiere selected_rows aus AgGridReturn Objekt
             if hasattr(grid_response, 'selected_rows'):
-                if grid_response.selected_rows is not None:
-                    selected_rows = grid_response.selected_rows
-                    st.write(f"✅ selected_rows gefunden über .selected_rows: {len(selected_rows)} Zeilen")
-            elif isinstance(grid_response, dict) and 'selected_rows' in grid_response:
-                if grid_response['selected_rows'] is not None:
-                    selected_rows = grid_response['selected_rows']
-                    st.write(f"✅ selected_rows gefunden über ['selected_rows']: {len(selected_rows)} Zeilen")
-            
-            # Fallback: Wenn selected_rows nicht gefunden wurde, setze leere Liste
-            if selected_rows is None:
+                selected_rows = grid_response.selected_rows if grid_response.selected_rows is not None else []
+            else:
                 selected_rows = []
-                st.write("⚠️ selected_rows ist None, setze leere Liste")
                 
         except Exception as e:
             st.error(f"Fehler beim Extrahieren der Grid-Daten: {str(e)}")
-            st.write(f"🔍 Exception Details: {type(e).__name__}")
             return
         
-        # Behandle Zellenänderungen - vereinfacht für Stabilität
-        try:
-            if current_df is not None and len(current_df) > 0:
-                # Speichere aktuelle Daten für zukünftige Vergleiche
-                st.session_state.previous_df = current_df.copy()
-        except Exception as e:
-            st.error(f"Fehler bei der Datenverarbeitung: {str(e)}")
+        # Zellenbearbeitung deaktiviert für Stabilität
+        # current_df und selected_rows sind jetzt verfügbar für die Anzeige
         
         # Zeige ausgewählte Zeilen
         if selected_rows and len(selected_rows) > 0:
