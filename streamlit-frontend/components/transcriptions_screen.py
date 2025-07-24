@@ -203,14 +203,27 @@ def render_transcriptions_screen():
         if 'previous_df' not in st.session_state:
             st.session_state.previous_df = filtered_df[['id', 'filename', 'transcription_status', 'set_language', 'meeting_title', 'meeting_start_date']].copy()
         
-        if grid_response['data'] is not None:
-            current_df = pd.DataFrame(grid_response['data'])
-            if not current_df.equals(st.session_state.previous_df):
-                updated_df = handle_cell_edit(current_df, st.session_state.previous_df)
-                st.session_state.previous_df = updated_df.copy()
+        # Extrahiere Daten und ausgewählte Zeilen - streamlit-aggrid gibt ein Objekt zurück
+        current_df = None
+        selected_rows = []
+        
+        # Prüfe verschiedene mögliche Strukturen
+        if hasattr(grid_response, 'data'):
+            current_df = pd.DataFrame(grid_response.data) if grid_response.data is not None else None
+        elif isinstance(grid_response, dict) and 'data' in grid_response:
+            current_df = pd.DataFrame(grid_response['data']) if grid_response['data'] is not None else None
+        
+        if hasattr(grid_response, 'selected_rows'):
+            selected_rows = grid_response.selected_rows or []
+        elif isinstance(grid_response, dict) and 'selected_rows' in grid_response:
+            selected_rows = grid_response['selected_rows'] or []
+        
+        # Behandle Zellenänderungen
+        if current_df is not None and not current_df.equals(st.session_state.previous_df):
+            updated_df = handle_cell_edit(current_df, st.session_state.previous_df)
+            st.session_state.previous_df = updated_df.copy()
         
         # Zeige ausgewählte Zeilen
-        selected_rows = grid_response['selected_rows']
         if selected_rows:
             st.subheader(f"📋 Ausgewählte Zeilen ({len(selected_rows)})")
             selected_df = pd.DataFrame(selected_rows)
