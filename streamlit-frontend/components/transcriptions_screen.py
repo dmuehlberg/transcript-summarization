@@ -199,11 +199,21 @@ def delete_selected_transcriptions():
     """Löscht die ausgewählten Transkriptionen."""
     # Sammle alle ausgewählten IDs
     selected_ids = []
+    
+    # Debug: Zeige alle Session State Keys
+    st.write("Debug - Session State Keys:", list(st.session_state.keys()))
+    
     for key in st.session_state:
         if key.startswith("checkbox_") and st.session_state[key]:
             # Extrahiere ID aus dem Key (checkbox_123 -> 123)
-            transcription_id = int(key.replace("checkbox_", ""))
-            selected_ids.append(transcription_id)
+            try:
+                transcription_id = int(key.replace("checkbox_", ""))
+                selected_ids.append(transcription_id)
+                st.write(f"Debug - Gefunden: {key} = {transcription_id}")
+            except ValueError:
+                st.write(f"Debug - Ungültige ID in Key: {key}")
+    
+    st.write(f"Debug - Ausgewählte IDs: {selected_ids}")
     
     if not selected_ids:
         st.warning("Keine Transkriptionen zum Löschen ausgewählt.")
@@ -211,6 +221,7 @@ def delete_selected_transcriptions():
     
     # Bestätigungsdialog
     st.warning(f"⚠️ Möchten Sie wirklich {len(selected_ids)} Transkription(en) löschen?")
+    st.write(f"Zu löschende IDs: {selected_ids}")
     
     col1, col2 = st.columns(2)
     with col1:
