@@ -164,10 +164,6 @@ def render_transcriptions_screen():
         except Exception as e:
             st.error(f"Fehler beim Filtern: {str(e)}")
     
-    # Debug: Zeige DataFrame-Info
-    st.write(f"🔍 Debug: filtered_df Typ: {type(filtered_df)}")
-    st.write(f"🔍 Debug: filtered_df Länge: {len(filtered_df) if filtered_df is not None else 'None'}")
-    
     # Zeige gefilterte Daten
     if filtered_df is not None and len(filtered_df) > 0:
         # AG Grid Konfiguration
@@ -209,20 +205,28 @@ def render_transcriptions_screen():
         grid_options = gb.build()
         
         # Zeige AG Grid
-        grid_response = AgGrid(
-            filtered_df[['id', 'filename', 'transcription_status', 'set_language', 'meeting_title', 'meeting_start_date']],
-            gridOptions=grid_options,
-            data_return_mode=DataReturnMode.AS_INPUT,
-            update_mode=GridUpdateMode.SELECTION_CHANGED,
-            fit_columns_on_grid_load=True,
-            theme='streamlit',
-            height=400,
-            allow_unsafe_jscode=True,
-            custom_css={
-                ".ag-row-hover": {"background-color": "lightblue !important"},
-                ".ag-row-selected": {"background-color": "#e6f3ff !important"}
-            }
-        )
+        try:
+            # Wähle nur die benötigten Spalten
+            display_columns = ['id', 'filename', 'transcription_status', 'set_language', 'meeting_title', 'meeting_start_date']
+            display_df = filtered_df[display_columns].copy()
+            
+            grid_response = AgGrid(
+                display_df,
+                gridOptions=grid_options,
+                data_return_mode=DataReturnMode.AS_INPUT,
+                update_mode=GridUpdateMode.SELECTION_CHANGED,
+                fit_columns_on_grid_load=True,
+                theme='streamlit',
+                height=400,
+                allow_unsafe_jscode=True,
+                custom_css={
+                    ".ag-row-hover": {"background-color": "lightblue !important"},
+                    ".ag-row-selected": {"background-color": "#e6f3ff !important"}
+                }
+            )
+        except Exception as e:
+            st.error(f"Fehler beim Anzeigen der AG Grid: {str(e)}")
+            return
         
         # Behandle Zellenänderungen
         if 'previous_df' not in st.session_state:
@@ -232,26 +236,33 @@ def render_transcriptions_screen():
         current_df = None
         selected_rows = []
         
-        # Prüfe verschiedene mögliche Strukturen
-        if hasattr(grid_response, 'data'):
-            current_df = pd.DataFrame(grid_response.data) if grid_response.data is not None else None
-        elif isinstance(grid_response, dict) and 'data' in grid_response:
-            current_df = pd.DataFrame(grid_response['data']) if grid_response['data'] is not None else None
-        
-        if hasattr(grid_response, 'selected_rows'):
-            selected_rows = grid_response.selected_rows or []
-        elif isinstance(grid_response, dict) and 'selected_rows' in grid_response:
-            selected_rows = grid_response['selected_rows'] or []
+        try:
+            # Prüfe verschiedene mögliche Strukturen
+            if hasattr(grid_response, 'data'):
+                current_df = pd.DataFrame(grid_response.data) if grid_response.data is not None else None
+            elif isinstance(grid_response, dict) and 'data' in grid_response:
+                current_df = pd.DataFrame(grid_response['data']) if grid_response['data'] is not None else None
+            
+            if hasattr(grid_response, 'selected_rows'):
+                selected_rows = grid_response.selected_rows or []
+            elif isinstance(grid_response, dict) and 'selected_rows' in grid_response:
+                selected_rows = grid_response['selected_rows'] or []
+        except Exception as e:
+            st.error(f"Fehler beim Extrahieren der Grid-Daten: {str(e)}")
+            return
         
         # Behandle Zellenänderungen
-        if current_df is not None and len(current_df) > 0:
-            if 'previous_df' in st.session_state and st.session_state.previous_df is not None:
-                if not current_df.equals(st.session_state.previous_df):
-                    updated_df = handle_cell_edit(current_df, st.session_state.previous_df)
-                    if updated_df is not None:
-                        st.session_state.previous_df = updated_df.copy()
-            else:
-                st.session_state.previous_df = current_df.copy()
+        try:
+            if current_df is not None and len(current_df) > 0:
+                if 'previous_df' in st.session_state and st.session_state.previous_df is not None:
+                    if not current_df.equals(st.session_state.previous_df):
+                        updated_df = handle_cell_edit(current_df, st.session_state.previous_df)
+                        if updated_df is not None:
+                            st.session_state.previous_df = updated_df.copy()
+                else:
+                    st.session_state.previous_df = current_df.copy()
+        except Exception as e:
+            st.error(f"Fehler bei der Zellenbearbeitung: {str(e)}")
         
         # Zeige ausgewählte Zeilen
         if selected_rows:
