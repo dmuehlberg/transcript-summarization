@@ -257,8 +257,9 @@ def render_transcriptions_screen():
             with col2:
                 st.write("**Start Datum:**", selected_row['meeting_start_date'])
                 # Hole zusätzliche Details aus der ursprünglichen DataFrame
-                original_row = filtered_df[filtered_df['id'] == selected_row['id']].iloc[0] if len(filtered_df[filtered_df['id'] == selected_row['id']]) > 0 else None
-                if original_row is not None:
+                matching_rows = filtered_df[filtered_df['id'] == selected_row['id']]
+                if len(matching_rows) > 0:
+                    original_row = matching_rows.iloc[0]
                     st.write("**Teilnehmer:**", original_row.get('participants', 'N/A'))
                     st.write("**Audio Dauer:**", format_duration(original_row.get('audio_duration')))
                     st.write("**Erstellt:**", original_row.get('created_at', 'N/A'))
