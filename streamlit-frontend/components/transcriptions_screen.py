@@ -243,18 +243,37 @@ def render_transcriptions_screen():
         selected_rows = []
         
         try:
-            # Prüfe verschiedene mögliche Strukturen
-            if hasattr(grid_response, 'data'):
-                current_df = pd.DataFrame(grid_response.data) if grid_response.data is not None else None
-            elif isinstance(grid_response, dict) and 'data' in grid_response:
-                current_df = pd.DataFrame(grid_response['data']) if grid_response['data'] is not None else None
+            # Debug: Zeige grid_response Struktur
+            st.write(f"🔍 grid_response Typ: {type(grid_response)}")
             
+            # Prüfe verschiedene mögliche Strukturen für Daten
+            if hasattr(grid_response, 'data'):
+                if grid_response.data is not None:
+                    current_df = pd.DataFrame(grid_response.data)
+                    st.write(f"✅ Daten gefunden über .data: {len(current_df)} Zeilen")
+            elif isinstance(grid_response, dict) and 'data' in grid_response:
+                if grid_response['data'] is not None:
+                    current_df = pd.DataFrame(grid_response['data'])
+                    st.write(f"✅ Daten gefunden über ['data']: {len(current_df)} Zeilen")
+            
+            # Prüfe verschiedene mögliche Strukturen für selected_rows
             if hasattr(grid_response, 'selected_rows'):
-                selected_rows = grid_response.selected_rows or []
+                if grid_response.selected_rows is not None:
+                    selected_rows = grid_response.selected_rows
+                    st.write(f"✅ selected_rows gefunden über .selected_rows: {len(selected_rows)} Zeilen")
             elif isinstance(grid_response, dict) and 'selected_rows' in grid_response:
-                selected_rows = grid_response['selected_rows'] or []
+                if grid_response['selected_rows'] is not None:
+                    selected_rows = grid_response['selected_rows']
+                    st.write(f"✅ selected_rows gefunden über ['selected_rows']: {len(selected_rows)} Zeilen")
+            
+            # Fallback: Wenn selected_rows nicht gefunden wurde, setze leere Liste
+            if selected_rows is None:
+                selected_rows = []
+                st.write("⚠️ selected_rows ist None, setze leere Liste")
+                
         except Exception as e:
             st.error(f"Fehler beim Extrahieren der Grid-Daten: {str(e)}")
+            st.write(f"🔍 Exception Details: {type(e).__name__}")
             return
         
         # Behandle Zellenänderungen - vereinfacht für Stabilität
@@ -266,13 +285,16 @@ def render_transcriptions_screen():
             st.error(f"Fehler bei der Datenverarbeitung: {str(e)}")
         
         # Zeige ausgewählte Zeilen
-        if selected_rows:
+        if selected_rows and len(selected_rows) > 0:
             st.subheader(f"📋 Ausgewählte Zeilen ({len(selected_rows)})")
-            selected_df = pd.DataFrame(selected_rows)
-            st.dataframe(selected_df[['filename', 'transcription_status', 'set_language', 'meeting_title']])
+            try:
+                selected_df = pd.DataFrame(selected_rows)
+                st.dataframe(selected_df[['filename', 'transcription_status', 'set_language', 'meeting_title']])
+            except Exception as e:
+                st.error(f"Fehler beim Anzeigen der ausgewählten Zeilen: {str(e)}")
         
         # Zeige Details für ausgewählte Zeile
-        if selected_rows:
+        if selected_rows and len(selected_rows) > 0:
             st.subheader("📝 Details")
             selected_row = selected_rows[0]  # Zeige Details der ersten ausgewählten Zeile
             
