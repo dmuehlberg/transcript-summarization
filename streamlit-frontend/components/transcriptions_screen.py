@@ -289,15 +289,6 @@ def render_transcriptions_screen():
             else:
                 st.session_state.previous_df = current_df.copy()
         
-        # Zeige ausgewählte Zeilen
-        if selected_rows is not None and hasattr(selected_rows, '__len__') and len(selected_rows) > 0:
-            st.subheader(f"📋 Ausgewählte Zeilen ({len(selected_rows)})")
-            try:
-                # selected_rows ist bereits ein DataFrame
-                st.dataframe(selected_rows[['filename', 'transcription_status', 'set_language', 'meeting_title']])
-            except Exception as e:
-                st.error(f"Fehler beim Anzeigen der ausgewählten Zeilen: {str(e)}")
-        
         # Zeige Details für ausgewählte Zeile
         if selected_rows is not None and hasattr(selected_rows, '__len__') and len(selected_rows) > 0:
             st.subheader("📝 Details")
