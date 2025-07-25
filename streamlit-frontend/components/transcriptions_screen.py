@@ -63,7 +63,7 @@ def render_transcriptions_screen():
     col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
     
     with col1:
-        if st.button("🔄 Refresh Table", use_container_width=True, type="primary"):
+        if st.button("🔄 Refresh Table", use_container_width=True, type="secondary"):
             # Setze Refresh-Flag und lösche cached Daten
             st.session_state.refresh_data = True
             if 'previous_df' in st.session_state:
