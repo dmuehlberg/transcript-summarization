@@ -169,7 +169,7 @@ def main():
         st.markdown("""
         <div style="text-align: center; margin-bottom: 1rem;">
             <h1 style="color: #1f77b4; font-family: 'Roboto', sans-serif; font-size: 2.5rem; font-weight: bold;">
-                🎯 Transcription Service Dashboard
+                Transcription Service Dashboard
             </h1>
             <p style="color: #666; font-size: 1.1rem;">
                 Moderne Steuerung für Transkriptions-Workflows

@@ -54,7 +54,7 @@ def render_transcriptions_screen():
     st.markdown("""
     <div style="text-align: center; margin-bottom: 2rem;">
         <h1 style="color: #1f77b4; font-family: 'Roboto', sans-serif; font-size: 2.5rem; font-weight: bold;">
-            📝 TRANSCRIPTION DASHBOARD
+            TRANSCRIPTION DASHBOARD
         </h1>
     </div>
     """, unsafe_allow_html=True)
@@ -145,7 +145,7 @@ def render_transcriptions_screen():
         return
     
     # Erstelle eine interaktive Tabelle mit AG Grid
-    st.subheader("📊 Transkriptionen Tabelle")
+    st.subheader("Transkriptionen")
     
     # Filter-Optionen
     col1, col2, col3 = st.columns(3)
