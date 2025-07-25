@@ -76,15 +76,14 @@ def render_transcriptions_screen():
     
     with col3:
         if st.button("🗑️ Markierte löschen", use_container_width=True, type="secondary"):
-            # Sammle alle ausgewählten IDs
+            # Sammle alle ausgewählten IDs aus AG Grid
             selected_ids = []
-            for key in st.session_state:
-                if key.startswith("checkbox_") and st.session_state[key]:
-                    try:
-                        transcription_id = int(key.replace("checkbox_", ""))
-                        selected_ids.append(transcription_id)
-                    except ValueError:
-                        pass
+            
+            # Extrahiere selected_rows aus dem Session State oder Grid Response
+            if 'selected_rows' in st.session_state and st.session_state.selected_rows:
+                for row in st.session_state.selected_rows:
+                    if 'id' in row:
+                        selected_ids.append(row['id'])
             
             if not selected_ids:
                 st.warning("Keine Transkriptionen zum Löschen ausgewählt.")
@@ -97,11 +96,9 @@ def render_transcriptions_screen():
                         if result:
                             st.success(f"✅ {len(selected_ids)} Transkription(en) erfolgreich gelöscht!")
                             
-                            # Lösche Checkbox-States
-                            for transcription_id in selected_ids:
-                                checkbox_key = f"checkbox_{transcription_id}"
-                                if checkbox_key in st.session_state:
-                                    del st.session_state[checkbox_key]
+                            # Lösche selected_rows aus Session State
+                            if 'selected_rows' in st.session_state:
+                                del st.session_state.selected_rows
                             
                             st.rerun()
                         else:
@@ -226,8 +223,8 @@ def render_transcriptions_screen():
             gb.configure_column("meeting_title", header_name="Meeting Titel", width=250)
             gb.configure_column("meeting_start_date", header_name="Start Datum", width=150)
             
-            # Aktiviere Row Selection - einfacher Klick ohne Checkbox
-            gb.configure_selection(selection_mode='single', use_checkbox=False)
+            # Aktiviere Row Selection mit Checkboxen für Mehrfachauswahl
+            gb.configure_selection(selection_mode='multiple', use_checkbox=True)
             
             grid_options = gb.build()
         except Exception as e:
@@ -274,8 +271,11 @@ def render_transcriptions_screen():
             # Extrahiere selected_rows aus AgGridReturn Objekt
             if hasattr(grid_response, 'selected_rows'):
                 selected_rows = grid_response.selected_rows if grid_response.selected_rows is not None else []
+                # Speichere selected_rows im Session State für andere Funktionen
+                st.session_state.selected_rows = selected_rows
             else:
                 selected_rows = []
+                st.session_state.selected_rows = []
                 
         except Exception as e:
             st.error(f"Fehler beim Extrahieren der Grid-Daten: {str(e)}")
@@ -299,11 +299,16 @@ def render_transcriptions_screen():
         
         # Zeige Details für ausgewählte Zeile
         if selected_rows is not None and hasattr(selected_rows, '__len__') and len(selected_rows) > 0:
-            st.subheader("📝 Details")
+            st.subheader(f"📝 Details ({len(selected_rows)} ausgewählt)")
             
             try:
-                # selected_rows ist ein DataFrame, verwende .iloc[0] für erste Zeile
-                selected_row = selected_rows.iloc[0].to_dict()  # Konvertiere zu Dictionary
+                # Zeige Details der ersten ausgewählten Zeile
+                if hasattr(selected_rows, 'iloc'):
+                    # selected_rows ist ein DataFrame
+                    selected_row = selected_rows.iloc[0].to_dict()
+                else:
+                    # selected_rows ist eine Liste von Dictionaries
+                    selected_row = selected_rows[0]
                 
                 # Details in Spalten anzeigen
                 col1, col2 = st.columns(2)
