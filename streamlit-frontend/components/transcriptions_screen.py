@@ -80,10 +80,20 @@ def render_transcriptions_screen():
             selected_ids = []
             
             # Extrahiere selected_rows aus dem Session State oder Grid Response
-            if 'selected_rows' in st.session_state and st.session_state.selected_rows:
-                for row in st.session_state.selected_rows:
-                    if 'id' in row:
-                        selected_ids.append(row['id'])
+            if 'selected_rows' in st.session_state and st.session_state.selected_rows is not None:
+                selected_rows = st.session_state.selected_rows
+                
+                # Behandle DataFrame vs Liste
+                if hasattr(selected_rows, 'iloc'):
+                    # selected_rows ist ein DataFrame
+                    for index, row in selected_rows.iterrows():
+                        if 'id' in row:
+                            selected_ids.append(row['id'])
+                else:
+                    # selected_rows ist eine Liste von Dictionaries
+                    for row in selected_rows:
+                        if 'id' in row:
+                            selected_ids.append(row['id'])
             
             if not selected_ids:
                 st.warning("Keine Transkriptionen zum Löschen ausgewählt.")
