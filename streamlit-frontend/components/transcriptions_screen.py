@@ -232,10 +232,10 @@ def render_transcriptions_screen():
             gb.configure_column("meeting_title", header_name="Meeting Titel", width=250)
             gb.configure_column("meeting_start_date", header_name="Start Datum", width=150)
             
-            # Aktiviere Row Selection - sowohl Checkbox als auch Klick
+            # Aktiviere Row Selection - nur Klick (Checkboxen sind in der ID-Spalte)
             gb.configure_selection(
                 selection_mode='multiple', 
-                use_checkbox=True,
+                use_checkbox=False,  # Keine Checkboxen in anderen Spalten
                 pre_selected_rows=[],
                 suppressRowClickSelection=False,
                 groupSelectsChildren=True
@@ -333,10 +333,6 @@ def render_transcriptions_screen():
                     st.session_state.previous_df = current_df.copy()
             else:
                 st.session_state.previous_df = current_df.copy()
-        
-        # Debug: Zeige selected_rows Info
-        st.write(f"🔍 DEBUG: selected_rows Typ: {type(selected_rows)}")
-        st.write(f"🔍 DEBUG: selected_rows Länge: {len(selected_rows) if hasattr(selected_rows, '__len__') else 'keine Länge'}")
         
         # Zeige Details für ausgewählte Zeile
         if selected_rows is not None and hasattr(selected_rows, '__len__') and len(selected_rows) > 0:
