@@ -216,8 +216,17 @@ def render_transcriptions_screen():
                 width=100
             )
             
+            # Konfiguriere Checkbox-Spalte als erste Spalte
+            gb.configure_column(
+                "id", 
+                header_name="", 
+                width=50, 
+                checkboxSelection=True,
+                headerCheckboxSelection=True,
+                pinned='left'
+            )
+            
             # Konfiguriere andere Spalten
-            gb.configure_column("id", header_name="ID", width=80, hide=True)
             gb.configure_column("filename", header_name="Dateiname", width=200)
             gb.configure_column("transcription_status", header_name="Status", width=120)
             gb.configure_column("meeting_title", header_name="Meeting Titel", width=250)
@@ -238,6 +247,7 @@ def render_transcriptions_screen():
             grid_options['rowSelection'] = 'multiple'
             grid_options['suppressRowClickSelection'] = False
             grid_options['checkboxSelection'] = True
+            grid_options['suppressRowDeselection'] = False
             
         except Exception as e:
             st.error(f"Fehler bei AG Grid Konfiguration: {str(e)}")
@@ -245,7 +255,7 @@ def render_transcriptions_screen():
         
         # Zeige AG Grid
         try:
-            # Wähle nur die benötigten Spalten
+            # Wähle nur die benötigten Spalten (ID bleibt sichtbar für Checkboxen)
             display_columns = ['id', 'filename', 'transcription_status', 'set_language', 'meeting_title', 'meeting_start_date']
             display_df = filtered_df[display_columns].copy()
             
