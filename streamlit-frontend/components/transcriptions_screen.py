@@ -64,6 +64,10 @@ def render_transcriptions_screen():
     
     with col1:
         if st.button("🔄 Refresh Table", use_container_width=True, type="primary"):
+            # Setze Refresh-Flag und lösche cached Daten
+            st.session_state.refresh_data = True
+            if 'previous_df' in st.session_state:
+                del st.session_state.previous_df
             st.rerun()
     
     with col2:
@@ -113,6 +117,10 @@ def render_transcriptions_screen():
     # Lade Transkriptionsdaten
     with st.spinner("Lade Transkriptionen..."):
         transcriptions = db_manager.get_transcriptions()
+    
+    # Reset Refresh-Flag nach dem Laden
+    if 'refresh_data' in st.session_state:
+        del st.session_state.refresh_data
     
     if transcriptions is None or len(transcriptions) == 0:
         st.warning("Keine Transkriptionen gefunden.")
