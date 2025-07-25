@@ -223,15 +223,22 @@ def render_transcriptions_screen():
             gb.configure_column("meeting_title", header_name="Meeting Titel", width=250)
             gb.configure_column("meeting_start_date", header_name="Start Datum", width=150)
             
-            # Aktiviere Row Selection mit Checkboxen für Mehrfachauswahl
+            # Aktiviere Row Selection - sowohl Checkbox als auch Klick
             gb.configure_selection(
                 selection_mode='multiple', 
                 use_checkbox=True,
                 pre_selected_rows=[],
-                suppressRowClickSelection=False  # Erlaubt sowohl Checkbox als auch Klick
+                suppressRowClickSelection=False,
+                groupSelectsChildren=True
             )
             
             grid_options = gb.build()
+            
+            # Explizit Checkbox-Konfiguration hinzufügen
+            grid_options['rowSelection'] = 'multiple'
+            grid_options['suppressRowClickSelection'] = False
+            grid_options['checkboxSelection'] = True
+            
         except Exception as e:
             st.error(f"Fehler bei AG Grid Konfiguration: {str(e)}")
             return
@@ -246,15 +253,30 @@ def render_transcriptions_screen():
                 display_df,
                 gridOptions=grid_options,
                 data_return_mode=DataReturnMode.AS_INPUT,
-                update_mode=GridUpdateMode.MODEL_CHANGED,
+                update_mode=GridUpdateMode.SELECTION_CHANGED,  # Ändern zu SELECTION_CHANGED für bessere Reaktion
                 fit_columns_on_grid_load=True,
                 theme='streamlit',
                 height=400,
                 allow_unsafe_jscode=True,
                 custom_css={
                     ".ag-row-hover": {"background-color": "lightblue !important"},
-                    ".ag-row-selected": {"background-color": "#e6f3ff !important"}
-                }
+                    ".ag-row-selected": {"background-color": "#e6f3ff !important"},
+                    ".ag-checkbox-input": {"display": "block !important"},
+                    ".ag-checkbox": {"display": "block !important"}
+                },
+                custom_js_code="""
+                // Erzwinge Checkbox-Anzeige
+                setTimeout(function() {
+                    var gridDiv = document.querySelector('.ag-root-wrapper');
+                    if (gridDiv) {
+                        var checkboxes = gridDiv.querySelectorAll('.ag-checkbox-input');
+                        checkboxes.forEach(function(checkbox) {
+                            checkbox.style.display = 'block';
+                            checkbox.style.visibility = 'visible';
+                        });
+                    }
+                }, 100);
+                """
             )
         except Exception as e:
             st.error(f"Fehler beim Anzeigen der AG Grid: {str(e)}")
