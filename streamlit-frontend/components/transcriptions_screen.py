@@ -399,11 +399,6 @@ def render_transcriptions_screen():
                         st.rerun()
                 
                 with col2:
-                    # Weitere Aktionen
-                    if st.button("🔄 Details aktualisieren"):
-                        st.rerun()
-                
-                with col3:
                     st.write("")  # Spacer
                 
             except Exception as e:
