@@ -159,7 +159,7 @@ def render_transcriptions_screen():
     
     # Zeige gefilterte Daten
     if filtered_df is not None and len(filtered_df) > 0:
-                # AG Grid Konfiguration
+        # AG Grid Konfiguration
         try:
             gb = GridOptionsBuilder.from_dataframe(
                 filtered_df[['id', 'filename', 'transcription_status', 'set_language', 'meeting_title', 'meeting_start_date']],
@@ -181,7 +181,7 @@ def render_transcriptions_screen():
                 editable=True,
                 cellEditor='agSelectCellEditor',
                 cellEditorParams={
-                    'values': ['de', 'en', 'fr', 'es', 'it']
+                    'values': ['auto', 'de', 'en']
                 },
                 width=100
             )
