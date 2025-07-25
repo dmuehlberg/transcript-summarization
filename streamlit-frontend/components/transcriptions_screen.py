@@ -222,7 +222,7 @@ def render_transcriptions_screen():
                 header_name="", 
                 width=50, 
                 checkboxSelection=True,
-                headerCheckboxSelection=True,
+                headerCheckboxSelection=False,  # Keine Header-Checkbox
                 pinned='left'
             )
             
@@ -248,6 +248,8 @@ def render_transcriptions_screen():
             grid_options['suppressRowClickSelection'] = False
             grid_options['checkboxSelection'] = True
             grid_options['suppressRowDeselection'] = False
+            grid_options['suppressHeaderMenuHide'] = True
+            grid_options['suppressMenuHide'] = True
             
         except Exception as e:
             st.error(f"Fehler bei AG Grid Konfiguration: {str(e)}")
