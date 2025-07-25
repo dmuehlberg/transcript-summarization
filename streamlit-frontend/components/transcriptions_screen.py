@@ -224,7 +224,12 @@ def render_transcriptions_screen():
             gb.configure_column("meeting_start_date", header_name="Start Datum", width=150)
             
             # Aktiviere Row Selection mit Checkboxen für Mehrfachauswahl
-            gb.configure_selection(selection_mode='multiple', use_checkbox=True)
+            gb.configure_selection(
+                selection_mode='multiple', 
+                use_checkbox=True,
+                pre_selected_rows=[],
+                suppressRowClickSelection=False  # Erlaubt sowohl Checkbox als auch Klick
+            )
             
             grid_options = gb.build()
         except Exception as e:
@@ -296,6 +301,10 @@ def render_transcriptions_screen():
                     st.session_state.previous_df = current_df.copy()
             else:
                 st.session_state.previous_df = current_df.copy()
+        
+        # Debug: Zeige selected_rows Info
+        st.write(f"🔍 DEBUG: selected_rows Typ: {type(selected_rows)}")
+        st.write(f"🔍 DEBUG: selected_rows Länge: {len(selected_rows) if hasattr(selected_rows, '__len__') else 'keine Länge'}")
         
         # Zeige Details für ausgewählte Zeile
         if selected_rows is not None and hasattr(selected_rows, '__len__') and len(selected_rows) > 0:
