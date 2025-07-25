@@ -244,7 +244,7 @@ def render_transcriptions_screen():
                 display_df,
                 gridOptions=grid_options,
                 data_return_mode=DataReturnMode.AS_INPUT,
-                update_mode=GridUpdateMode.SELECTION_CHANGED,
+                update_mode=GridUpdateMode.MODEL_CHANGED,
                 fit_columns_on_grid_load=True,
                 theme='streamlit',
                 height=400,
