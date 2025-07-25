@@ -221,8 +221,8 @@ def render_transcriptions_screen():
                 "id", 
                 header_name="", 
                 width=50, 
-                checkboxSelection=True,
-                headerCheckboxSelection=False,  # Keine Header-Checkbox
+                checkboxSelection=False,  # Keine Checkboxen in der Spalte
+                headerCheckboxSelection=False,
                 pinned='left'
             )
             
@@ -232,10 +232,10 @@ def render_transcriptions_screen():
             gb.configure_column("meeting_title", header_name="Meeting Titel", width=250)
             gb.configure_column("meeting_start_date", header_name="Start Datum", width=150)
             
-            # Aktiviere Row Selection - nur Klick (Checkboxen sind in der ID-Spalte)
+            # Aktiviere Row Selection mit Checkboxen
             gb.configure_selection(
                 selection_mode='multiple', 
-                use_checkbox=False,  # Keine Checkboxen in anderen Spalten
+                use_checkbox=True,  # Checkboxen aktivieren
                 pre_selected_rows=[],
                 suppressRowClickSelection=False,
                 groupSelectsChildren=True
@@ -274,7 +274,10 @@ def render_transcriptions_screen():
                     ".ag-row-hover": {"background-color": "lightblue !important"},
                     ".ag-row-selected": {"background-color": "#e6f3ff !important"},
                     ".ag-checkbox-input": {"display": "block !important"},
-                    ".ag-checkbox": {"display": "block !important"}
+                    ".ag-checkbox": {"display": "block !important"},
+                    ".ag-header-select-all": {"display": "none !important"},
+                    ".ag-header-checkbox": {"display": "none !important"},
+                    ".ag-header-cell .ag-checkbox": {"display": "none !important"}
                 },
                 custom_js_code="""
                 // Erzwinge Checkbox-Anzeige
