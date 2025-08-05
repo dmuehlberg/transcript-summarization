@@ -1,0 +1,83 @@
+version: '3.8'
+
+services:
+  # Frontend React App
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8400:8400"
+    environment:
+      - VITE_API_URL=http://localhost:8400/api
+    depends_on:
+      - backend
+    networks:
+      - transcript-network
+    restart: unless-stopped
+
+  # Backend Express Server
+  backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB:-transcript_db}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - N8N_URL=${N8N_URL:-http://n8n:5678}
+      - N8N_API_KEY=${N8N_API_KEY:-}
+    depends_on:
+      - postgres
+    networks:
+      - transcript-network
+    restart: unless-stopped
+    volumes:
+      - ./server/logs:/app/logs
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-transcript_db}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - transcript-network
+    restart: unless-stopped
+
+  # n8n (optional - falls nicht extern verfügbar)
+  n8n:
+    image: n8nio/n8n:latest
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_USER:-admin}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD:-password}
+      - WEBHOOK_URL=http://localhost:5678/
+      - GENERIC_TIMEZONE=Europe/Berlin
+    volumes:
+      - n8n_data:/home/node/.n8n
+    networks:
+      - transcript-network
+    restart: unless-stopped
+    profiles:
+      - n8n
+
+volumes:
+  postgres_data:
+  n8n_data:
+
+networks:
+  transcript-network:
+    driver: bridge 

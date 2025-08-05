@@ -299,3 +299,42 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+
+  # React Frontend für Transkriptions-Steuerung
+  react-frontend:
+    build:
+      context: ./react-frontend
+      dockerfile: Dockerfile
+    container_name: react-frontend
+    networks: ['demo']
+    ports:
+      - "8401:8400"
+    environment:
+      - VITE_API_URL=http://localhost:8401/api
+    depends_on:
+      - react-backend
+    restart: unless-stopped
+
+  # Express Backend für Transkriptions-Steuerung
+  react-backend:
+    build:
+      context: ./react-frontend/server
+      dockerfile: Dockerfile
+    container_name: react-backend
+    networks: ['demo']
+    ports:
+      - "3002:3001"
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - N8N_URL=${N8N_URL:-http://n8n:5678}
+      - N8N_API_KEY=${N8N_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - ./react-frontend/server/logs:/app/logs
