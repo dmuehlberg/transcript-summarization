@@ -13,6 +13,8 @@ fi
 # Lade Umgebungsvariablen
 if [ -f ../.env ]; then
     source ../.env
+    # Stelle sicher, dass die richtige Datenbank verwendet wird
+    POSTGRES_DB=${POSTGRES_DB:-n8n}
 else
     echo "⚠️  .env Datei nicht gefunden. Verwende Standardwerte."
     POSTGRES_USER=${POSTGRES_USER:-postgres}
