@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { WorkflowControls } from './components/WorkflowControls';
 import { TranscriptionTable } from './components/TranscriptionTable';
 import { CalendarTable } from './components/CalendarTable';

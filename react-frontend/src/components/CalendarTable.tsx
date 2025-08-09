@@ -1,4 +1,4 @@
-import React from 'react';
+
 import {
   useReactTable,
   getCoreRowModel,
@@ -6,13 +6,12 @@ import {
   getFilteredRowModel,
   flexRender,
   createColumnHelper,
-  type SortingState,
 } from '@tanstack/react-table';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from './ui/button';
 import { transcriptionApi, calendarApi } from '@/lib/api';
 import { formatDate } from '@/lib/data-formatters';
-import type { CalendarEntry, Transcription } from '@/lib/types';
+import type { CalendarEntry } from '@/lib/types';
 import { ArrowLeft, Check } from 'lucide-react';
 
 interface CalendarTableProps {
