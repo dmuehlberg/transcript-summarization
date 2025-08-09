@@ -310,7 +310,7 @@ services:
     ports:
       - "8401:8400"
     environment:
-      - VITE_API_URL=http://localhost:8401/api
+      - VITE_API_URL=/api
     depends_on:
       - react-backend
     restart: unless-stopped

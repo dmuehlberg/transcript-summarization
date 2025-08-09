@@ -143,7 +143,7 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = ({ onSelect
               variant="ghost"
               onClick={() => {
                 setEditingCell({ id: row.original.id, column: 'set_language' });
-                setEditValue(getValue());
+                setEditValue(getValue() || '');
               }}
             >
               Bearbeiten

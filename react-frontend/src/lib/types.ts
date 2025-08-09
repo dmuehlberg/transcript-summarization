@@ -1,10 +1,11 @@
 export interface Transcription {
   id: number;
   filename: string;
-  transcription_status: 'pending' | 'processing' | 'completed' | 'error';
-  set_language: string;
+  transcription_status: 'pending' | 'processing' | 'finished' | 'error';
+  set_language: string | null;
   meeting_title: string | null;
   meeting_start_date: string | null;
+  meeting_end_date: string | null;
   participants: string | null;
   transcription_duration: number | null;
   audio_duration: number | null;
@@ -13,6 +14,11 @@ export interface Transcription {
   transcript_text: string | null;
   corrected_text: string | null;
   recording_date: string | null;
+  transcription_inputpath?: string;
+  participants_firstname?: string | null;
+  participants_lastname?: string | null;
+  meeting_location?: string | null;
+  invitation_text?: string | null;
 }
 
 export interface CalendarEntry {

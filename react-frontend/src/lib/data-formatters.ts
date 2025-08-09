@@ -25,7 +25,7 @@ export const formatDate = (dateString: string | null): string => {
 
 export const getStatusColor = (status: string): string => {
   switch (status) {
-    case 'completed':
+    case 'finished':
       return 'bg-green-500 text-white';
     case 'processing':
       return 'bg-blue-500 text-white';
@@ -40,7 +40,7 @@ export const getStatusColor = (status: string): string => {
 
 export const getStatusText = (status: string): string => {
   switch (status) {
-    case 'completed':
+    case 'finished':
       return 'Abgeschlossen';
     case 'processing':
       return 'Verarbeitung';

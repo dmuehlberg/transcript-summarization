@@ -53,7 +53,8 @@ app.get('/api/health', async (req, res) => {
     const n8nUrl = process.env.N8N_URL || 'http://n8n:5678';
     let n8nHealthy = false;
     try {
-      await axios.head(`${n8nUrl}/health`, { timeout: 5000 });
+      // Prüfe ob n8n antwortet (jeder Endpunkt reicht)
+      await axios.get(`${n8nUrl}/`, { timeout: 5000 });
       n8nHealthy = true;
     } catch (error) {
       logger.warn('n8n health check failed:', error.message);
