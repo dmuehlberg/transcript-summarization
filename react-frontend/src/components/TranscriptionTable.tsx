@@ -9,6 +9,7 @@ import {
   createColumnHelper,
   type SortingState,
   type ColumnFiltersState,
+  type ColumnSizingState,
 } from '@tanstack/react-table';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from './ui/button';
@@ -28,6 +29,7 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = ({ onSelect
   const queryClient = useQueryClient();
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+  const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
   const [globalFilter, setGlobalFilter] = useState('');
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
   const [editingCell, setEditingCell] = useState<{ id: number; column: string } | null>(null);
@@ -65,6 +67,10 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = ({ onSelect
     // Checkbox column
     columnHelper.display({
       id: 'select',
+      size: 50,
+      minSize: 40,
+      maxSize: 60,
+      enableResizing: true,
       header: ({ table }) => (
         <input
           type="checkbox"
@@ -86,18 +92,30 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = ({ onSelect
     // Filename
     columnHelper.accessor('filename', {
       header: 'Dateiname',
+      size: 200,
+      minSize: 150,
+      maxSize: 400,
+      enableResizing: true,
       cell: ({ getValue }) => <span className="font-mono text-sm">{getValue()}</span>,
     }),
     
     // Status
     columnHelper.accessor('transcription_status', {
       header: 'Status',
+      size: 120,
+      minSize: 100,
+      maxSize: 150,
+      enableResizing: true,
       cell: ({ getValue }) => <StatusBadge status={getValue()} />,
     }),
     
     // Language (Inline editable)
     columnHelper.accessor('set_language', {
       header: 'Sprache',
+      size: 150,
+      minSize: 120,
+      maxSize: 200,
+      enableResizing: true,
       cell: ({ row, getValue }) => {
         const isEditing = editingCell?.id === row.original.id && editingCell?.column === 'set_language';
         
@@ -156,6 +174,10 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = ({ onSelect
     // Meeting title
     columnHelper.accessor('meeting_title', {
       header: 'Meeting-Titel',
+      size: 200,
+      minSize: 150,
+      maxSize: 300,
+      enableResizing: true,
       cell: ({ getValue }) => <span>{truncateText(getValue(), 50)}</span>,
     }),
     
@@ -220,15 +242,18 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = ({ onSelect
     state: {
       sorting,
       columnFilters,
+      columnSizing,
       globalFilter,
     },
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
+    onColumnSizingChange: setColumnSizing,
     onGlobalFilterChange: setGlobalFilter,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
+    columnResizeMode: 'onChange',
   });
 
   const handleDeleteSelected = () => {
@@ -284,11 +309,21 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = ({ onSelect
                 {headerGroup.headers.map((header) => (
                   <th
                     key={header.id}
-                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider relative"
+                    style={{ width: header.getSize() }}
                   >
                     {header.isPlaceholder
                       ? null
                       : flexRender(header.column.columnDef.header, header.getContext())}
+                    {header.column.getCanResize() && (
+                      <div
+                        onMouseDown={header.getResizeHandler()}
+                        onTouchStart={header.getResizeHandler()}
+                        className={`absolute right-0 top-0 h-full w-1 cursor-col-resize select-none touch-none ${
+                          header.column.getIsResizing() ? 'bg-blue-500' : 'bg-gray-300 hover:bg-gray-400'
+                        }`}
+                      />
+                    )}
                   </th>
                 ))}
               </tr>
@@ -298,7 +333,11 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = ({ onSelect
             {table.getRowModel().rows.map((row) => (
               <tr key={row.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                 {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id} className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
+                  <td 
+                    key={cell.id} 
+                    className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100"
+                    style={{ width: cell.column.getSize() }}
+                  >
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </td>
                 ))}
