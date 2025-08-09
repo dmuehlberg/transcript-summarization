@@ -9,7 +9,7 @@ import type {
   ApiResponse 
 } from './types';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_BASE_URL = '/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -44,22 +44,22 @@ api.interceptors.response.use(
 // Transcription APIs
 export const transcriptionApi = {
   getAll: async (params?: PaginationParams): Promise<PaginatedResponse<Transcription>> => {
-    const response = await api.get('/api/transcriptions', { params });
+    const response = await api.get('/transcriptions', { params });
     return response.data;
   },
 
   deleteMultiple: async (ids: number[]): Promise<ApiResponse<void>> => {
-    const response = await api.delete('/api/transcriptions', { data: { ids } });
+    const response = await api.delete('/transcriptions', { data: { ids } });
     return response.data;
   },
 
   updateLanguage: async (id: number, language: string): Promise<ApiResponse<Transcription>> => {
-    const response = await api.patch(`/api/transcriptions/${id}/language`, { language });
+    const response = await api.patch(`/transcriptions/${id}/language`, { language });
     return response.data;
   },
 
   linkCalendar: async (id: number, calendarData: Partial<CalendarEntry>): Promise<ApiResponse<Transcription>> => {
-    const response = await api.post(`/api/transcriptions/${id}/link-calendar`, calendarData);
+    const response = await api.post(`/transcriptions/${id}/link-calendar`, calendarData);
     return response.data;
   },
 };
@@ -67,7 +67,7 @@ export const transcriptionApi = {
 // Calendar APIs
 export const calendarApi = {
   getByDate: async (startDate: string): Promise<ApiResponse<CalendarEntry[]>> => {
-    const response = await api.get('/api/calendar', { params: { start_date: startDate } });
+    const response = await api.get('/calendar', { params: { start_date: startDate } });
     return response.data;
   },
 };
@@ -75,12 +75,12 @@ export const calendarApi = {
 // Workflow APIs
 export const workflowApi = {
   start: async (): Promise<ApiResponse<void>> => {
-    const response = await api.post('/api/workflow/start');
+    const response = await api.post('/workflow/start');
     return response.data;
   },
 
   getStatus: async (): Promise<ApiResponse<WorkflowStatus>> => {
-    const response = await api.get('/api/workflow/status');
+    const response = await api.get('/workflow/status');
     return response.data;
   },
 };
@@ -88,7 +88,7 @@ export const workflowApi = {
 // Health API
 export const healthApi = {
   check: async (): Promise<ApiResponse<HealthStatus>> => {
-    const response = await api.get('/api/health');
+    const response = await api.get('/health');
     return response.data;
   },
 };

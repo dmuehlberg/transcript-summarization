@@ -72,7 +72,7 @@ export const WorkflowControls: React.FC = () => {
             {healthLoading ? (
               <div className="animate-spin h-4 w-4 border-2 border-blue-500 rounded-full border-t-transparent"></div>
             ) : (
-              getHealthIcon(healthData?.data.database || false)
+              getHealthIcon(healthData?.data?.database || false)
             )}
           </div>
           <div className="flex items-center space-x-2">
@@ -80,7 +80,7 @@ export const WorkflowControls: React.FC = () => {
             {healthLoading ? (
               <div className="animate-spin h-4 w-4 border-2 border-blue-500 rounded-full border-t-transparent"></div>
             ) : (
-              getHealthIcon(healthData?.data.n8n || false)
+              getHealthIcon(healthData?.data?.n8n || false)
             )}
           </div>
         </div>
@@ -90,7 +90,7 @@ export const WorkflowControls: React.FC = () => {
         <div className="flex items-center space-x-4">
           <Button
             onClick={handleStartWorkflow}
-            disabled={startWorkflowMutation.isPending || !healthData?.data.n8n}
+            disabled={startWorkflowMutation.isPending || !healthData?.data?.n8n}
             className="flex items-center space-x-2"
           >
             <Play className="h-4 w-4" />
