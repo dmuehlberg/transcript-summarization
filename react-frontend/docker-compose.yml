@@ -39,40 +39,7 @@ services:
     volumes:
       - ./server/logs:/app/logs
 
-  # PostgreSQL Database
-  postgres:
-    image: postgres:15-alpine
-    environment:
-      - POSTGRES_DB=${POSTGRES_DB:-transcript_db}
-      - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
-    ports:
-      - "5432:5432"
-    networks:
-      - transcript-network
-    restart: unless-stopped
-
-  # n8n (optional - falls nicht extern verfügbar)
-  n8n:
-    image: n8nio/n8n:latest
-    ports:
-      - "5678:5678"
-    environment:
-      - N8N_BASIC_AUTH_ACTIVE=true
-      - N8N_BASIC_AUTH_USER=${N8N_USER:-admin}
-      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD:-password}
-      - WEBHOOK_URL=http://localhost:5678/
-      - GENERIC_TIMEZONE=Europe/Berlin
-    volumes:
-      - n8n_data:/home/node/.n8n
-    networks:
-      - transcript-network
-    restart: unless-stopped
-    profiles:
-      - n8n
+  
 
 volumes:
   postgres_data:
