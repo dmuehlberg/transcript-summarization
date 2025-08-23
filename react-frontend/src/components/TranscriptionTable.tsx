@@ -184,36 +184,60 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = ({ onSelect
     // Meeting start date
     columnHelper.accessor('meeting_start_date', {
       header: 'Meeting-Datum',
+      size: 120,
+      minSize: 100,
+      maxSize: 150,
+      enableResizing: true,
       cell: ({ getValue }) => <span>{formatDate(getValue())}</span>,
     }),
     
     // Participants
     columnHelper.accessor('participants', {
       header: 'Teilnehmer',
+      size: 150,
+      minSize: 120,
+      maxSize: 200,
+      enableResizing: true,
       cell: ({ getValue }) => <span>{truncateText(getValue(), 30)}</span>,
     }),
     
     // Transcription duration
     columnHelper.accessor('transcription_duration', {
       header: 'Transkription',
+      size: 120,
+      minSize: 100,
+      maxSize: 150,
+      enableResizing: true,
       cell: ({ getValue }) => <span>{formatDuration(getValue())}</span>,
     }),
     
     // Audio duration
     columnHelper.accessor('audio_duration', {
       header: 'Audio',
+      size: 100,
+      minSize: 80,
+      maxSize: 150,
+      enableResizing: true,
       cell: ({ getValue }) => <span>{formatDuration(getValue())}</span>,
     }),
     
     // Created at
     columnHelper.accessor('created_at', {
       header: 'Erstellt',
+      size: 120,
+      minSize: 100,
+      maxSize: 150,
+      enableResizing: true,
       cell: ({ getValue }) => <span>{formatDate(getValue())}</span>,
     }),
     
     // Actions
     columnHelper.display({
       id: 'actions',
+      size: 150,
+      minSize: 120,
+      maxSize: 200,
+      enableResizing: true,
       header: 'Aktionen',
       cell: ({ row }) => (
         <div className="flex items-center space-x-2">
@@ -302,15 +326,19 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = ({ onSelect
 
       {/* Table */}
       <div className="overflow-x-auto">
-        <table className="w-full">
+        <table className="w-full table-fixed">
           <thead className="bg-gray-50 dark:bg-gray-700">
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id}>
                 {headerGroup.headers.map((header) => (
                   <th
                     key={header.id}
-                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider relative"
-                    style={{ width: header.getSize() }}
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider relative overflow-hidden"
+                    style={{ 
+                      width: header.getSize(),
+                      minWidth: header.getSize(),
+                      maxWidth: header.getSize()
+                    }}
                   >
                     {header.isPlaceholder
                       ? null
@@ -335,8 +363,12 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = ({ onSelect
                 {row.getVisibleCells().map((cell) => (
                   <td 
                     key={cell.id} 
-                    className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100"
-                    style={{ width: cell.column.getSize() }}
+                    className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 overflow-hidden"
+                    style={{ 
+                      width: cell.column.getSize(),
+                      minWidth: cell.column.getSize(),
+                      maxWidth: cell.column.getSize()
+                    }}
                   >
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </td>
