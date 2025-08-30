@@ -101,8 +101,8 @@
             "pg_type": "text"
         },
         "Contact Item Data": {
-            "pg_field": "contact_item_data",
-            "pg_type": "text"
+            "pg_field": "meeting_series_start_date",
+            "pg_type": "timestamp with time zone"
         },
         "Has Picture": {
             "pg_field": "has_picture",
@@ -151,6 +151,14 @@
         "Unknown (0x817a)": {
             "pg_field": "unknown_817a",
             "pg_type": "text"
+        },
+        "Address Book Extension Attribute1": {
+            "pg_field": "meeting_series_rhythm",
+            "pg_type": "text"
+        },
+        "Address Book Is Member Of Distribution List": {
+            "pg_field": "meeting_series_end_date",
+            "pg_type": "timestamp with time zone"
         }
     },
     "external_mappings": {
@@ -237,6 +245,18 @@
         "PSETID_Appointment: Location": {
             "pg_field": "has_picture",
             "pg_type": "text"
+        },
+        "AddressBookExtensionAttribute1": {
+            "pg_field": "meeting_series_rhythm",
+            "pg_type": "text"
+        },
+        "ContactItemData": {
+            "pg_field": "meeting_series_start_date",
+            "pg_type": "timestamp with time zone"
+        },
+        "AddressBookIsMemberOfDistributionList": {
+            "pg_field": "meeting_series_end_date",
+            "pg_type": "timestamp with time zone"
         }
     }
 } 

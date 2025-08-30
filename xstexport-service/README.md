@@ -101,6 +101,34 @@ Der Service unterstützt die direkte Integration in eine PostgreSQL-Datenbank:
 - Datentyp-Konvertierung für Timestamps, Integer und Boolean-Werte
 - Zeitzonen-Behandlung (UTC-Konvertierung)
 
+## Unterstützte CSV-Felder
+
+Der Service unterstützt folgende CSV-Felder für Kalenderdaten:
+
+### Standard-Felder
+- **Subject**: Betreff des Termins
+- **Start Date**: Startdatum/-zeit des Termins
+- **End Date**: Enddatum/-zeit des Termins
+- **Conversation Topic**: Gesprächsthema
+- **Sender Name**: Name des Absenders
+- **Display Cc**: CC-Empfänger
+- **Display To**: Hauptempfänger
+- **Creation Time**: Erstellungszeitpunkt
+- **Last Modification Time**: Letzte Änderungszeit
+
+### Terminserien-Felder (NEU)
+- **Address Book Extension Attribute1** → `meeting_series_rhythm`: Rhythmus der Terminserie (z.B. wöchentlich, monatlich)
+- **Contact Item Data** → `meeting_series_start_date`: Startdatum der Terminserie
+- **Address Book Is Member Of Distribution List** → `meeting_series_end_date`: Enddatum der Terminserie
+
+### Externe CSV-Felder
+Für extern erzeugte CSV-Dateien werden alternative Feldnamen unterstützt:
+- **AddressBookExtensionAttribute1** → `meeting_series_rhythm`
+- **ContactItemData** → `meeting_series_start_date`
+- **AddressBookIsMemberOfDistributionList** → `meeting_series_end_date`
+
+Alle Datumsfelder werden automatisch in UTC konvertiert und gespeichert.
+
 ## Installation und Start
 
 1. Abhängigkeiten installieren:
@@ -129,10 +157,21 @@ Alle Endpoints implementieren umfassende Fehlerbehandlung:
 
 ## Testing
 
-Ein einfacher Test für den neuen CSV-Import-Endpoint ist verfügbar:
+Tests für den CSV-Import-Endpoint sind verfügbar:
 
+### Externes CSV-Format testen
 ```bash
-python test_csv_import.py
+python test_external_csv_import.py
 ```
 
-Der Test erstellt eine Test-CSV-Datei und sendet sie an den `/import-calendar-csv` Endpoint. Stellen Sie sicher, dass der Service läuft, bevor Sie den Test ausführen. 
+### Internes CSV-Format mit neuen Terminserien-Feldern testen
+```bash
+python test_internal_csv_import.py
+```
+
+Die Tests erstellen Test-CSV-Dateien mit den neuen Terminserien-Feldern und senden sie an den `/import-calendar-csv` Endpoint. Stellen Sie sicher, dass der Service läuft, bevor Sie die Tests ausführen.
+
+**Getestete neue Felder:**
+- `Address Book Extension Attribute1` → `meeting_series_rhythm`
+- `Contact Item Data` → `meeting_series_start_date`  
+- `Address Book Is Member Of Distribution List` → `meeting_series_end_date` 

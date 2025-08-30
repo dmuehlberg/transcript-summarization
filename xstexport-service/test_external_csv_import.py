@@ -35,7 +35,10 @@ def create_test_external_csv():
             'SentRepresentingSmtpAddress': 'representing@test.com',
             'UserEntryId': 'test_entry_id',
             'PS_PUBLIC_STRINGS: SkypeTeamsMeetingUrl': 'https://teams.microsoft.com/test',
-            'PSETID_Appointment: Location': 'Conference Room B'
+            'PSETID_Appointment: Location': 'Conference Room B',
+            'AddressBookExtensionAttribute1': 'wöchentlich',
+            'ContactItemData': '2024-01-15 11:00:00',
+            'AddressBookIsMemberOfDistributionList': '2024-12-31 23:59:59'
         },
         {
             'Subject': 'Test External Meeting 2',
@@ -58,7 +61,10 @@ def create_test_external_csv():
             'SentRepresentingSmtpAddress': 'representing2@test.com',
             'UserEntryId': 'test_entry_id_2',
             'PS_PUBLIC_STRINGS: SkypeTeamsMeetingUrl': 'https://teams.microsoft.com/test2',
-            'PSETID_Appointment: Location': 'Virtual Meeting'
+            'PSETID_Appointment: Location': 'Virtual Meeting',
+            'AddressBookExtensionAttribute1': 'monatlich',
+            'ContactItemData': '2024-01-16 15:00:00',
+            'AddressBookIsMemberOfDistributionList': '2024-06-30 23:59:59'
         }
     ]
     
