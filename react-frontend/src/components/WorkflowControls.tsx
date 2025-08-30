@@ -4,6 +4,7 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { workflowApi, healthApi } from '@/lib/api';
 import { Play, AlertCircle, CheckCircle, XCircle } from 'lucide-react';
+import { FileUploadButton } from './FileUploadButton';
 
 export const WorkflowControls: React.FC = () => {
   // Health Status Query
@@ -96,6 +97,19 @@ export const WorkflowControls: React.FC = () => {
             <Play className="h-4 w-4" />
             <span>Transkription starten</span>
           </Button>
+
+          <FileUploadButton
+            onSuccess={() => {
+              // Erfolgsmeldung anzeigen
+              alert('CSV erfolgreich importiert!');
+              // Optional: Workflow-Status neu laden
+              // queryClient.invalidateQueries({ queryKey: ['workflow-status'] });
+            }}
+            onError={(error) => {
+              // Fehlermeldung anzeigen
+              alert(`Fehler beim CSV-Import: ${error}`);
+            }}
+          />
 
           {startWorkflowMutation.isPending && (
             <div className="flex items-center space-x-2">

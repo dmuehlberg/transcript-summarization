@@ -107,4 +107,24 @@ export const tableConfigApi = {
   },
 };
 
+// CSV Import API
+export const csvImportApi = {
+  importCalendarCsv: async (file: File, source: string = 'internal') => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('source', source);
+    
+    const response = await fetch('http://localhost:8200/import-calendar-csv', {
+      method: 'POST',
+      body: formData,
+    });
+    
+    if (!response.ok) {
+      throw new Error(`CSV-Import fehlgeschlagen: ${response.statusText}`);
+    }
+    
+    return response.json();
+  },
+};
+
 export default api; 
