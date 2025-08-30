@@ -94,7 +94,7 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = ({ onSelect
       size: 200,
       minSize: 150,
       enableResizing: true,
-      cell: ({ getValue }) => <span className="font-mono text-sm">{getValue()}</span>,
+      cell: ({ getValue }) => <span>{getValue()}</span>,
     }),
     
     // Status
