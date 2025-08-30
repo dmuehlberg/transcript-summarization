@@ -174,6 +174,20 @@ class DatabaseService:
                     elif pg_type == 'BOOLEAN':
                         df_mapped[pg_field] = df_mapped[pg_field].map({'true': True, 'false': False, 'True': True, 'False': False})
             
+            # Bereinige Textfelder (Subject, etc.) - entferne Leading/Trailing Whitespaces und Control Characters
+            for field_name, field_info in mapping_to_use.items():
+                if field_info.get('pg_type') == 'text':  # Nur Textfelder
+                    pg_field = field_info['pg_field']
+                    
+                    if pg_field in df_mapped.columns:
+                        # Bereinige Whitespaces und ersetze leere Strings durch None
+                        df_mapped[pg_field] = df_mapped[pg_field].astype(str).str.strip()
+                        
+                        # Entferne nur leading Control Characters (ASCII 0-31, 127), aber behalte Zeilenumbrüche im Text
+                        df_mapped[pg_field] = df_mapped[pg_field].str.replace(r'^[\x00-\x1F\x7F]+', '', regex=True)
+                        
+                        df_mapped[pg_field] = df_mapped[pg_field].replace('', None)
+            
             # Importiere in die Datenbank
             df_mapped.to_sql(table_name, self.engine, if_exists='append', index=False)
             logger.info(f"Daten erfolgreich in Tabelle {table_name} importiert")
