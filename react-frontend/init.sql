@@ -27,11 +27,45 @@ CREATE TABLE IF NOT EXISTS calendar_entries (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Spaltenkonfiguration für React-Tabellen
+CREATE TABLE IF NOT EXISTS react_table_column_config (
+    id SERIAL PRIMARY KEY,
+    table_name VARCHAR(100) NOT NULL,
+    column_name VARCHAR(100) NOT NULL,
+    column_width INTEGER NOT NULL,
+    column_order INTEGER NOT NULL,
+    is_visible BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(table_name, column_name)
+);
+
 -- Indizes für bessere Performance
 CREATE INDEX IF NOT EXISTS idx_transcriptions_status ON transcriptions(transcription_status);
 CREATE INDEX IF NOT EXISTS idx_transcriptions_language ON transcriptions(set_language);
 CREATE INDEX IF NOT EXISTS idx_transcriptions_created_at ON transcriptions(created_at);
 CREATE INDEX IF NOT EXISTS idx_calendar_start_date ON calendar_entries(start_date);
+CREATE INDEX IF NOT EXISTS idx_react_table_column_config_table ON react_table_column_config(table_name);
+CREATE INDEX IF NOT EXISTS idx_react_table_column_config_order ON react_table_column_config(table_name, column_order);
+
+-- Standard-Spaltenkonfiguration für Transkriptions-Tabelle
+INSERT INTO react_table_column_config (table_name, column_name, column_width, column_order, is_visible) VALUES
+('transcriptions', 'select', 50, 1, true),
+('transcriptions', 'filename', 200, 2, true),
+('transcriptions', 'transcription_status', 120, 3, true),
+('transcriptions', 'set_language', 150, 4, true),
+('transcriptions', 'meeting_title', 200, 5, true),
+('transcriptions', 'meeting_start_date', 120, 6, true),
+('transcriptions', 'participants', 200, 7, true),
+('transcriptions', 'transcription_duration', 120, 8, true),
+('transcriptions', 'audio_duration', 120, 9, true),
+('transcriptions', 'detected_language', 120, 10, true),
+('transcriptions', 'created_at', 120, 11, true),
+('transcriptions', 'actions', 150, 12, true)
+ON CONFLICT (table_name, column_name) DO UPDATE SET
+    column_width = EXCLUDED.column_width,
+    column_order = EXCLUDED.column_order,
+    updated_at = CURRENT_TIMESTAMP;
 
 -- Beispieldaten für Tests
 INSERT INTO transcriptions (filename, transcription_status, set_language, meeting_title, meeting_start_date, participants, transcription_duration, audio_duration, detected_language, transcript_text, recording_date) VALUES

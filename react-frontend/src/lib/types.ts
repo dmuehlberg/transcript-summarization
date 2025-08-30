@@ -60,4 +60,15 @@ export interface PaginatedResponse<T> {
   page: number;
   limit: number;
   totalPages: number;
+}
+
+export interface TableColumnConfig {
+  column_name: string;
+  column_width: number;
+  column_order: number;
+  is_visible: boolean;
+}
+
+export interface ColumnSizingState {
+  [key: string]: number;
 } 

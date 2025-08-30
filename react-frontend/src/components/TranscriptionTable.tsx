@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   useReactTable,
   getCoreRowModel,
@@ -16,9 +16,9 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Select } from './ui/select';
 import { StatusBadge } from './StatusBadge';
-import { transcriptionApi } from '@/lib/api';
+import { transcriptionApi, tableConfigApi } from '@/lib/api';
 import { formatDuration, formatDate, truncateText, getLanguageOptions } from '@/lib/data-formatters';
-import type { Transcription } from '@/lib/types';
+import type { Transcription, TableColumnConfig, ColumnSizingState as SavedColumnSizingState } from '@/lib/types';
 import { Trash2, Calendar, Check, X } from 'lucide-react';
 
 interface TranscriptionTableProps {
@@ -34,12 +34,21 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = ({ onSelect
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
   const [editingCell, setEditingCell] = useState<{ id: number; column: string } | null>(null);
   const [editValue, setEditValue] = useState('');
+  // const [savedColumnSizing, setSavedColumnSizing] = useState<SavedColumnSizingState>({});
 
   // Fetch transcriptions
   const { data: transcriptionsData, isLoading } = useQuery({
     queryKey: ['transcriptions'],
     queryFn: () => transcriptionApi.getAll(),
     refetchInterval: 10000, // Alle 10 Sekunden
+  });
+
+  // Load column configuration
+  const { data: columnConfig, isLoading: configLoading, error: configError } = useQuery({
+    queryKey: ['table-config', 'transcriptions'],
+    queryFn: () => tableConfigApi.getConfig('transcriptions'),
+    staleTime: 5 * 60 * 1000, // 5 Minuten
+    retry: 3,
   });
 
   // Update language mutation
@@ -60,6 +69,35 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = ({ onSelect
       setSelectedRows(new Set());
     },
   });
+
+  // Save column configuration mutation
+  const saveColumnConfigMutation = useMutation({
+    mutationFn: (columns: TableColumnConfig[]) => {
+      return tableConfigApi.updateConfig('transcriptions', columns);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['table-config', 'transcriptions'] });
+    },
+    onError: (error) => {
+      console.error('Failed to save column configuration:', error);
+    },
+  });
+
+  // Load saved column configuration on mount
+  useEffect(() => {
+    if (columnConfig?.data) {
+      const configMap: SavedColumnSizingState = {};
+      columnConfig.data.forEach(col => {
+        if (col.is_visible) {
+          configMap[col.column_name] = col.column_width;
+        }
+      });
+      setColumnSizing(configMap);
+      // setSavedColumnSizing(configMap);
+    }
+  }, [columnConfig]);
+
+
 
   const columnHelper = createColumnHelper<Transcription>();
 
@@ -249,6 +287,8 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = ({ onSelect
     }),
   ];
 
+
+
   const table = useReactTable({
     data: transcriptionsData?.data || [],
     columns,
@@ -257,16 +297,50 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = ({ onSelect
       columnFilters,
       columnSizing,
       globalFilter,
+      rowSelection: Object.fromEntries(
+        Array.from(selectedRows).map(id => [id, true])
+      ),
     },
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
-    onColumnSizingChange: setColumnSizing,
+    onColumnSizingChange: (updater: any) => {
+      const newSizing = typeof updater === 'function' ? updater(columnSizing) : updater;
+      setColumnSizing(newSizing);
+      
+      // Clear any existing timeout
+      if ((window as any).columnResizeTimeout) {
+        clearTimeout((window as any).columnResizeTimeout);
+      }
+      
+      // Save to database after a longer delay (better debouncing)
+      (window as any).columnResizeTimeout = setTimeout(() => {
+        if (columnConfig?.data) {
+          const updatedColumns = columnConfig.data.map(col => {
+            const newWidth = newSizing[col.column_name];
+            if (newWidth !== undefined) {
+              return {
+                ...col,
+                column_width: newWidth
+              };
+            }
+            return col;
+          });
+          
+          saveColumnConfigMutation.mutate(updatedColumns);
+        }
+      }, 1000); // Increased to 1 second for better debouncing
+    },
     onGlobalFilterChange: setGlobalFilter,
+    onRowSelectionChange: (updater) => {
+      const newSelection = typeof updater === 'function' ? updater({}) : updater;
+      setSelectedRows(new Set(Object.keys(newSelection).map(Number)));
+    },
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     columnResizeMode: 'onChange',
+    enableColumnResizing: true,
   });
 
   const handleDeleteSelected = () => {
@@ -274,6 +348,21 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = ({ onSelect
       deleteTranscriptionsMutation.mutate(Array.from(selectedRows));
     }
   };
+
+  // Zeige Loading-Indikator während Konfiguration geladen wird
+  if (configLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin h-8 w-8 border-4 border-blue-500 rounded-full border-t-transparent"></div>
+        <span className="ml-2">Lade Tabellenkonfiguration...</span>
+      </div>
+    );
+  }
+
+  // Zeige Fehlermeldung bei Problemen
+  if (configError) {
+    // Fallback zu Standard-Spaltenbreiten
+  }
 
   if (isLoading) {
     return (

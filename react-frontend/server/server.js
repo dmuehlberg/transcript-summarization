@@ -310,6 +310,88 @@ app.get('/api/workflow/status', async (req, res) => {
   }
 });
 
+// Get column configuration for a table
+app.get('/api/table-config/:tableName', async (req, res) => {
+  try {
+    const { tableName } = req.params;
+    
+    const query = `
+      SELECT column_name, column_width, column_order, is_visible
+      FROM react_table_column_config 
+      WHERE table_name = $1 
+      ORDER BY column_order
+    `;
+    
+    const result = await pool.query(query, [tableName]);
+    
+    res.json({
+      data: result.rows,
+      message: `Column configuration loaded for ${tableName}`
+    });
+  } catch (error) {
+    logger.error('Failed to load column configuration:', error);
+    res.status(500).json({
+      error: 'Failed to load column configuration',
+      details: error.message
+    });
+  }
+});
+
+// Update column configuration
+app.put('/api/table-config/:tableName', async (req, res) => {
+  try {
+    const { tableName } = req.params;
+    const { columns } = req.body; // Array of { column_name, column_width, column_order, is_visible }
+    
+    // Begin transaction
+    const client = await pool.connect();
+    
+    try {
+      await client.query('BEGIN');
+      
+      // Update each column configuration
+      for (const column of columns) {
+        const updateQuery = `
+          INSERT INTO react_table_column_config (table_name, column_name, column_width, column_order, is_visible, updated_at)
+          VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+          ON CONFLICT (table_name, column_name) 
+          DO UPDATE SET
+            column_width = EXCLUDED.column_width,
+            column_order = EXCLUDED.column_order,
+            is_visible = EXCLUDED.is_visible,
+            updated_at = CURRENT_TIMESTAMP
+        `;
+        
+        await client.query(updateQuery, [
+          tableName,
+          column.column_name,
+          column.column_width,
+          column.column_order,
+          column.is_visible
+        ]);
+      }
+      
+      await client.query('COMMIT');
+      
+      res.json({
+        message: `Column configuration updated for ${tableName}`,
+        data: { updatedColumns: columns.length }
+      });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    logger.error('Failed to update column configuration:', error);
+    res.status(500).json({
+      error: 'Failed to update column configuration',
+      details: error.message
+    });
+  }
+});
+
 // Error handling middleware
 app.use((error, req, res, next) => {
   logger.error('Unhandled error:', error);

@@ -6,7 +6,8 @@ import type {
   HealthStatus,
   PaginationParams,
   PaginatedResponse,
-  ApiResponse 
+  ApiResponse,
+  TableColumnConfig
 } from './types';
 
 const API_BASE_URL = '/api';
@@ -89,6 +90,19 @@ export const workflowApi = {
 export const healthApi = {
   check: async (): Promise<ApiResponse<HealthStatus>> => {
     const response = await api.get('/health');
+    return response.data;
+  },
+};
+
+// Table Configuration APIs
+export const tableConfigApi = {
+  getConfig: async (tableName: string): Promise<ApiResponse<TableColumnConfig[]>> => {
+    const response = await api.get(`/table-config/${tableName}`);
+    return response.data;
+  },
+  
+  updateConfig: async (tableName: string, columns: TableColumnConfig[]): Promise<ApiResponse<void>> => {
+    const response = await api.put(`/table-config/${tableName}`, { columns });
     return response.data;
   },
 };
