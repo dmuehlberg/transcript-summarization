@@ -63,10 +63,17 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = ({ onSelect
 
   // Delete transcriptions mutation
   const deleteTranscriptionsMutation = useMutation({
-    mutationFn: (ids: number[]) => transcriptionApi.deleteMultiple(ids),
-    onSuccess: () => {
+    mutationFn: (ids: number[]) => {
+      console.log('Mutation function called with IDs:', ids);
+      return transcriptionApi.deleteMultiple(ids);
+    },
+    onSuccess: (_, variables) => {
+      console.log('Delete mutation successful, deleted IDs:', variables);
       queryClient.invalidateQueries({ queryKey: ['transcriptions'] });
       setSelectedRows(new Set());
+    },
+    onError: (error, variables) => {
+      console.error('Delete mutation failed for IDs:', variables, 'Error:', error);
     },
   });
 
@@ -298,7 +305,10 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = ({ onSelect
       columnSizing,
       globalFilter,
       rowSelection: Object.fromEntries(
-        Array.from(selectedRows).map(id => [id, true])
+        (transcriptionsData?.data || []).map((row, index) => [
+          index.toString(),
+          selectedRows.has(row.id)
+        ])
       ),
     },
     onSortingChange: setSorting,
@@ -333,7 +343,33 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = ({ onSelect
     onGlobalFilterChange: setGlobalFilter,
     onRowSelectionChange: (updater) => {
       const newSelection = typeof updater === 'function' ? updater({}) : updater;
-      setSelectedRows(new Set(Object.keys(newSelection).map(Number)));
+      console.log('Raw selection change:', newSelection);
+      
+      // Get current selected rows to merge with new selection
+      const currentSelectedRows = new Map(
+        Array.from(selectedRows).map(id => [id, true])
+      );
+      
+      // Process new selection changes
+      Object.entries(newSelection).forEach(([rowIndexStr, isSelected]) => {
+        const rowIndex = parseInt(rowIndexStr);
+        const row = table.getRowModel().rows[rowIndex];
+        const transcriptionId = row?.original?.id;
+        
+        if (transcriptionId) {
+          console.log(`Row ${rowIndex} -> ID: ${transcriptionId} -> Selected: ${isSelected}`);
+          
+          if (isSelected) {
+            currentSelectedRows.set(transcriptionId, true);
+          } else {
+            currentSelectedRows.delete(transcriptionId);
+          }
+        }
+      });
+      
+      const newSelectedIds = Array.from(currentSelectedRows.keys());
+      console.log('Updated selection, all selected IDs:', newSelectedIds);
+      setSelectedRows(new Set(newSelectedIds));
     },
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
@@ -341,11 +377,18 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = ({ onSelect
     getPaginationRowModel: getPaginationRowModel(),
     columnResizeMode: 'onChange',
     enableColumnResizing: true,
+    enableRowSelection: true,
+    enableMultiRowSelection: true,
   });
 
   const handleDeleteSelected = () => {
+    console.log('Delete button clicked, selectedRows:', selectedRows);
     if (selectedRows.size > 0) {
-      deleteTranscriptionsMutation.mutate(Array.from(selectedRows));
+      const ids = Array.from(selectedRows);
+      console.log('Deleting transcriptions with IDs:', ids);
+      deleteTranscriptionsMutation.mutate(ids);
+    } else {
+      console.log('No rows selected for deletion');
     }
   };
 
