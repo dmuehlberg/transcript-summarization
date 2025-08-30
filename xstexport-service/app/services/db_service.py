@@ -186,7 +186,11 @@ class DatabaseService:
                         # Entferne nur leading Control Characters (ASCII 0-31, 127), aber behalte Zeilenumbrüche im Text
                         df_mapped[pg_field] = df_mapped[pg_field].str.replace(r'^[\x00-\x1F\x7F]+', '', regex=True)
                         
-                        df_mapped[pg_field] = df_mapped[pg_field].replace('', None)
+                        # Ersetze leere Strings und NaN-Werte durch None
+                        df_mapped[pg_field] = df_mapped[pg_field].replace(['', 'nan', 'NaN', 'None'], None)
+                        
+                        # Konvertiere alle verbleibenden NaN-Werte zu None (für pandas NaN)
+                        df_mapped[pg_field] = df_mapped[pg_field].where(pd.notna(df_mapped[pg_field]), None)
             
             # Importiere in die Datenbank
             df_mapped.to_sql(table_name, self.engine, if_exists='append', index=False)
