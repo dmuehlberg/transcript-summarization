@@ -17,7 +17,7 @@ import { Input } from './ui/input';
 import { Select } from './ui/select';
 import { StatusBadge } from './StatusBadge';
 import { transcriptionApi, tableConfigApi } from '@/lib/api';
-import { formatDuration, formatDate, truncateText, getLanguageOptions } from '@/lib/data-formatters';
+import { formatDuration, formatDate, getLanguageOptions } from '@/lib/data-formatters';
 import type { Transcription, TableColumnConfig, ColumnSizingState as SavedColumnSizingState } from '@/lib/types';
 import { Trash2, Calendar, Check, X } from 'lucide-react';
 
@@ -211,7 +211,7 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = ({ onSelect
       size: 200,
       minSize: 150,
       enableResizing: true,
-      cell: ({ getValue }) => <span>{truncateText(getValue(), 50)}</span>,
+      cell: ({ getValue }) => <span>{getValue()}</span>,
     }),
     
     // Meeting start date
@@ -229,7 +229,7 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = ({ onSelect
       size: 150,
       minSize: 120,
       enableResizing: true,
-      cell: ({ getValue }) => <span>{truncateText(getValue(), 30)}</span>,
+      cell: ({ getValue }) => <span>{getValue()}</span>,
     }),
     
     // Transcription duration
