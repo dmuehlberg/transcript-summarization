@@ -159,6 +159,42 @@
         "Address Book Is Member Of Distribution List": {
             "pg_field": "meeting_series_end_date",
             "pg_type": "timestamp with time zone"
+        },
+        "Meeting Series Start Time": {
+            "pg_field": "meeting_series_start_time",
+            "pg_type": "timestamp with time zone"
+        },
+        "Meeting Series End Time": {
+            "pg_field": "meeting_series_end_time",
+            "pg_type": "timestamp with time zone"
+        },
+        "Meeting Series Frequency": {
+            "pg_field": "meeting_series_frequency",
+            "pg_type": "text"
+        },
+        "Meeting Series Interval": {
+            "pg_field": "meeting_series_interval",
+            "pg_type": "INTEGER"
+        },
+        "Meeting Series Weekdays": {
+            "pg_field": "meeting_series_weekdays",
+            "pg_type": "text"
+        },
+        "Meeting Series Monthday": {
+            "pg_field": "meeting_series_monthday",
+            "pg_type": "INTEGER"
+        },
+        "Meeting Series Weekday Nth": {
+            "pg_field": "meeting_series_weekday_nth",
+            "pg_type": "INTEGER"
+        },
+        "Meeting Series Months": {
+            "pg_field": "meeting_series_months",
+            "pg_type": "text"
+        },
+        "Meeting Series Exceptions": {
+            "pg_field": "meeting_series_exceptions",
+            "pg_type": "text"
         }
     },
     "external_mappings": {
@@ -257,6 +293,42 @@
         "AddressBookIsMemberOfDistributionList": {
             "pg_field": "meeting_series_end_date",
             "pg_type": "timestamp with time zone"
+        },
+        "MeetingSeriesStartTime": {
+            "pg_field": "meeting_series_start_time",
+            "pg_type": "timestamp with time zone"
+        },
+        "MeetingSeriesEndTime": {
+            "pg_field": "meeting_series_end_time",
+            "pg_type": "timestamp with time zone"
+        },
+        "MeetingSeriesFrequency": {
+            "pg_field": "meeting_series_frequency",
+            "pg_type": "text"
+        },
+        "MeetingSeriesInterval": {
+            "pg_field": "meeting_series_interval",
+            "pg_type": "INTEGER"
+        },
+        "MeetingSeriesWeekdays": {
+            "pg_field": "meeting_series_weekdays",
+            "pg_type": "text"
+        },
+        "MeetingSeriesMonthday": {
+            "pg_field": "meeting_series_monthday",
+            "pg_type": "INTEGER"
+        },
+        "MeetingSeriesWeekdayNth": {
+            "pg_field": "meeting_series_weekday_nth",
+            "pg_type": "INTEGER"
+        },
+        "MeetingSeriesMonths": {
+            "pg_field": "meeting_series_months",
+            "pg_type": "text"
+        },
+        "MeetingSeriesExceptions": {
+            "pg_field": "meeting_series_exceptions",
+            "pg_type": "text"
         }
     }
 } 
