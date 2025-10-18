@@ -48,8 +48,8 @@ RUN find /usr -name "libcudnn*.so*" | sort
 # PyTorch und TorchAudio auf kompatible Versionen setzen um AudioMetaData Problem zu beheben
 RUN pip install --no-cache-dir torch==2.0.0+cu118 torchaudio==2.0.0+cu118 -i https://download.pytorch.org/whl/cu118 \
     && pip install --no-cache-dir -r requirements/prod.txt \
-    # PyAnnote Audio auf kompatible Version downgraden
-    && pip install --no-cache-dir pyannote-audio==3.1.1 \
+    # PyAnnote Audio auf kompatible Version downgraden (2.1.1 ist kompatibel mit TorchAudio 2.0.0)
+    && pip install --no-cache-dir pyannote-audio==2.1.1 \
     # Clean pip cache and temporary files
     && rm -rf /root/.cache /tmp/*
 
