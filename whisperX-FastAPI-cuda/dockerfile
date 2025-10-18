@@ -31,8 +31,7 @@ RUN export DEBIAN_FRONTEND=noninteractive \
     && ln -s -f /usr/bin/python${PYTHON_VERSION} /usr/bin/python3 \
     && ln -s -f /usr/bin/python${PYTHON_VERSION} /usr/bin/python
 
-# Install UV for package management
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+# UV Package Manager entfernt - verwende Standard pip
 
 WORKDIR /app
 
@@ -46,8 +45,9 @@ COPY requirements requirements/
 RUN find /usr -name "libcudnn*.so*" | sort
 
 # Ändern Sie die PyTorch-Installation zu einer Version, die mit CUDA 11.8 und cuDNN 8 kompatibel ist
-RUN uv pip install --system --no-cache-dir torch==2.0.1+cu118 -i https://download.pytorch.org/whl/cu118 \
-    && uv pip install --system --no-cache-dir -r requirements/prod.txt \
+# TorchAudio explizit auf kompatible Version setzen um AudioMetaData Problem zu beheben
+RUN pip install --no-cache-dir torch==2.0.1+cu118 torchaudio==2.0.1+cu118 -i https://download.pytorch.org/whl/cu118 \
+    && pip install --no-cache-dir -r requirements/prod.txt \
     # Clean pip cache and temporary files
     && rm -rf /root/.cache /tmp/*
 
