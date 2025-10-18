@@ -46,10 +46,14 @@ RUN find /usr -name "libcudnn*.so*" | sort
 
 # Ändern Sie die PyTorch-Installation zu einer Version, die mit CUDA 11.8 und cuDNN 8 kompatibel ist
 # PyTorch und TorchAudio auf kompatible Versionen setzen um AudioMetaData Problem zu beheben
+# Zuerst PyTorch installieren, dann whisperx mit Version-Constraints
 RUN pip install --no-cache-dir torch==2.0.0+cu118 torchaudio==2.0.0+cu118 -i https://download.pytorch.org/whl/cu118 \
-    && pip install --no-cache-dir -r requirements/prod.txt \
     # PyAnnote Audio auf kompatible Version downgraden (2.1.1 ist kompatibel mit TorchAudio 2.0.0)
     && pip install --no-cache-dir pyannote-audio==2.1.1 \
+    # whisperx mit spezifischen Version-Constraints installieren um PyTorch-Upgrades zu verhindern
+    && pip install --no-cache-dir whisperx==3.3.3 --no-deps \
+    # Dann die restlichen Dependencies installieren
+    && pip install --no-cache-dir -r requirements/prod.txt \
     # Clean pip cache and temporary files
     && rm -rf /root/.cache /tmp/*
 
