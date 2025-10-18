@@ -276,33 +276,42 @@ TARGETPLATFORM=linux/amd64
 ENVEOF
 fi
 
-# container-setup.sh ausführen
-if [ -f "./container-setup.sh" ]; then
-    echo "Führe container-setup.sh aus..."
-    chmod +x ./container-setup.sh
-    echo "n" | timeout 1800 ./container-setup.sh 2>&1
-    SETUP_EXIT_CODE=$?
-    if [ $SETUP_EXIT_CODE -eq 0 ]; then
-        echo "container-setup.sh erfolgreich abgeschlossen"
-    elif [ $SETUP_EXIT_CODE -eq 124 ]; then
-        echo "WARNUNG: container-setup.sh Timeout nach 30 Minuten"
-    else
-        echo "FEHLER: container-setup.sh fehlgeschlagen (Exit Code: $SETUP_EXIT_CODE)"
-    fi
-else
-    echo "FEHLER: container-setup.sh nicht gefunden!"
-    echo "Verfügbare Dateien:"
-    ls -la 2>&1
-    # Fallback: Lade das Skript herunter
-    echo "Fallback: Lade container-setup.sh herunter..."
-    wget https://raw.githubusercontent.com/dmuehlberg/transcript-summarization/main/container-setup.sh -O ./container-setup.sh 2>&1
-    if [ -f "./container-setup.sh" ]; then
-        chmod +x ./container-setup.sh
-        echo "n" | timeout 1800 ./container-setup.sh 2>&1
-    else
-        echo "FEHLER: Fallback fehlgeschlagen"
-    fi
-fi
+# container-setup.sh ausführen - AUSKOMMENTIERT für manuellen Start
+# if [ -f "./container-setup.sh" ]; then
+#     echo "Führe container-setup.sh aus..."
+#     chmod +x ./container-setup.sh
+#     echo "n" | timeout 1800 ./container-setup.sh 2>&1
+#     SETUP_EXIT_CODE=$?
+#     if [ $SETUP_EXIT_CODE -eq 0 ]; then
+#         echo "container-setup.sh erfolgreich abgeschlossen"
+#     elif [ $SETUP_EXIT_CODE -eq 124 ]; then
+#         echo "WARNUNG: container-setup.sh Timeout nach 30 Minuten"
+#     else
+#         echo "FEHLER: container-setup.sh fehlgeschlagen (Exit Code: $SETUP_EXIT_CODE)"
+#     fi
+# else
+#     echo "FEHLER: container-setup.sh nicht gefunden!"
+#     echo "Verfügbare Dateien:"
+#     ls -la 2>&1
+#     # Fallback: Lade das Skript herunter
+#     echo "Fallback: Lade container-setup.sh herunter..."
+#     wget https://raw.githubusercontent.com/dmuehlberg/transcript-summarization/main/container-setup.sh -O ./container-setup.sh 2>&1
+#     if [ -f "./container-setup.sh" ]; then
+#         chmod +x ./container-setup.sh
+#         echo "n" | timeout 1800 ./container-setup.sh 2>&1
+#     else
+#         echo "FEHLER: Fallback fehlgeschlagen"
+#     fi
+# fi
+
+# Manueller Start-Hinweis
+echo "MANUELLER START:"
+echo "SSH in die Instanz und führe aus:"
+echo "  cd transcript-summarization"
+echo "  ./container-setup.sh"
+echo ""
+echo "Oder für Live-Monitoring:"
+echo "  ./container-setup.sh 2>&1 | tee setup.log"
 
 echo "=== EC2-USER SETUP ABGESCHLOSSEN ==="
 EOS
