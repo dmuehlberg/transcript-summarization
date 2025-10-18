@@ -216,7 +216,8 @@ docker --version 2>&1
 
 # Docker Compose v2 und Buildx installieren
 echo "Installiere Docker Compose v2 und Buildx..."
-curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+# Verwende die korrekte URL für Linux x86_64
+curl -L "https://github.com/docker/compose/releases/download/v2.40.1/docker-compose-linux-x86_64" -o /usr/local/bin/docker-compose
 chmod +x /usr/local/bin/docker-compose
 ln -sf /usr/local/bin/docker-compose /usr/bin/docker-compose
 
