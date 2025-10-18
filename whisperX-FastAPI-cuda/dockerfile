@@ -45,8 +45,8 @@ COPY requirements requirements/
 RUN find /usr -name "libcudnn*.so*" | sort
 
 # Ändern Sie die PyTorch-Installation zu einer Version, die mit CUDA 11.8 und cuDNN 8 kompatibel ist
-# TorchAudio explizit auf kompatible Version setzen um AudioMetaData Problem zu beheben
-RUN pip install --no-cache-dir torch==2.0.1+cu118 torchaudio==2.0.1+cu118 -i https://download.pytorch.org/whl/cu118 \
+# PyTorch und TorchAudio auf kompatible Versionen setzen um AudioMetaData Problem zu beheben
+RUN pip install --no-cache-dir torch==2.0.0+cu118 torchaudio==2.0.0+cu118 -i https://download.pytorch.org/whl/cu118 \
     && pip install --no-cache-dir -r requirements/prod.txt \
     # Clean pip cache and temporary files
     && rm -rf /root/.cache /tmp/*
