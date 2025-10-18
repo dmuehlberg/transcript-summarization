@@ -64,31 +64,65 @@ main() {
     export DOCKER_CLIENT_TIMEOUT=120
     export COMPOSE_HTTP_TIMEOUT=120
     
+    # Prüfe Docker Buildx Version (muss v0.18.0+ für --allow flag sein)
+    log "Prüfe Docker Buildx Version..."
+    if command -v docker &> /dev/null && docker buildx version &> /dev/null; then
+        BUILDX_VERSION=$(docker buildx version 2>/dev/null | grep -o 'v[0-9]\+\.[0-9]\+\.[0-9]\+' | head -1)
+        if [[ "$BUILDX_VERSION" < "v0.18.0" ]]; then
+            warning "Docker Buildx Version $BUILDX_VERSION ist zu alt. Installiere v0.18.0+..."
+            sudo mkdir -p /usr/local/lib/docker/cli-plugins
+            sudo curl -L "https://github.com/docker/buildx/releases/download/v0.18.0/buildx-v0.18.0.linux-amd64" -o /usr/local/lib/docker/cli-plugins/docker-buildx
+            sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-buildx
+            docker buildx create --use --name mybuilder
+            log "Docker Buildx v0.18.0+ installiert"
+        else
+            info "Docker Buildx Version $BUILDX_VERSION ist kompatibel"
+        fi
+    else
+        warning "Docker Buildx nicht verfügbar - verwende Docker Compose v1.29.2 als Fallback"
+        if ! command -v /usr/local/bin/docker-compose-v1 &> /dev/null; then
+            log "Installiere Docker Compose v1.29.2 als Fallback..."
+            sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-Linux-x86_64" -o /usr/local/bin/docker-compose-v1
+            sudo chmod +x /usr/local/bin/docker-compose-v1
+        fi
+    fi
+    
     log "Stoppe alte Container..."
     docker-compose down 2>/dev/null || /usr/local/bin/docker-compose down 2>/dev/null || true
     
     log "Baue Container whisperx_cuda (kann 5-10 Minuten dauern)..."
-    if command -v docker-compose &> /dev/null; then
+    # Verwende Docker Compose v2 wenn verfügbar, sonst v1.29.2 als Fallback
+    if command -v docker-compose &> /dev/null && docker buildx version &> /dev/null; then
+        info "Verwende Docker Compose v2 mit Buildx"
         docker-compose build whisperx_cuda
+    elif command -v /usr/local/bin/docker-compose-v1 &> /dev/null; then
+        info "Verwende Docker Compose v1.29.2 als Fallback"
+        /usr/local/bin/docker-compose-v1 build whisperx_cuda
     else
-        /usr/local/bin/docker-compose build whisperx_cuda
+        error "Keine kompatible Docker Compose Version gefunden"
+        exit 1
     fi
     
     log "Starte Container..."
-    if command -v docker-compose &> /dev/null; then
+    if command -v docker-compose &> /dev/null && docker buildx version &> /dev/null; then
         docker-compose up -d whisperx_cuda
+    elif command -v /usr/local/bin/docker-compose-v1 &> /dev/null; then
+        /usr/local/bin/docker-compose-v1 up -d whisperx_cuda
     else
-        /usr/local/bin/docker-compose up -d whisperx_cuda
+        error "Keine kompatible Docker Compose Version gefunden"
+        exit 1
     fi
     
     sleep 10
     
     # Container Status prüfen
     log "Prüfe Container Status..."
-    if command -v docker-compose &> /dev/null; then
+    if command -v docker-compose &> /dev/null && docker buildx version &> /dev/null; then
         CONTAINER_STATUS=$(docker-compose ps whisperx_cuda --format json 2>/dev/null | grep -o '"State":"[^"]*"' | cut -d'"' -f4 || echo "unknown")
+    elif command -v /usr/local/bin/docker-compose-v1 &> /dev/null; then
+        CONTAINER_STATUS=$(/usr/local/bin/docker-compose-v1 ps whisperx_cuda --format json 2>/dev/null | grep -o '"State":"[^"]*"' | cut -d'"' -f4 || echo "unknown")
     else
-        CONTAINER_STATUS=$(/usr/local/bin/docker-compose ps whisperx_cuda --format json 2>/dev/null | grep -o '"State":"[^"]*"' | cut -d'"' -f4 || echo "unknown")
+        CONTAINER_STATUS="unknown"
     fi
     
     if [[ "$CONTAINER_STATUS" == "running" ]]; then
@@ -100,17 +134,25 @@ main() {
         info "Logs anzeigen: docker-compose logs -f whisperx_cuda"
     else
         warning "Container Status: $CONTAINER_STATUS"
-        warning "Bitte Logs prüfen: docker-compose logs whisperx_cuda (oder /usr/local/bin/docker-compose logs whisperx_cuda)"
+        if command -v docker-compose &> /dev/null && docker buildx version &> /dev/null; then
+            warning "Bitte Logs prüfen: docker-compose logs whisperx_cuda"
+        elif command -v /usr/local/bin/docker-compose-v1 &> /dev/null; then
+            warning "Bitte Logs prüfen: /usr/local/bin/docker-compose-v1 logs whisperx_cuda"
+        else
+            warning "Bitte Logs prüfen: docker logs whisperx-cuda"
+        fi
     fi
     
     # Logs anzeigen?
     read -p "Logs anzeigen? (y/N): " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        if command -v docker-compose &> /dev/null; then
+        if command -v docker-compose &> /dev/null && docker buildx version &> /dev/null; then
             docker-compose logs -f whisperx_cuda
+        elif command -v /usr/local/bin/docker-compose-v1 &> /dev/null; then
+            /usr/local/bin/docker-compose-v1 logs -f whisperx_cuda
         else
-            /usr/local/bin/docker-compose logs -f whisperx_cuda
+            error "Keine kompatible Docker Compose Version für Logs gefunden"
         fi
     fi
 }

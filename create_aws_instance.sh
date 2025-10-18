@@ -214,6 +214,22 @@ echo "Docker Status:"
 systemctl status docker --no-pager 2>&1
 docker --version 2>&1
 
+# Docker Compose v2 und Buildx installieren
+echo "Installiere Docker Compose v2 und Buildx..."
+curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+chmod +x /usr/local/bin/docker-compose
+ln -sf /usr/local/bin/docker-compose /usr/bin/docker-compose
+
+# Docker Buildx v0.18.0+ installieren (unterstützt --allow flag)
+mkdir -p /usr/local/lib/docker/cli-plugins
+curl -L "https://github.com/docker/buildx/releases/download/v0.18.0/buildx-v0.18.0.linux-amd64" -o /usr/local/lib/docker/cli-plugins/docker-buildx
+chmod +x /usr/local/lib/docker/cli-plugins/docker-buildx
+
+# Docker Buildx Builder erstellen
+docker buildx create --use --name mybuilder
+
+echo "Docker Compose v2 und Buildx v0.18.0+ installiert"
+
 # ec2-user Setup-Skript schreiben
 cat > /home/ec2-user/ec2_setup.sh <<'EOS'
 #!/bin/bash
