@@ -1,5 +1,5 @@
 ## Verwenden Sie das Standard NVIDIA CUDA Image (öffentlich verfügbar)
-FROM nvidia/cuda:12.6.1-cudnn9-runtime-ubuntu22.04
+FROM nvidia/cuda:12.4.1-cudnn9-runtime-ubuntu22.04
 
 # Alternative: AWS-optimiertes Image (erfordert ECR-Authentifizierung)
 #FROM 763104351884.dkr.ecr.eu-central-1.amazonaws.com/pytorch-training:2.6.0-gpu-py311-cu126-ubuntu22.04-ec2
