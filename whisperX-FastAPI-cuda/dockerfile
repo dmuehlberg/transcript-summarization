@@ -1,5 +1,5 @@
-## Verwenden Sie das PyTorch-Image (verfügbar und funktioniert)
-FROM pytorch/pytorch:2.5.1-cuda12.1-cudnn9-runtime
+## Verwenden Sie das PyTorch-Image mit cuDNN 8 (funktioniert mit WhisperX)
+FROM pytorch/pytorch:1.13.1-cuda11.6-cudnn8-devel
 
 # Alternative: NVIDIA CUDA Image (falls PyTorch-Image nicht verfügbar)
 #FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
@@ -13,14 +13,12 @@ RUN sed -i 's/archive.ubuntu.com/eu-central-1.ec2.archive.ubuntu.com/g' /etc/apt
     sed -i 's/security.ubuntu.com/eu-central-1.ec2.archive.ubuntu.com/g' /etc/apt/sources.list
 
 # Install only essential dependencies (Python 3.11 ist bereits im PyTorch-Image)
-# cuDNN 8 zusätzlich installieren für WhisperX-Kompatibilität
+# cuDNN 8 ist bereits im Image installiert - keine zusätzliche Installation nötig
 RUN export DEBIAN_FRONTEND=noninteractive \
     && apt-get -y update \
     && apt-get -y install --no-install-recommends \
     git \
     ffmpeg \
-    libcudnn8 \
-    libcudnn8-dev \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -33,6 +31,7 @@ COPY app/gunicorn_logging.conf .
 COPY requirements requirements/
 
 # Überprüfen und anzeigen der CUDA-Bibliotheken und ihrer Pfade für Diagnosezwecke
+# cuDNN 8 sollte jetzt verfügbar sein (libcudnn_ops_infer.so.8)
 RUN find /usr -name "libcudnn*.so*" | sort
 
 # PyTorch ist bereits im Image installiert, nur Dependencies installieren
