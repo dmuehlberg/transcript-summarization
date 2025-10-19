@@ -12,26 +12,14 @@ ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/include:/usr/lib/x86_6
 RUN sed -i 's/archive.ubuntu.com/eu-central-1.ec2.archive.ubuntu.com/g' /etc/apt/sources.list && \
     sed -i 's/security.ubuntu.com/eu-central-1.ec2.archive.ubuntu.com/g' /etc/apt/sources.list
 
-# Install dependencies and clean up in the same layer
+# Install only essential dependencies (Python 3.11 ist bereits im PyTorch-Image)
 RUN export DEBIAN_FRONTEND=noninteractive \
     && apt-get -y update \
     && apt-get -y install --no-install-recommends \
-    software-properties-common \
-    && add-apt-repository ppa:deadsnakes/ppa \
-    && apt-get -y update \
-    && apt-get -y install --no-install-recommends \
-    python${PYTHON_VERSION} \
-    python${PYTHON_VERSION}-dev \
-    python${PYTHON_VERSION}-distutils \
-    python3-pip \
     git \
     ffmpeg \
     && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* \
-    && ln -s -f /usr/bin/python${PYTHON_VERSION} /usr/bin/python3 \
-    && ln -s -f /usr/bin/python${PYTHON_VERSION} /usr/bin/python
-
-# UV Package Manager entfernt - verwende Standard pip
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -44,7 +32,6 @@ COPY requirements requirements/
 # Überprüfen und anzeigen der CUDA-Bibliotheken und ihrer Pfade für Diagnosezwecke
 RUN find /usr -name "libcudnn*.so*" | sort
 
-# Ändern Sie die PyTorch-Installation zu einer Version, die mit CUDA 11.8 und cuDNN 8 kompatibel ist
 # PyTorch ist bereits im Image installiert, nur Dependencies installieren
 # Verwende die gleiche Strategie wie der funktionierende CPU-Container
 RUN pip install --no-cache-dir -r requirements/prod.txt \
