@@ -28,6 +28,7 @@ class Metadata(BaseModel):
     task_params: Optional[dict]
     language: Optional[str]
     file_name: Optional[str]
+    error: Optional[str]
     url: Optional[str]
     duration: Optional[float]
     audio_duration: Optional[float] = None
