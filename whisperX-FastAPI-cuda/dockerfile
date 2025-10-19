@@ -1,8 +1,8 @@
-## Verwenden Sie das Standard NVIDIA CUDA Image (öffentlich verfügbar)
-FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
+## Verwenden Sie das PyTorch-Image (verfügbar und funktioniert)
+FROM pytorch/pytorch:2.5.1-cuda12.1-cudnn9-runtime
 
-# Alternative: AWS-optimiertes Image (erfordert ECR-Authentifizierung)
-#FROM 763104351884.dkr.ecr.eu-central-1.amazonaws.com/pytorch-training:2.6.0-gpu-py311-cu126-ubuntu22.04-ec2
+# Alternative: NVIDIA CUDA Image (falls PyTorch-Image nicht verfügbar)
+#FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
 
 ENV PYTHON_VERSION=3.11
 # Stellen Sie sicher, dass sowohl die CUDA- als auch die cuDNN-Bibliotheken im Pfad sind
@@ -45,11 +45,9 @@ COPY requirements requirements/
 RUN find /usr -name "libcudnn*.so*" | sort
 
 # Ändern Sie die PyTorch-Installation zu einer Version, die mit CUDA 11.8 und cuDNN 8 kompatibel ist
-# PyTorch und TorchAudio auf CUDA 12.1 kompatible Versionen setzen
+# PyTorch ist bereits im Image installiert, nur Dependencies installieren
 # Verwende die gleiche Strategie wie der funktionierende CPU-Container
-RUN pip install --no-cache-dir torch==2.6.0 torchaudio==2.6.0 -i https://download.pytorch.org/whl/cu121 \
-    # Dann die restlichen Dependencies installieren (inkl. whisperx==3.3.3)
-    && pip install --no-cache-dir -r requirements/prod.txt \
+RUN pip install --no-cache-dir -r requirements/prod.txt \
     # Clean pip cache and temporary files
     && rm -rf /root/.cache /tmp/*
 
