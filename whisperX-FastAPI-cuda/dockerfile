@@ -45,9 +45,9 @@ COPY requirements requirements/
 RUN find /usr -name "libcudnn*.so*" | sort
 
 # Ändern Sie die PyTorch-Installation zu einer Version, die mit CUDA 11.8 und cuDNN 8 kompatibel ist
-# PyTorch und TorchAudio auf CUDA 11.8 kompatible Versionen setzen
-# Verwende die gleiche Strategie wie der funktionierende CPU-Container
-RUN pip install --no-cache-dir torch==2.0.1+cu118 torchaudio==2.0.1+cu118 -i https://download.pytorch.org/whl/cu118 \
+# PyTorch und TorchAudio auf exakt kompatible Versionen setzen
+# torchaudio 2.0.1+cu118 verlangt torch==2.0.0, also verwenden wir das
+RUN pip install --no-cache-dir torch==2.0.0+cu118 torchaudio==2.0.1+cu118 -i https://download.pytorch.org/whl/cu118 \
     # Dann die restlichen Dependencies installieren (inkl. whisperx==3.3.3)
     && pip install --no-cache-dir -r requirements/prod.txt \
     # Clean pip cache and temporary files
