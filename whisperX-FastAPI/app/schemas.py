@@ -357,6 +357,24 @@ class DiarizationParams(BaseModel):
     )
 
 
+class TaskType(str, Enum):
+    """Enum for task types."""
+
+    transcription = "transcription"
+    transcription_alignment = "transcription_alignment"
+    diarization = "diarization"
+    combine_transcript_diarization = "combine_transcript&diarization"
+    full_process = "full_process"
+
+
+class TaskStatus(str, Enum):
+    """Enum for task status."""
+
+    processing = "processing"
+    completed = "completed"
+    failed = "failed"
+
+
 class SpeechToTextProcessingParams(BaseModel):
     """Model for speech-to-text processing parameters."""
 
