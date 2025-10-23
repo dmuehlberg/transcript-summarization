@@ -188,8 +188,11 @@ services:
       - ollama-gpu
 
   whisperx:
+    platform: ${TARGETPLATFORM:-linux/amd64}
     build:
       context: ./whisperX-FastAPI
+      args:
+        - TARGETPLATFORM=${TARGETPLATFORM:-linux/amd64}
     container_name: whisperx
     networks: ['demo']
     ports:
