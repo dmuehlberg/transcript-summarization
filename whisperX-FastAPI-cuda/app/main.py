@@ -11,6 +11,7 @@ from dotenv import load_dotenv  # noqa: E402
 from fastapi import FastAPI, status  # noqa: E402
 from fastapi.responses import JSONResponse, RedirectResponse  # noqa: E402
 from sqlalchemy import text  # noqa: E402
+import logging  # noqa: E402
 
 from .config import Config  # noqa: E402
 from .db import engine  # noqa: E402
@@ -154,12 +155,13 @@ async def readiness_check():
                 "message": "Application is ready to accept requests",
             },
         )
-    except Exception as e:
+    except Exception:
+        logging.exception("Readiness check failed:")
         return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             content={
                 "status": "error",
                 "database": "disconnected",
-                "message": f"Application is not ready: {str(e)}",
+                "message": "Application is not ready due to an internal error.",
             },
         )

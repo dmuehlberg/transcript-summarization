@@ -6,8 +6,8 @@ from datetime import datetime
 import torch
 from fastapi import Depends
 from sqlalchemy.orm import Session
+from whisperx.diarize import DiarizationPipeline
 from whisperx import (
-    DiarizationPipeline,
     align,
     assign_word_speakers,
     load_align_model,
@@ -17,7 +17,7 @@ from whisperx import (
 from .config import Config
 from .db import get_db_session
 from .logger import logger  # Import the logger from the new module
-from .schemas import AlignedTranscription, SpeechToTextProcessingParams
+from .schemas import AlignedTranscription, SpeechToTextProcessingParams, TaskStatus
 from .tasks import update_task_status_in_db
 from .transcript import filter_aligned_transcription
 
