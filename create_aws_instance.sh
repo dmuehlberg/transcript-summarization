@@ -214,6 +214,133 @@ echo "Docker Status:"
 systemctl status docker --no-pager 2>&1
 docker --version 2>&1
 
+# Docker auf größeres EBS-Volume umziehen (falls verfügbar)
+echo "=== Docker Volume Migration ==="
+DOCKER_VOLUME_MOUNT="/mnt/docker-data"
+
+# Finde das erste verfügbare zusätzliche NVMe-Volume (nicht Root-Volume)
+DOCKER_VOLUME_DEVICE=""
+for device in /dev/nvme*n1; do
+    # Überspringe Root-Volume (normalerweise nvme0n1) und EFI-Partitionen
+    if [ -b "$device" ] && ! mountpoint -q "$device" 2>/dev/null; then
+        # Prüfe ob es nicht das Root-Device ist
+        ROOT_DEVICE=$(findmnt -n -o SOURCE /)
+        if [ "$device" != "$ROOT_DEVICE" ] && [ "${device}" != "/dev/nvme0n1" ]; then
+            DOCKER_VOLUME_DEVICE="$device"
+            echo "Gefundenes zusätzliches Volume: $DOCKER_VOLUME_DEVICE"
+            break
+        fi
+    fi
+done
+
+# Fallback: Versuche spezifische Devices
+if [ -z "$DOCKER_VOLUME_DEVICE" ]; then
+    for device in /dev/nvme1n1 /dev/nvme2n1 /dev/nvme3n1; do
+        if [ -b "$device" ]; then
+            DOCKER_VOLUME_DEVICE="$device"
+            echo "Verwende Fallback-Device: $DOCKER_VOLUME_DEVICE"
+            break
+        fi
+    done
+fi
+
+# Prüfe ob zusätzliches Volume verfügbar ist
+if [ -n "$DOCKER_VOLUME_DEVICE" ] && [ -b "$DOCKER_VOLUME_DEVICE" ]; then
+    echo "Zusätzliches Volume $DOCKER_VOLUME_DEVICE gefunden"
+    
+    # Prüfe ob Volume bereits formatiert ist
+    if ! blkid "$DOCKER_VOLUME_DEVICE" > /dev/null 2>&1; then
+        echo "Formatiere $DOCKER_VOLUME_DEVICE mit XFS..."
+        mkfs.xfs -f "$DOCKER_VOLUME_DEVICE" 2>&1
+        echo "Formatierung abgeschlossen"
+    else
+        echo "Volume ist bereits formatiert"
+    fi
+    
+    # Erstelle Mount-Point
+    mkdir -p "$DOCKER_VOLUME_MOUNT" 2>&1
+    
+    # Prüfe ob bereits gemountet
+    if ! mountpoint -q "$DOCKER_VOLUME_MOUNT"; then
+        echo "Mounte $DOCKER_VOLUME_DEVICE auf $DOCKER_VOLUME_MOUNT..."
+        mount "$DOCKER_VOLUME_DEVICE" "$DOCKER_VOLUME_MOUNT" 2>&1
+        echo "Volume erfolgreich gemountet"
+    else
+        echo "Volume ist bereits gemountet"
+    fi
+    
+    # Docker stoppen für Migration
+    echo "Stoppe Docker für Migration..."
+    systemctl stop docker 2>&1
+    
+    # Migriere bestehende Docker-Daten (falls vorhanden)
+    if [ -d "/var/lib/docker" ] && [ "$(ls -A /var/lib/docker 2>/dev/null)" ]; then
+        echo "Migriere bestehende Docker-Daten..."
+        if [ ! "$(ls -A $DOCKER_VOLUME_MOUNT 2>/dev/null)" ]; then
+            rsync -av /var/lib/docker/ "$DOCKER_VOLUME_MOUNT/" 2>&1
+            echo "Daten-Migration abgeschlossen"
+        else
+            echo "Docker-Daten bereits auf Volume vorhanden"
+        fi
+    else
+        echo "Keine bestehenden Docker-Daten zum Migrieren"
+        mkdir -p "$DOCKER_VOLUME_MOUNT" 2>&1
+    fi
+    
+    # Erstelle Backup des alten Verzeichnisses und Symlink
+    if [ -d "/var/lib/docker" ] && [ ! -L "/var/lib/docker" ]; then
+        echo "Erstelle Backup und Symlink..."
+        mv /var/lib/docker /var/lib/docker.backup 2>&1
+    fi
+    
+    # Erstelle Symlink
+    if [ ! -e "/var/lib/docker" ]; then
+        ln -s "$DOCKER_VOLUME_MOUNT" /var/lib/docker 2>&1
+        echo "Symlink /var/lib/docker -> $DOCKER_VOLUME_MOUNT erstellt"
+    fi
+    
+    # Füge Mount in /etc/fstab hinzu (falls noch nicht vorhanden)
+    VOLUME_UUID=$(blkid -s UUID -o value "$DOCKER_VOLUME_DEVICE")
+    if [ -n "$VOLUME_UUID" ]; then
+        if ! grep -q "$DOCKER_VOLUME_MOUNT" /etc/fstab; then
+            echo "UUID=$VOLUME_UUID $DOCKER_VOLUME_MOUNT xfs defaults,nofail 0 2" >> /etc/fstab
+            echo "Eintrag in /etc/fstab hinzugefügt"
+        else
+            echo "Eintrag bereits in /etc/fstab vorhanden"
+        fi
+    fi
+    
+    # Starte Docker wieder
+    echo "Starte Docker..."
+    systemctl start docker 2>&1
+    
+    # Warte kurz auf Docker-Start
+    sleep 3
+    
+    # Prüfe Docker-Status
+    if systemctl is-active --quiet docker; then
+        echo "✅ Docker Volume Migration erfolgreich!"
+        echo "Docker Root Dir: $(docker info 2>/dev/null | grep 'Docker Root Dir' | awk '{print $4}')"
+        df -h "$DOCKER_VOLUME_MOUNT" 2>&1
+    else
+        echo "⚠️ Warnung: Docker konnte nicht gestartet werden, verwende Standard-Verzeichnis"
+        # Fallback: Entferne Symlink und verwende Standard
+        if [ -L "/var/lib/docker" ]; then
+            rm /var/lib/docker
+            if [ -d "/var/lib/docker.backup" ]; then
+                mv /var/lib/docker.backup /var/lib/docker
+            else
+                mkdir -p /var/lib/docker
+            fi
+            systemctl start docker 2>&1
+        fi
+    fi
+else
+    echo "Kein zusätzliches Volume gefunden - verwende Standard /var/lib/docker"
+fi
+
+echo "=== Docker Volume Migration abgeschlossen ==="
+
 # Docker Compose v2 und Buildx installieren
 echo "Installiere Docker Compose v2 und Buildx..."
 # Verwende die korrekte URL für Linux x86_64
