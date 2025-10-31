@@ -1,10 +1,10 @@
-## Verwenden Sie das PyTorch-Image mit cuDNN 8 (funktioniert mit WhisperX)
-FROM pytorch/pytorch:1.13.1-cuda11.6-cudnn8-devel
+## Verwenden Sie das neueres PyTorch-Image mit cuDNN 8 (bessere Kompatibilität mit WhisperX 3.4.2)
+FROM pytorch/pytorch:2.1.0-cuda11.8-cudnn8-devel
 
 # Alternative: NVIDIA CUDA Image (falls PyTorch-Image nicht verfügbar)
 #FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
 
-ENV PYTHON_VERSION=3.11
+ENV PYTHON_VERSION=3.10
 # Stellen Sie sicher, dass sowohl die CUDA- als auch die cuDNN-Bibliotheken im Pfad sind
 ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/include:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH
 
@@ -12,13 +12,22 @@ ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/include:/usr/lib/x86_6
 RUN sed -i 's/archive.ubuntu.com/eu-central-1.ec2.archive.ubuntu.com/g' /etc/apt/sources.list && \
     sed -i 's/security.ubuntu.com/eu-central-1.ec2.archive.ubuntu.com/g' /etc/apt/sources.list
 
-# Install only essential dependencies (Python 3.11 ist bereits im PyTorch-Image)
-# cuDNN 8 ist bereits im Image installiert - keine zusätzliche Installation nötig
+# Install dependencies including build tools for PyAV compilation
+# PyAV (Abhängigkeit von WhisperX 3.4.2) benötigt pkg-config und FFmpeg-Entwicklungsbibliotheken
 RUN export DEBIAN_FRONTEND=noninteractive \
     && apt-get -y update \
     && apt-get -y install --no-install-recommends \
     git \
     ffmpeg \
+    pkg-config \
+    build-essential \
+    libavformat-dev \
+    libavcodec-dev \
+    libavdevice-dev \
+    libavutil-dev \
+    libswscale-dev \
+    libswresample-dev \
+    libavfilter-dev \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -35,8 +44,9 @@ COPY requirements requirements/
 RUN find /usr -name "libcudnn*.so*" | sort
 
 # PyTorch ist bereits im Image installiert, nur Dependencies installieren
-# Verwende die gleiche Strategie wie der funktionierende CPU-Container
-RUN pip install --no-cache-dir -r requirements/prod.txt \
+# Upgrade pip und setuptools für bessere Kompatibilität
+RUN pip install --upgrade pip setuptools wheel \
+    && pip install --no-cache-dir -r requirements/prod.txt \
     # Clean pip cache and temporary files
     && rm -rf /root/.cache /tmp/*
 
