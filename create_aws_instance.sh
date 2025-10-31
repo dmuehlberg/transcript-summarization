@@ -143,7 +143,7 @@ create_instance_in_region() {
     # Suche nach dem neuesten Deep Learning AMI
     AMI_ID=$(aws ec2 describe-images --region $region \
         --owners amazon \
-        --filters "Name=name,Values=*Deep Learning Proprietary Nvidia Driver AMI (Amazon Linux 2)*" \
+        --filters "Name=name,Values=*Deep Learning OSS Nvidia Driver AMI GPU PyTorch 2.8 (Amazon Linux 2023)*" \
         --query "sort_by(Images, &CreationDate)[-1].ImageId" \
         --output text)
 
