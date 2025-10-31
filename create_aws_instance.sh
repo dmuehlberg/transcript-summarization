@@ -138,7 +138,7 @@ create_instance_in_region() {
     fi
 
     # 3. AMI-ID für Amazon Linux 2 mit Deep Learning und NVIDIA Treibern
-    log "Suche nach Deep Learning AMI für Amazon Linux 2 in $region..."
+    log "Suche nach Deep Learning OSS Nvidia Driver AMI GPU PyTorch 2.8 (Amazon Linux 2023) in $region..."
     
     # Suche nach dem neuesten Deep Learning AMI
     AMI_ID=$(aws ec2 describe-images --region $region \
@@ -183,12 +183,12 @@ echo "Working Dir: $(pwd)"
 # Cloud-init Status loggen
 echo "Cloud-init Status: $(cloud-init status 2>/dev/null || echo 'unknown')"
 
-echo "Starte WhisperX-Installation auf Amazon Linux 2 mit NVIDIA Treibern..."
+echo "Starte WhisperX-Installation auf Amazon Linux 2023 mit NVIDIA Treibern..."
 
 # Warte kurz bis System bereit ist
 sleep 30
 
-# System Update für Amazon Linux 2
+# System Update für Amazon Linux 2023
 # echo "System Update..."
 # yum update -y 2>&1
 
