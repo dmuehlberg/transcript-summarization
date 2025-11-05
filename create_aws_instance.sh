@@ -240,7 +240,7 @@ while [ $WAIT_COUNT -lt $MAX_WAIT ] && [ -z "$DOCKER_VOLUME_DEVICE" ]; do
             if [ "$device" != "$ROOT_DEVICE" ] && [ "${device}" != "/dev/nvme0n1" ]; then
                 DOCKER_VOLUME_DEVICE="$device"
                 echo "Gefundenes zusätzliches Volume: $DOCKER_VOLUME_DEVICE"
-                break
+                break 2  # Breche beide Schleifen (for und while)
             fi
         fi
     done
@@ -251,7 +251,7 @@ while [ $WAIT_COUNT -lt $MAX_WAIT ] && [ -z "$DOCKER_VOLUME_DEVICE" ]; do
             if [ -b "$device" ] 2>/dev/null; then
                 DOCKER_VOLUME_DEVICE="$device"
                 echo "Verwende Fallback-Device: $DOCKER_VOLUME_DEVICE"
-                break
+                break 2  # Breche beide Schleifen (for und while)
             fi
         done
     fi
@@ -261,7 +261,7 @@ while [ $WAIT_COUNT -lt $MAX_WAIT ] && [ -z "$DOCKER_VOLUME_DEVICE" ]; do
         sleep 2
         WAIT_COUNT=$((WAIT_COUNT + 2))
         if [ $((WAIT_COUNT % 10)) -eq 0 ]; then
-            echo "Warte auf zusätzliche Volumes... ($WAIT_COUNT/$MAX_WAIT Sekunden)"
+            echo "Warte auf zusätzliche Volumes... (${WAIT_COUNT}/${MAX_WAIT} Sekunden)"
         fi
     fi
 done
