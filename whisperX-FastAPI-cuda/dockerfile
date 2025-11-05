@@ -43,9 +43,11 @@ COPY requirements requirements/
 # cuDNN 8 sollte jetzt verfügbar sein (libcudnn_ops_infer.so.8)
 RUN find /usr -name "libcudnn*.so*" | sort
 
-# PyTorch ist bereits im Image installiert, nur Dependencies installieren
+# PyTorch ist bereits im Image installiert, aber wir müssen die Versionen fixieren
+# für Kompatibilität mit pyannote.audio (benötigt AudioMetaData in torchaudio 2.8.x)
 # Upgrade pip und setuptools für bessere Kompatibilität
 RUN pip install --upgrade pip setuptools wheel \
+    && pip install --no-cache-dir -r requirements/system.txt \
     && pip install --no-cache-dir -r requirements/prod.txt \
     # Clean pip cache and temporary files
     && rm -rf /root/.cache /tmp/*
