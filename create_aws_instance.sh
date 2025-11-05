@@ -224,7 +224,12 @@ for device in /dev/nvme*n1; do
     # Überspringe Root-Volume (normalerweise nvme0n1) und EFI-Partitionen
     if [ -b "$device" ] && ! mountpoint -q "$device" 2>/dev/null; then
         # Prüfe ob es nicht das Root-Device ist
-        ROOT_DEVICE=$(findmnt -n -o SOURCE /)
+        # Verwende findmnt falls verfügbar, sonst Fallback auf df
+        if command -v findmnt >/dev/null 2>&1; then
+            ROOT_DEVICE=$(findmnt -n -o SOURCE / 2>/dev/null || echo "")
+        else
+            ROOT_DEVICE=$(df / | tail -1 | awk '{print $1}' 2>/dev/null || echo "")
+        fi
         if [ "$device" != "$ROOT_DEVICE" ] && [ "${device}" != "/dev/nvme0n1" ]; then
             DOCKER_VOLUME_DEVICE="$device"
             echo "Gefundenes zusätzliches Volume: $DOCKER_VOLUME_DEVICE"
@@ -249,12 +254,24 @@ if [ -n "$DOCKER_VOLUME_DEVICE" ] && [ -b "$DOCKER_VOLUME_DEVICE" ]; then
     echo "Zusätzliches Volume $DOCKER_VOLUME_DEVICE gefunden"
     
     # Prüfe ob Volume bereits formatiert ist
-    if ! blkid "$DOCKER_VOLUME_DEVICE" > /dev/null 2>&1; then
-        echo "Formatiere $DOCKER_VOLUME_DEVICE mit XFS..."
-        mkfs.xfs -f "$DOCKER_VOLUME_DEVICE" 2>&1
-        echo "Formatierung abgeschlossen"
+    # Verwende blkid falls verfügbar, sonst Fallback auf file
+    if command -v blkid >/dev/null 2>&1; then
+        if ! blkid "$DOCKER_VOLUME_DEVICE" > /dev/null 2>&1; then
+            echo "Formatiere $DOCKER_VOLUME_DEVICE mit XFS..."
+            mkfs.xfs -f "$DOCKER_VOLUME_DEVICE" 2>&1
+            echo "Formatierung abgeschlossen"
+        else
+            echo "Volume ist bereits formatiert"
+        fi
     else
-        echo "Volume ist bereits formatiert"
+        # Fallback: Prüfe ob Dateisystem existiert
+        if file -s "$DOCKER_VOLUME_DEVICE" | grep -q "filesystem"; then
+            echo "Volume ist bereits formatiert"
+        else
+            echo "Formatiere $DOCKER_VOLUME_DEVICE mit XFS..."
+            mkfs.xfs -f "$DOCKER_VOLUME_DEVICE" 2>&1
+            echo "Formatierung abgeschlossen"
+        fi
     fi
     
     # Erstelle Mount-Point
@@ -300,11 +317,28 @@ if [ -n "$DOCKER_VOLUME_DEVICE" ] && [ -b "$DOCKER_VOLUME_DEVICE" ]; then
     fi
     
     # Füge Mount in /etc/fstab hinzu (falls noch nicht vorhanden)
-    VOLUME_UUID=$(blkid -s UUID -o value "$DOCKER_VOLUME_DEVICE")
+    # Verwende blkid falls verfügbar, sonst Fallback auf lsblk
+    if command -v blkid >/dev/null 2>&1; then
+        VOLUME_UUID=$(blkid -s UUID -o value "$DOCKER_VOLUME_DEVICE" 2>/dev/null || echo "")
+    elif command -v lsblk >/dev/null 2>&1; then
+        VOLUME_UUID=$(lsblk -no UUID "$DOCKER_VOLUME_DEVICE" 2>/dev/null || echo "")
+    else
+        # Fallback: Verwende Device-Name direkt (weniger optimal, aber funktioniert)
+        VOLUME_UUID=""
+    fi
+    
     if [ -n "$VOLUME_UUID" ]; then
         if ! grep -q "$DOCKER_VOLUME_MOUNT" /etc/fstab; then
             echo "UUID=$VOLUME_UUID $DOCKER_VOLUME_MOUNT xfs defaults,nofail 0 2" >> /etc/fstab
             echo "Eintrag in /etc/fstab hinzugefügt"
+        else
+            echo "Eintrag bereits in /etc/fstab vorhanden"
+        fi
+    else
+        # Fallback: Verwende Device-Name (funktioniert, aber weniger robust)
+        if ! grep -q "$DOCKER_VOLUME_MOUNT" /etc/fstab; then
+            echo "$DOCKER_VOLUME_DEVICE $DOCKER_VOLUME_MOUNT xfs defaults,nofail 0 2" >> /etc/fstab
+            echo "Eintrag in /etc/fstab hinzugefügt (mit Device-Name)"
         else
             echo "Eintrag bereits in /etc/fstab vorhanden"
         fi
