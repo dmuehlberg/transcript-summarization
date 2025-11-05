@@ -12,3 +12,4 @@ AWS_logs/cloud_init_output.log
 AWS_logs/docker_compose_logs.txt
 AWS_logs/user_data.log
 debug.log
+debug.log
