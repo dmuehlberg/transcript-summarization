@@ -1,5 +1,6 @@
 # setuptools==78.1.0
 # Fix PyTorch auf 2.8.0 für Kompatibilität mit pyannote.audio 3.4.0 (benötigt AudioMetaData)
+# torchvision 0.23.0 ist kompatibel mit torch 2.8.0
 torch==2.8.0
 torchaudio==2.8.0
-torchvision==0.18.0
+torchvision==0.23.0
