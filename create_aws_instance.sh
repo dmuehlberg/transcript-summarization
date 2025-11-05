@@ -218,36 +218,53 @@ docker --version 2>&1
 echo "=== Docker Volume Migration ==="
 DOCKER_VOLUME_MOUNT="/mnt/docker-data"
 
-# Finde das erste verfügbare zusätzliche NVMe-Volume (nicht Root-Volume)
+# Warte auf EBS-Volumes (können einige Sekunden brauchen, bis sie verfügbar sind)
+echo "Warte auf zusätzliche EBS-Volumes..."
+MAX_WAIT=60
+WAIT_COUNT=0
 DOCKER_VOLUME_DEVICE=""
-for device in /dev/nvme*n1; do
-    # Überspringe Root-Volume (normalerweise nvme0n1) und EFI-Partitionen
-    if [ -b "$device" ] && ! mountpoint -q "$device" 2>/dev/null; then
-        # Prüfe ob es nicht das Root-Device ist
-        # Verwende findmnt falls verfügbar, sonst Fallback auf df
-        if command -v findmnt >/dev/null 2>&1; then
-            ROOT_DEVICE=$(findmnt -n -o SOURCE / 2>/dev/null || echo "")
-        else
-            ROOT_DEVICE=$(df / | tail -1 | awk '{print $1}' 2>/dev/null || echo "")
+
+# Versuche bis zu 60 Sekunden, zusätzliche Volumes zu finden
+while [ $WAIT_COUNT -lt $MAX_WAIT ] && [ -z "$DOCKER_VOLUME_DEVICE" ]; do
+    # Finde das erste verfügbare zusätzliche NVMe-Volume (nicht Root-Volume)
+    for device in /dev/nvme*n1; do
+        # Überspringe Root-Volume (normalerweise nvme0n1) und EFI-Partitionen
+        if [ -b "$device" ] 2>/dev/null && ! mountpoint -q "$device" 2>/dev/null; then
+            # Prüfe ob es nicht das Root-Device ist
+            # Verwende findmnt falls verfügbar, sonst Fallback auf df
+            if command -v findmnt >/dev/null 2>&1; then
+                ROOT_DEVICE=$(findmnt -n -o SOURCE / 2>/dev/null || echo "")
+            else
+                ROOT_DEVICE=$(df / | tail -1 | awk '{print $1}' 2>/dev/null || echo "")
+            fi
+            if [ "$device" != "$ROOT_DEVICE" ] && [ "${device}" != "/dev/nvme0n1" ]; then
+                DOCKER_VOLUME_DEVICE="$device"
+                echo "Gefundenes zusätzliches Volume: $DOCKER_VOLUME_DEVICE"
+                break
+            fi
         fi
-        if [ "$device" != "$ROOT_DEVICE" ] && [ "${device}" != "/dev/nvme0n1" ]; then
-            DOCKER_VOLUME_DEVICE="$device"
-            echo "Gefundenes zusätzliches Volume: $DOCKER_VOLUME_DEVICE"
-            break
+    done
+    
+    # Fallback: Versuche spezifische Devices
+    if [ -z "$DOCKER_VOLUME_DEVICE" ]; then
+        for device in /dev/nvme1n1 /dev/nvme2n1 /dev/nvme3n1; do
+            if [ -b "$device" ] 2>/dev/null; then
+                DOCKER_VOLUME_DEVICE="$device"
+                echo "Verwende Fallback-Device: $DOCKER_VOLUME_DEVICE"
+                break
+            fi
+        done
+    fi
+    
+    # Wenn kein Volume gefunden, warte kurz und versuche es erneut
+    if [ -z "$DOCKER_VOLUME_DEVICE" ]; then
+        sleep 2
+        WAIT_COUNT=$((WAIT_COUNT + 2))
+        if [ $((WAIT_COUNT % 10)) -eq 0 ]; then
+            echo "Warte auf zusätzliche Volumes... ($WAIT_COUNT/$MAX_WAIT Sekunden)"
         fi
     fi
 done
-
-# Fallback: Versuche spezifische Devices
-if [ -z "$DOCKER_VOLUME_DEVICE" ]; then
-    for device in /dev/nvme1n1 /dev/nvme2n1 /dev/nvme3n1; do
-        if [ -b "$device" ]; then
-            DOCKER_VOLUME_DEVICE="$device"
-            echo "Verwende Fallback-Device: $DOCKER_VOLUME_DEVICE"
-            break
-        fi
-    done
-fi
 
 # Prüfe ob zusätzliches Volume verfügbar ist
 if [ -n "$DOCKER_VOLUME_DEVICE" ] && [ -b "$DOCKER_VOLUME_DEVICE" ]; then
@@ -317,20 +334,26 @@ if [ -n "$DOCKER_VOLUME_DEVICE" ] && [ -b "$DOCKER_VOLUME_DEVICE" ]; then
     fi
     
     # Füge Mount in /etc/fstab hinzu (falls noch nicht vorhanden)
+    # Warte kurz, damit UUID nach Formatierung verfügbar ist
+    sleep 2
+    
     # Verwende blkid falls verfügbar, sonst Fallback auf lsblk
+    VOLUME_UUID=""
     if command -v blkid >/dev/null 2>&1; then
         VOLUME_UUID=$(blkid -s UUID -o value "$DOCKER_VOLUME_DEVICE" 2>/dev/null || echo "")
+        # Versuche es nochmal nach kurzer Wartezeit, falls UUID noch nicht verfügbar
+        if [ -z "$VOLUME_UUID" ]; then
+            sleep 3
+            VOLUME_UUID=$(blkid -s UUID -o value "$DOCKER_VOLUME_DEVICE" 2>/dev/null || echo "")
+        fi
     elif command -v lsblk >/dev/null 2>&1; then
         VOLUME_UUID=$(lsblk -no UUID "$DOCKER_VOLUME_DEVICE" 2>/dev/null || echo "")
-    else
-        # Fallback: Verwende Device-Name direkt (weniger optimal, aber funktioniert)
-        VOLUME_UUID=""
     fi
     
-    if [ -n "$VOLUME_UUID" ]; then
+    if [ -n "$VOLUME_UUID" ] && [ "$VOLUME_UUID" != "" ]; then
         if ! grep -q "$DOCKER_VOLUME_MOUNT" /etc/fstab; then
             echo "UUID=$VOLUME_UUID $DOCKER_VOLUME_MOUNT xfs defaults,nofail 0 2" >> /etc/fstab
-            echo "Eintrag in /etc/fstab hinzugefügt"
+            echo "Eintrag in /etc/fstab hinzugefügt (UUID: $VOLUME_UUID)"
         else
             echo "Eintrag bereits in /etc/fstab vorhanden"
         fi
