@@ -168,7 +168,7 @@ create_instance_in_region() {
 
     # 4. User-Data-Skript für die automatische Installation erstellen
     log "Erstelle User-Data-Skript..."
-    USER_DATA=$(cat <<EOF
+    USER_DATA=$(cat <<'EOF'
 #!/bin/bash
 
 # User-Data Skript für WhisperX Installation
