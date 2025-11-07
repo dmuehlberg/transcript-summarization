@@ -159,16 +159,22 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = ({ onSelect
       enableResizing: true,
       cell: ({ row, getValue }) => {
         const isEditing = editingCell?.id === row.original.id && editingCell?.column === 'set_language';
+        const languageOptions = getLanguageOptions();
+        const currentValue = getValue();
         
         if (isEditing) {
+          // Sicherstellen, dass editValue einen gültigen Wert hat
+          // Verwende editValue, falls gesetzt, sonst den aktuellen Wert oder den ersten Optionenwert
+          const validValue = editValue || currentValue || languageOptions[0]?.value || 'auto';
+          
           return (
             <div className="flex items-center space-x-2">
               <Select
-                value={editValue}
+                value={validValue}
                 onChange={(e) => setEditValue(e.target.value)}
                 className="w-32"
               >
-                {getLanguageOptions().map((option) => (
+                {languageOptions.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
@@ -177,7 +183,9 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = ({ onSelect
               <Button
                 size="sm"
                 onClick={() => {
-                  updateLanguageMutation.mutate({ id: row.original.id, language: editValue });
+                  // Verwende den Wert, der im Select-Element angezeigt wird (validValue)
+                  // Das stellt sicher, dass der korrekte Wert gespeichert wird, auch wenn editValue noch nicht aktualisiert wurde
+                  updateLanguageMutation.mutate({ id: row.original.id, language: validValue });
                 }}
                 disabled={updateLanguageMutation.isPending}
               >
@@ -202,7 +210,9 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = ({ onSelect
               variant="ghost"
               onClick={() => {
                 setEditingCell({ id: row.original.id, column: 'set_language' });
-                setEditValue(getValue() || '');
+                // Verwende den aktuellen Wert oder den ersten Optionenwert als Fallback
+                const initialValue = currentValue || languageOptions[0]?.value || 'auto';
+                setEditValue(initialValue);
               }}
             >
               Bearbeiten
