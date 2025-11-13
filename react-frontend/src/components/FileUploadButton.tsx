@@ -18,10 +18,18 @@ export const FileUploadButton: React.FC<FileUploadButtonProps> = ({
     mutationFn: (file: File) => csvImportApi.importCalendarCsv(file, 'internal'),
     onSuccess: () => {
       setIsUploading(false);
+      // File-Input zurücksetzen, damit beim nächsten Mal das onChange-Event wieder ausgelöst wird
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
       onSuccess?.();
     },
     onError: (error: Error) => {
       setIsUploading(false);
+      // File-Input zurücksetzen, damit beim nächsten Mal das onChange-Event wieder ausgelöst wird
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
       onError?.(error.message);
     },
   });
