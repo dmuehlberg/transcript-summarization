@@ -1,7 +1,7 @@
 import json
 import logging
 import httpx
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
 from datetime import datetime
 import pytz
 
@@ -351,4 +351,39 @@ End Date: {end_date}"""
         if value is None or value == "":
             return ""
         return str(value).strip()
+    
+    async def check_availability(self) -> Tuple[bool, str]:
+        """
+        Prüft, ob Ollama erreichbar ist und das konfigurierte Modell verfügbar ist.
+        
+        Returns:
+            Tuple (erfolgreich: bool, nachricht: str)
+        """
+        try:
+            # Prüfe zuerst, ob Ollama erreichbar ist
+            url = f"{self.ollama_base_url}/api/tags"
+            
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                try:
+                    response = await client.get(url)
+                    response.raise_for_status()
+                except httpx.RequestError as e:
+                    return False, f"Ollama-Server nicht erreichbar unter {self.ollama_base_url}: {str(e)}"
+                except httpx.HTTPStatusError as e:
+                    return False, f"Ollama-Server antwortet mit Fehler {e.response.status_code}: {str(e)}"
+                
+                # Prüfe, ob das Modell verfügbar ist
+                models_data = response.json()
+                available_models = [model.get("name", "") for model in models_data.get("models", [])]
+                
+                if self.model not in available_models:
+                    available_str = ", ".join(available_models[:5])  # Erste 5 Modelle anzeigen
+                    if len(available_models) > 5:
+                        available_str += f" ... (insgesamt {len(available_models)} Modelle)"
+                    return False, f"Modell '{self.model}' nicht verfügbar. Verfügbare Modelle: {available_str if available_models else 'keine'}"
+                
+                return True, f"Ollama erreichbar und Modell '{self.model}' verfügbar"
+                
+        except Exception as e:
+            return False, f"Unerwarteter Fehler bei Ollama-Prüfung: {str(e)}"
 

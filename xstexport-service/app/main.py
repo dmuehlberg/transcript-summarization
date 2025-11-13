@@ -15,7 +15,7 @@ from app.services.file_extractor import extract_calendar_from_existing_file, ext
 from app.services.file_service import list_app_files, list_data_directory_files
 from app.services.pst_folder_service import list_pst_folders
 from app.services.db_service import DatabaseService
-from app.config.database import get_db_config
+from app.config.database import get_db_config, get_ollama_config
 
 # Logger konfigurieren
 logging.basicConfig(level=logging.INFO)
@@ -44,6 +44,21 @@ async def startup_event():
         logger.info("Anwendung gestartet")
         # Tabelle erstellen, falls sie noch nicht existiert
         db_service.create_table_if_not_exists()
+        
+        # Prüfe Ollama-Verfügbarkeit (nicht-blockierend)
+        try:
+            from app.services.llm_service import LLMService
+            ollama_config = get_ollama_config()
+            llm_service = LLMService(ollama_config['base_url'], ollama_config['model'])
+            is_available, message = await llm_service.check_availability()
+            if is_available:
+                logger.info(f"✅ Ollama-Prüfung erfolgreich: {message}")
+            else:
+                logger.warning(f"⚠️ Ollama-Prüfung fehlgeschlagen: {message}")
+        except Exception as e:
+            logger.warning(f"⚠️ Ollama-Prüfung konnte nicht durchgeführt werden: {str(e)}")
+            # Container startet trotzdem weiter
+        
     except Exception as e:
         logger.error(f"Fehler beim Start: {str(e)}")
         raise
