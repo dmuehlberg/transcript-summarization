@@ -2,7 +2,7 @@
 
 ## Übersicht
 
-Dieses Dokument beschreibt die Implementierung einer automatischen Konvertierung von natürlichen Serientermin-Beschreibungen (aus `meeting_series_rhythm`, `meeting_series_start_date`, `meeting_series_end_date`) in strukturierte RRULE-Felder mittels Ollama LLM (qwen2.5).
+Dieses Dokument beschreibt die Implementierung einer automatischen Konvertierung von natürlichen Serientermin-Beschreibungen (aus `meeting_series_rhythm`, `meeting_series_start_date`, `meeting_series_end_date`) in strukturierte RRULE-Felder mittels Ollama LLM (phi4-mini:3.8b).
 
 ## Architektur-Übersicht
 
@@ -10,7 +10,7 @@ Dieses Dokument beschreibt die Implementierung einer automatischen Konvertierung
 CSV-Import → DB-Import → LLM-Verarbeitung → DB-Update
      ↓            ↓              ↓              ↓
 calendar_data  calendar_data  Ollama API   calendar_data
-                              (qwen2.5)    (erweiterte Felder)
+                              (phi4-mini:3.8b)    (erweiterte Felder)
 ```
 
 ## 1. Konfiguration
@@ -23,7 +23,7 @@ calendar_data  calendar_data  Ollama API   calendar_data
 ```env
 # Ollama LLM Konfiguration
 OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=qwen2.5
+OLLAMA_MODEL=phi4-mini:3.8b
 ```
 
 **Begründung:**
@@ -58,7 +58,7 @@ ollama>=0.1.0
 
 ```python
 class LLMService:
-    def __init__(self, ollama_base_url: str, model: str = "qwen2.5")
+    def __init__(self, ollama_base_url: str, model: str = "phi4-mini:3.8b")
     async def parse_meeting_series(self, rhythm: str, start_date: str, end_date: str) -> Dict[str, Any]
     def _build_system_prompt(self) -> str
     def _build_user_prompt(self, rhythm: str, start_date: str, end_date: str) -> str
@@ -100,7 +100,7 @@ End Date: 2025-11-10T14:30:00+01:00
 **Request-Body:**
 ```json
 {
-  "model": "qwen2.5",
+  "model": "phi4-mini:3.8b",
   "system": "<system_prompt>",
   "prompt": "<user_prompt>",
   "stream": false,
@@ -258,7 +258,7 @@ def get_ollama_config():
     """Gibt die Ollama-Konfiguration zurück."""
     return {
         "base_url": os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
-        "model": os.getenv("OLLAMA_MODEL", "qwen2.5")
+        "model": os.getenv("OLLAMA_MODEL", "phi4-mini:3.8b")
     }
 ```
 
@@ -445,7 +445,7 @@ def convert_to_text(value: Any) -> Optional[str]:
 ### 11.2 Externe Services
 
 - Ollama-Container muss laufen (Port 11434)
-- qwen2.5 Modell muss in Ollama verfügbar sein
+- phi4-mini:3.8b Modell muss in Ollama verfügbar sein
 
 ## 12. Rollback-Strategie
 
