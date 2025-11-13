@@ -14,6 +14,8 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
 import tempfile
 import pytz
+import asyncio
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -196,6 +198,218 @@ class DatabaseService:
             df_mapped.to_sql(table_name, self.engine, if_exists='append', index=False)
             logger.info(f"Daten erfolgreich in Tabelle {table_name} importiert")
             
+            # Nach erfolgreichem CSV-Import: LLM-Verarbeitung starten
+            try:
+                # Rufe die async Methode in einem neuen Event Loop auf
+                # (wird in einem separaten Thread ausgeführt, um Konflikte zu vermeiden)
+                stats = self._run_async_llm_processing(table_name)
+                logger.info(f"LLM-Verarbeitung abgeschlossen: {stats}")
+            except Exception as e:
+                logger.warning(f"LLM-Verarbeitung fehlgeschlagen, aber CSV-Import erfolgreich: {str(e)}")
+                # Nicht als kritischer Fehler behandeln
+            
         except Exception as e:
             logger.error(f"Fehler beim Importieren der CSV-Datei: {str(e)}")
-            raise 
+            raise
+    
+    def get_rows_with_meeting_series(self, table_name: str = "calendar_data") -> List[Dict[str, Any]]:
+        """
+        Ruft alle Zeilen mit gefülltem meeting_series_rhythm ab.
+        
+        Args:
+            table_name: Name der Tabelle (Standard: "calendar_data")
+        
+        Returns:
+            Liste von Dictionaries mit id, meeting_series_rhythm, meeting_series_start_date, meeting_series_end_date
+        """
+        try:
+            sql = text(f"""
+                SELECT id, meeting_series_rhythm, meeting_series_start_date, meeting_series_end_date
+                FROM {table_name}
+                WHERE meeting_series_rhythm IS NOT NULL 
+                  AND meeting_series_rhythm != ''
+                  AND (meeting_series_start_time IS NULL OR meeting_series_end_time IS NULL)
+            """)
+            
+            with self.engine.connect() as conn:
+                result = conn.execute(sql)
+                rows = []
+                for row in result:
+                    rows.append({
+                        'id': row[0],
+                        'meeting_series_rhythm': row[1],
+                        'meeting_series_start_date': row[2],
+                        'meeting_series_end_date': row[3]
+                    })
+                
+                logger.info(f"Gefunden: {len(rows)} Zeilen mit meeting_series_rhythm zum Verarbeiten")
+                return rows
+        except SQLAlchemyError as e:
+            logger.error(f"Fehler beim Abrufen der Zeilen mit meeting_series_rhythm: {str(e)}")
+            raise
+    
+    def update_meeting_series_fields(
+        self, 
+        row_id: int, 
+        rrule_data: Dict[str, Any], 
+        table_name: str = "calendar_data"
+    ) -> None:
+        """
+        Aktualisiert eine Zeile mit den LLM-generierten RRULE-Feldern.
+        
+        Args:
+            row_id: ID der zu aktualisierenden Zeile
+            rrule_data: Dictionary mit RRULE-Feldern
+            table_name: Name der Tabelle (Standard: "calendar_data")
+        """
+        try:
+            # Konvertiere Datentypen für PostgreSQL
+            start_time = rrule_data.get('meeting_series_start_time')
+            end_time = rrule_data.get('meeting_series_end_time')
+            frequency = self._convert_to_text(rrule_data.get('meeting_series_frequency'))
+            interval = self._convert_to_int(rrule_data.get('meeting_series_interval'))
+            weekdays = self._convert_to_text(rrule_data.get('meeting_series_weekdays'))
+            monthday = self._convert_to_int(rrule_data.get('meeting_series_monthday'))
+            weekday_nth = self._convert_to_int(rrule_data.get('meeting_series_weekday_nth'))
+            months = self._convert_to_text(rrule_data.get('meeting_series_months'))
+            exceptions = self._convert_to_text(rrule_data.get('meeting_series_exceptions'))
+            
+            sql = text(f"""
+                UPDATE {table_name}
+                SET 
+                    meeting_series_start_time = :start_time,
+                    meeting_series_end_time = :end_time,
+                    meeting_series_frequency = :frequency,
+                    meeting_series_interval = :interval,
+                    meeting_series_weekdays = :weekdays,
+                    meeting_series_monthday = :monthday,
+                    meeting_series_weekday_nth = :weekday_nth,
+                    meeting_series_months = :months,
+                    meeting_series_exceptions = :exceptions
+                WHERE id = :id
+            """)
+            
+            with self.engine.connect() as conn:
+                conn.execute(sql, {
+                    'id': row_id,
+                    'start_time': start_time,
+                    'end_time': end_time,
+                    'frequency': frequency if frequency else None,
+                    'interval': interval,
+                    'weekdays': weekdays if weekdays else None,
+                    'monthday': monthday,
+                    'weekday_nth': weekday_nth,
+                    'months': months if months else None,
+                    'exceptions': exceptions
+                })
+                conn.commit()
+            
+            logger.debug(f"Zeile {row_id} erfolgreich aktualisiert")
+        except SQLAlchemyError as e:
+            logger.error(f"Fehler beim Aktualisieren der Zeile {row_id}: {str(e)}")
+            raise
+    
+    async def process_meeting_series_with_llm(
+        self, 
+        table_name: str = "calendar_data",
+        llm_service: Optional[Any] = None
+    ) -> Dict[str, Any]:
+        """
+        Orchestriert die gesamte LLM-Verarbeitung für Meeting-Series.
+        
+        Args:
+            table_name: Name der Tabelle (Standard: "calendar_data")
+            llm_service: Optionaler LLMService (wird erstellt falls None)
+        
+        Returns:
+            Dictionary mit Statistik (total, success, failed)
+        """
+        if llm_service is None:
+            from app.services.llm_service import LLMService
+            from app.config.database import get_ollama_config
+            ollama_config = get_ollama_config()
+            llm_service = LLMService(ollama_config['base_url'], ollama_config['model'])
+        
+        rows = self.get_rows_with_meeting_series(table_name)
+        stats = {'total': len(rows), 'success': 0, 'failed': 0}
+        
+        for row in rows:
+            try:
+                # Konvertiere start_date und end_date zu Strings falls nötig
+                start_date = row['meeting_series_start_date']
+                end_date = row['meeting_series_end_date']
+                
+                if isinstance(start_date, datetime):
+                    start_date = start_date.isoformat()
+                elif start_date is None:
+                    start_date = ""
+                else:
+                    start_date = str(start_date)
+                
+                if isinstance(end_date, datetime):
+                    end_date = end_date.isoformat()
+                elif end_date is None:
+                    end_date = ""
+                else:
+                    end_date = str(end_date)
+                
+                rrule_data = await llm_service.parse_meeting_series(
+                    row['meeting_series_rhythm'],
+                    start_date,
+                    end_date
+                )
+                self.update_meeting_series_fields(row['id'], rrule_data, table_name)
+                stats['success'] += 1
+            except Exception as e:
+                logger.error(f"Fehler bei LLM-Verarbeitung für Zeile {row['id']}: {str(e)}")
+                stats['failed'] += 1
+        
+        return stats
+    
+    def _convert_to_int(self, value: Any) -> Optional[int]:
+        """Hilfsmethode zur Konvertierung zu Integer."""
+        if value is None or value == "":
+            return None
+        try:
+            return int(value)
+        except (ValueError, TypeError):
+            return None
+    
+    def _convert_to_text(self, value: Any) -> Optional[str]:
+        """Hilfsmethode zur Konvertierung zu Text."""
+        if value is None or value == "":
+            return None
+        return str(value).strip()
+    
+    def _run_async_llm_processing(self, table_name: str) -> Dict[str, Any]:
+        """
+        Führt die async LLM-Verarbeitung in einem neuen Event Loop aus.
+        Diese Methode ist synchron und kann von synchronen Methoden aufgerufen werden.
+        """
+        def run_in_thread():
+            # Erstelle einen neuen Event Loop für diesen Thread
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            try:
+                return new_loop.run_until_complete(self.process_meeting_series_with_llm(table_name))
+            finally:
+                new_loop.close()
+        
+        # Führe die async Funktion in einem separaten Thread aus
+        result_container = {}
+        exception_container = {}
+        
+        def thread_target():
+            try:
+                result_container['result'] = run_in_thread()
+            except Exception as e:
+                exception_container['exception'] = e
+        
+        thread = threading.Thread(target=thread_target)
+        thread.start()
+        thread.join()
+        
+        if 'exception' in exception_container:
+            raise exception_container['exception']
+        
+        return result_container['result'] 

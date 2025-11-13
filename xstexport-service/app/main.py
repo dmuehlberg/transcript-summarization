@@ -383,6 +383,7 @@ async def import_calendar_csv(
         logger.info(f"Importiere CSV-Datei in Tabelle: {table_name} mit Quelle: {source}")
         db_service.import_csv_to_db(temp_file_path, table_name, source)
         
+        # LLM-Verarbeitung wird automatisch in import_csv_to_db aufgerufen
         logger.info("CSV-Import erfolgreich abgeschlossen")
         return JSONResponse(
             content={
@@ -408,3 +409,27 @@ async def import_calendar_csv(
         if temp_dir and os.path.exists(temp_dir):
             shutil.rmtree(temp_dir)
             logger.info(f"Temporäres Verzeichnis bereinigt: {temp_dir}")
+
+@app.post("/process-meeting-series")
+async def process_meeting_series(
+    table_name: str = Form("calendar_data", description="Name der Tabelle")
+):
+    """
+    Verarbeitet alle Zeilen mit meeting_series_rhythm mittels LLM.
+    Nützlich für Re-Processing oder nach manuellen DB-Updates.
+    """
+    try:
+        stats = await db_service.process_meeting_series_with_llm(table_name)
+        return JSONResponse(
+            content={
+                "status": "success",
+                "message": "LLM-Verarbeitung abgeschlossen",
+                "statistics": stats
+            }
+        )
+    except Exception as e:
+        logger.error(f"Fehler bei LLM-Verarbeitung: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Fehler bei LLM-Verarbeitung: {str(e)}"
+        )

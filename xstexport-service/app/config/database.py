@@ -27,4 +27,11 @@ def get_db_config():
         "database": os.getenv("DB_NAME", "xstexport"),
         "user": os.getenv("DB_USER", "postgres"),
         "password": os.getenv("DB_PASSWORD", "postgres")
+    }
+
+def get_ollama_config():
+    """Gibt die Ollama-Konfiguration zurück."""
+    return {
+        "base_url": os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
+        "model": os.getenv("OLLAMA_MODEL", "phi4-mini:3.8b")
     } 
