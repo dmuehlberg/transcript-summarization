@@ -134,6 +134,13 @@ create_instance_in_region() {
             --port 8000 \
             --cidr 0.0.0.0/0 > /dev/null
         
+        # Ollama API auf Port 11434 erlauben
+        aws ec2 authorize-security-group-ingress --region $region \
+            --group-id $SG_ID \
+            --protocol tcp \
+            --port 11434 \
+            --cidr 0.0.0.0/0 > /dev/null
+        
         log "Sicherheitsgruppe erstellt mit ID: $SG_ID"
     fi
 
@@ -520,6 +527,72 @@ fi
 echo "=== EC2-USER SETUP ABGESCHLOSSEN ==="
 EOS
 
+# Ollama-GPU Installation
+echo "=== OLLAMA-GPU INSTALLATION ==="
+cd /home/ec2-user/transcript-summarization
+
+# Prüfe docker-compose Verfügbarkeit
+DOCKER_COMPOSE_CMD=""
+if command -v docker-compose &> /dev/null; then
+    DOCKER_COMPOSE_CMD="docker-compose"
+elif [ -f "/usr/local/bin/docker-compose" ]; then
+    DOCKER_COMPOSE_CMD="/usr/local/bin/docker-compose"
+else
+    echo "FEHLER: docker-compose nicht gefunden"
+    exit 1
+fi
+
+# Starte Ollama-GPU Container
+echo "Starte Ollama-GPU Container..."
+$DOCKER_COMPOSE_CMD --profile gpu-nvidia up -d ollama-gpu 2>&1
+
+# Warte auf Container-Start (max. 2 Minuten)
+echo "Warte auf Ollama-Container-Start..."
+MAX_WAIT=120
+WAIT_COUNT=0
+OLLAMA_READY=false
+
+while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
+    if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
+        echo "✅ Ollama-Container läuft"
+        OLLAMA_READY=true
+        break
+    fi
+    if [ $((WAIT_COUNT % 15)) -eq 0 ]; then
+        echo "Warte auf Ollama... ($WAIT_COUNT/$MAX_WAIT Sekunden)"
+    fi
+    sleep 5
+    WAIT_COUNT=$((WAIT_COUNT + 5))
+done
+
+# Pull qwen2.5:7b Modell
+if [ "$OLLAMA_READY" = "true" ]; then
+    echo "Pulle qwen2.5:7b Modell..."
+    
+    # Versuche Modell-Pull direkt im Container
+    if docker exec ollama ollama pull qwen2.5:7b 2>&1; then
+        echo "✅ qwen2.5:7b Modell erfolgreich gepullt"
+    else
+        echo "⚠️ Warnung: Direkter Pull fehlgeschlagen, versuche alternativen Ansatz..."
+        # Alternativer Ansatz: Temporärer Container mit shared volume
+        docker run --rm \
+            --network transcript-summarization_demo \
+            -v transcript-summarization_ollama_storage:/root/.ollama \
+            ollama/ollama:latest \
+            /bin/sh -c "sleep 3; OLLAMA_HOST=ollama:11434 ollama pull qwen2.5:7b" 2>&1
+        
+        if [ $? -eq 0 ]; then
+            echo "✅ qwen2.5:7b Modell erfolgreich gepullt (alternativer Ansatz)"
+        else
+            echo "⚠️ Warnung: Modell-Pull fehlgeschlagen, kann später manuell durchgeführt werden"
+        fi
+    fi
+else
+    echo "⚠️ Warnung: Ollama-Container nicht erreichbar, Modell-Pull wird übersprungen"
+fi
+
+echo "=== OLLAMA-GPU INSTALLATION ABGESCHLOSSEN ==="
+
 chmod +x /home/ec2-user/ec2_setup.sh
 sudo -u ec2-user bash /home/ec2-user/ec2_setup.sh
 
@@ -529,6 +602,19 @@ echo "Datum: $(date)"
 
 echo "Docker Container:"
 sudo -u ec2-user bash -c 'cd /home/ec2-user/transcript-summarization && docker-compose ps 2>/dev/null || echo "Container Status nicht verfügbar"'
+
+echo "Ollama Container:"
+sudo -u ec2-user bash -c 'cd /home/ec2-user/transcript-summarization && docker ps --filter name=ollama --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || echo "Ollama Container Status nicht verfügbar"'
+
+echo "Ollama API Check:"
+curl -s http://localhost:11434/api/tags > /dev/null 2>&1 && echo "✅ Ollama API: OK" || echo "⚠️ Ollama API: Nicht verfügbar"
+
+echo "Ollama Modell Check:"
+if curl -s http://localhost:11434/api/tags 2>/dev/null | grep -q "qwen2.5:7b"; then
+    echo "✅ qwen2.5:7b Modell verfügbar"
+else
+    echo "⚠️ qwen2.5:7b Modell nicht gefunden"
+fi
 
 PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
 echo "Public IP: $PUBLIC_IP"
@@ -585,6 +671,8 @@ EOF
     info "3. Container Status prüfen: ssh -i $KEY_FILE ec2-user@$PUBLIC_IP 'cd transcript-summarization && /usr/local/bin/docker-compose ps'"
     info "4. WhisperX API testen: http://$PUBLIC_IP:8000/docs"
     info "5. Health Check: curl http://$PUBLIC_IP:8000/health"
+    info "6. Ollama API testen: curl http://$PUBLIC_IP:11434/api/tags"
+    info "7. Ollama Modell-Liste: curl http://$PUBLIC_IP:11434/api/tags | jq"
     info ""
     info "🔧 MANUELLE REPARATUR (falls nötig):"
     info "   ssh -i $KEY_FILE ec2-user@$PUBLIC_IP"
@@ -682,6 +770,19 @@ EOF
                     exit 0
                 else
                     echo \" - API noch nicht verfügbar\"
+                fi
+                
+                # 5. Ollama Status
+                echo \"OLLAMA CHECK:\"
+                if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
+                    echo \" - Ollama API verfügbar\"
+                    if curl -s http://localhost:11434/api/tags 2>/dev/null | grep -q \"qwen2.5:7b\"; then
+                        echo \" - qwen2.5:7b Modell verfügbar\"
+                    else
+                        echo \" - qwen2.5:7b Modell noch nicht verfügbar\"
+                    fi
+                else
+                    echo \" - Ollama API noch nicht verfügbar\"
                 fi
                 
                 echo \"================================\"
