@@ -527,8 +527,42 @@ fi
 echo "=== EC2-USER SETUP ABGESCHLOSSEN ==="
 EOS
 
-# Ollama-GPU Installation
+chmod +x /home/ec2-user/ec2_setup.sh
+sudo -u ec2-user bash /home/ec2-user/ec2_setup.sh
+
+# Ollama-GPU Installation (nach WhisperX-Installation)
 echo "=== OLLAMA-GPU INSTALLATION ==="
+
+# Warte auf WhisperX-Container (max. 10 Minuten)
+echo "Warte auf WhisperX-Container..."
+WHISPERX_WAIT=600
+WHISPERX_COUNT=0
+WHISPERX_READY=false
+
+while [ $WHISPERX_COUNT -lt $WHISPERX_WAIT ]; do
+    if curl -s http://localhost:8000/health > /dev/null 2>&1; then
+        echo "✅ WhisperX-Container läuft"
+        WHISPERX_READY=true
+        break
+    fi
+    if [ $((WHISPERX_COUNT % 60)) -eq 0 ]; then
+        echo "Warte auf WhisperX... ($WHISPERX_COUNT/$WHISPERX_WAIT Sekunden)"
+    fi
+    sleep 10
+    WHISPERX_COUNT=$((WHISPERX_COUNT + 10))
+done
+
+if [ "$WHISPERX_READY" != "true" ]; then
+    echo "⚠️ Warnung: WhisperX-Container nicht erreichbar nach $WHISPERX_WAIT Sekunden"
+    echo "Ollama-Installation wird trotzdem versucht..."
+fi
+
+# Prüfe ob Repository vorhanden ist
+if [ ! -d "/home/ec2-user/transcript-summarization" ]; then
+    echo "⚠️ Warnung: Repository nicht gefunden, warte kurz..."
+    sleep 30
+fi
+
 cd /home/ec2-user/transcript-summarization
 
 # Prüfe docker-compose Verfügbarkeit
@@ -592,9 +626,6 @@ else
 fi
 
 echo "=== OLLAMA-GPU INSTALLATION ABGESCHLOSSEN ==="
-
-chmod +x /home/ec2-user/ec2_setup.sh
-sudo -u ec2-user bash /home/ec2-user/ec2_setup.sh
 
 # Final Status
 echo "=== INSTALLATION STATUS ==="
