@@ -220,263 +220,29 @@ fi
 echo "Docker Status:"
 systemctl status docker --no-pager 2>&1
 docker --version 2>&1
+echo "=== Docker Installation abgeschlossen ==="
 
-# Docker auf größeres EBS-Volume umziehen (falls verfügbar)
-echo "=== Docker Volume Migration ==="
-DOCKER_VOLUME_MOUNT="/mnt/docker-data"
-
-# Warte auf EBS-Volumes (können einige Sekunden brauchen, bis sie verfügbar sind)
-echo "Warte auf zusätzliche EBS-Volumes..."
-MAX_WAIT=60
-WAIT_COUNT=0
-DOCKER_VOLUME_DEVICE=""
-
-# Versuche bis zu 60 Sekunden, zusätzliche Volumes zu finden
-while [ $WAIT_COUNT -lt $MAX_WAIT ] && [ -z "$DOCKER_VOLUME_DEVICE" ]; do
-    # Finde das erste verfügbare zusätzliche NVMe-Volume (nicht Root-Volume)
-    for device in /dev/nvme*n1; do
-        # Prüfe ob es ein Block-Device ist
-        if [ -b "$device" ] 2>/dev/null; then
-            # Prüfe ob das Device bereits gemountet ist (mit findmnt oder df)
-            IS_MOUNTED=false
-            if command -v findmnt >/dev/null 2>&1; then
-                if findmnt "$device" >/dev/null 2>&1; then
-                    IS_MOUNTED=true
-                fi
-            else
-                if df | grep -q "$device"; then
-                    IS_MOUNTED=true
-                fi
-            fi
-            
-            # Überspringe gemountete Devices
-            if [ "$IS_MOUNTED" = "false" ]; then
-                # Prüfe ob es nicht das Root-Device ist
-                # Verwende findmnt falls verfügbar, sonst Fallback auf df
-                if command -v findmnt >/dev/null 2>&1; then
-                    ROOT_DEVICE=$(findmnt -n -o SOURCE / 2>/dev/null || echo "")
-                else
-                    ROOT_DEVICE=$(df / | tail -1 | awk '{print $1}' 2>/dev/null || echo "")
-                fi
-                # Prüfe ob es nicht das Root-Device oder nvme0n1 ist
-                if [ "$device" != "$ROOT_DEVICE" ] && [ "$device" != "/dev/nvme0n1" ]; then
-                    DOCKER_VOLUME_DEVICE="$device"
-                    echo "Gefundenes zusätzliches Volume: $DOCKER_VOLUME_DEVICE"
-                    break 2  # Breche beide Schleifen (for und while)
-                fi
-            fi
-        fi
-    done
-    
-    # Fallback: Versuche spezifische Devices
-    if [ -z "$DOCKER_VOLUME_DEVICE" ]; then
-        for device in /dev/nvme1n1 /dev/nvme2n1 /dev/nvme3n1; do
-            if [ -b "$device" ] 2>/dev/null; then
-                # Prüfe ob das Device bereits gemountet ist
-                IS_MOUNTED=false
-                if command -v findmnt >/dev/null 2>&1; then
-                    if findmnt "$device" >/dev/null 2>&1; then
-                        IS_MOUNTED=true
-                    fi
-                else
-                    if df | grep -q "$device"; then
-                        IS_MOUNTED=true
-                    fi
-                fi
-                if [ "$IS_MOUNTED" = "false" ]; then
-                    DOCKER_VOLUME_DEVICE="$device"
-                    echo "Verwende Fallback-Device: $DOCKER_VOLUME_DEVICE"
-                    break 2  # Breche beide Schleifen (for und while)
-                fi
-            fi
-        done
-    fi
-    
-    # Wenn kein Volume gefunden, warte kurz und versuche es erneut
-    if [ -z "$DOCKER_VOLUME_DEVICE" ]; then
-        sleep 2
-        WAIT_COUNT=$((WAIT_COUNT + 2))
-        if [ $((WAIT_COUNT % 10)) -eq 0 ]; then
-            echo "Warte auf zusätzliche Volumes... ($WAIT_COUNT/$MAX_WAIT Sekunden)"
-        fi
-    fi
-done
-
-# Prüfe ob zusätzliches Volume verfügbar ist
-if [ -n "$DOCKER_VOLUME_DEVICE" ] && [ -b "$DOCKER_VOLUME_DEVICE" ]; then
-    echo "Zusätzliches Volume $DOCKER_VOLUME_DEVICE gefunden"
-    
-    # Prüfe ob Volume bereits formatiert ist
-    # Verwende blkid falls verfügbar, sonst Fallback auf file
-    if command -v blkid >/dev/null 2>&1; then
-        if ! blkid "$DOCKER_VOLUME_DEVICE" > /dev/null 2>&1; then
-            echo "Formatiere $DOCKER_VOLUME_DEVICE mit XFS..."
-            mkfs.xfs -f "$DOCKER_VOLUME_DEVICE" 2>&1
-            echo "Formatierung abgeschlossen"
-        else
-            echo "Volume ist bereits formatiert"
-        fi
-    else
-        # Fallback: Prüfe ob Dateisystem existiert
-        if file -s "$DOCKER_VOLUME_DEVICE" | grep -q "filesystem"; then
-            echo "Volume ist bereits formatiert"
-        else
-            echo "Formatiere $DOCKER_VOLUME_DEVICE mit XFS..."
-            mkfs.xfs -f "$DOCKER_VOLUME_DEVICE" 2>&1
-            echo "Formatierung abgeschlossen"
-        fi
-    fi
-    
-    # Erstelle Mount-Point
-    mkdir -p "$DOCKER_VOLUME_MOUNT" 2>&1
-    
-    # Prüfe ob bereits gemountet
-    if ! mountpoint -q "$DOCKER_VOLUME_MOUNT"; then
-        echo "Mounte $DOCKER_VOLUME_DEVICE auf $DOCKER_VOLUME_MOUNT..."
-        mount "$DOCKER_VOLUME_DEVICE" "$DOCKER_VOLUME_MOUNT" 2>&1
-        echo "Volume erfolgreich gemountet"
-    else
-        echo "Volume ist bereits gemountet"
-    fi
-    
-    # Docker stoppen für Migration
-    echo "Stoppe Docker für Migration..."
-    systemctl stop docker 2>&1
-    
-    # Migriere bestehende Docker-Daten (falls vorhanden)
-    if [ -d "/var/lib/docker" ] && [ "$(ls -A /var/lib/docker 2>/dev/null)" ]; then
-        echo "Migriere bestehende Docker-Daten..."
-        if [ ! "$(ls -A $DOCKER_VOLUME_MOUNT 2>/dev/null)" ]; then
-            rsync -av /var/lib/docker/ "$DOCKER_VOLUME_MOUNT/" 2>&1
-            echo "Daten-Migration abgeschlossen"
-        else
-            echo "Docker-Daten bereits auf Volume vorhanden"
-        fi
-    else
-        echo "Keine bestehenden Docker-Daten zum Migrieren"
-        mkdir -p "$DOCKER_VOLUME_MOUNT" 2>&1
-    fi
-    
-    # Erstelle Backup des alten Verzeichnisses und Symlink
-    if [ -d "/var/lib/docker" ] && [ ! -L "/var/lib/docker" ]; then
-        echo "Erstelle Backup und Symlink..."
-        mv /var/lib/docker /var/lib/docker.backup 2>&1
-    fi
-    
-    # Erstelle Symlink
-    if [ ! -e "/var/lib/docker" ]; then
-        ln -s "$DOCKER_VOLUME_MOUNT" /var/lib/docker 2>&1
-        echo "Symlink /var/lib/docker -> $DOCKER_VOLUME_MOUNT erstellt"
-    fi
-    
-    # Füge Mount in /etc/fstab hinzu (falls noch nicht vorhanden)
-    # Warte kurz, damit UUID nach Formatierung verfügbar ist
-    sleep 2
-    
-    # Verwende blkid falls verfügbar, sonst Fallback auf lsblk
-    VOLUME_UUID=""
-    if command -v blkid >/dev/null 2>&1; then
-        VOLUME_UUID=$(blkid -s UUID -o value "$DOCKER_VOLUME_DEVICE" 2>/dev/null || echo "")
-        # Versuche es nochmal nach kurzer Wartezeit, falls UUID noch nicht verfügbar
-        if [ -z "$VOLUME_UUID" ]; then
-            sleep 3
-            VOLUME_UUID=$(blkid -s UUID -o value "$DOCKER_VOLUME_DEVICE" 2>/dev/null || echo "")
-        fi
-    elif command -v lsblk >/dev/null 2>&1; then
-        VOLUME_UUID=$(lsblk -no UUID "$DOCKER_VOLUME_DEVICE" 2>/dev/null || echo "")
-    fi
-    
-    if [ -n "$VOLUME_UUID" ] && [ "$VOLUME_UUID" != "" ]; then
-        if ! grep -q "$DOCKER_VOLUME_MOUNT" /etc/fstab; then
-            echo "UUID=$VOLUME_UUID $DOCKER_VOLUME_MOUNT xfs defaults,nofail 0 2" >> /etc/fstab
-            echo "Eintrag in /etc/fstab hinzugefügt (UUID: $VOLUME_UUID)"
-        else
-            echo "Eintrag bereits in /etc/fstab vorhanden"
-        fi
-    else
-        # Fallback: Verwende Device-Name (funktioniert, aber weniger robust)
-        if ! grep -q "$DOCKER_VOLUME_MOUNT" /etc/fstab; then
-            echo "$DOCKER_VOLUME_DEVICE $DOCKER_VOLUME_MOUNT xfs defaults,nofail 0 2" >> /etc/fstab
-            echo "Eintrag in /etc/fstab hinzugefügt (mit Device-Name)"
-        else
-            echo "Eintrag bereits in /etc/fstab vorhanden"
-        fi
-    fi
-    
-    # Starte Docker wieder
-    echo "Starte Docker..."
-    systemctl start docker 2>&1
-    
-    # Warte kurz auf Docker-Start
-    sleep 3
-    
-    # Prüfe Docker-Status
-    if systemctl is-active --quiet docker; then
-        echo "✅ Docker Volume Migration erfolgreich!"
-        echo "Docker Root Dir: $(docker info 2>/dev/null | grep 'Docker Root Dir' | awk '{print $4}')"
-        df -h "$DOCKER_VOLUME_MOUNT" 2>&1
-    else
-        echo "⚠️ Warnung: Docker konnte nicht gestartet werden, verwende Standard-Verzeichnis"
-        # Fallback: Entferne Symlink und verwende Standard
-        if [ -L "/var/lib/docker" ]; then
-            rm /var/lib/docker
-            if [ -d "/var/lib/docker.backup" ]; then
-                mv /var/lib/docker.backup /var/lib/docker
-            else
-                mkdir -p /var/lib/docker
-            fi
-            systemctl start docker 2>&1
-        fi
-    fi
-else
-    echo "Kein zusätzliches Volume gefunden - verwende Standard /var/lib/docker"
-fi
-
-echo "=== Docker Volume Migration abgeschlossen ==="
-
-# Docker Compose v2 und Buildx installieren
-echo "Installiere Docker Compose v2 und Buildx..."
-# Verwende die korrekte URL für Linux x86_64
-curl -L "https://github.com/docker/compose/releases/download/v2.40.1/docker-compose-linux-x86_64" -o /usr/local/bin/docker-compose
-chmod +x /usr/local/bin/docker-compose
-ln -sf /usr/local/bin/docker-compose /usr/bin/docker-compose
-
-# Docker Buildx v0.18.0+ installieren (unterstützt --allow flag)
-mkdir -p /usr/local/lib/docker/cli-plugins
-curl -L "https://github.com/docker/buildx/releases/download/v0.18.0/buildx-v0.18.0.linux-amd64" -o /usr/local/lib/docker/cli-plugins/docker-buildx
-chmod +x /usr/local/lib/docker/cli-plugins/docker-buildx
-
-# Docker Buildx Builder erstellen
-docker buildx create --use --name mybuilder
-
-echo "Docker Compose v2 und Buildx v0.18.0+ installiert"
-
-# Repository klonen (direkt, ohne ec2_setup.sh Wrapper)
-echo "Klone Repository..."
 cd /home/ec2-user
 if [ ! -d "transcript-summarization" ]; then
+    echo "Klone Repository..."
     sudo -u ec2-user git clone https://github.com/dmuehlberg/transcript-summarization.git 2>&1
-    if [ $? -eq 0 ]; then
-        echo "Repository erfolgreich geklont"
-    else
+    if [ $? -ne 0 ]; then
         echo "FEHLER: Repository konnte nicht geklont werden"
         exit 1
     fi
 else
-    echo "Repository bereits vorhanden"
+    echo "Repository bereits vorhanden - aktualisiere..."
     cd transcript-summarization
     sudo -u ec2-user git pull 2>&1 || echo "Git pull fehlgeschlagen"
 fi
 
 cd /home/ec2-user/transcript-summarization
 
-# .env-Datei aus /tmp kopieren (falls verfügbar)
 if [ -f "/tmp/.env" ]; then
-    echo "Kopiere .env-Datei mit HF_TOKEN..."
+    echo "Kopiere .env-Datei..."
     sudo -u ec2-user cp /tmp/.env .env
-    echo "✅ .env-Datei mit HF_TOKEN kopiert"
 else
-    echo "⚠️ .env-Datei nicht verfügbar - erstelle Standard .env"
+    echo "Erstelle Standard .env..."
     sudo -u ec2-user cat > .env << 'ENVEOF'
 POSTGRES_USER=root
 POSTGRES_PASSWORD=postgres
@@ -489,179 +255,30 @@ TARGETPLATFORM=linux/amd64
 ENVEOF
 fi
 
-# Zweites Installations-Skript erstellen
-echo "Erstelle install_services.sh Skript..."
-cat > /home/ec2-user/install_services.sh << 'INSTALLEOF'
-#!/bin/bash
-# Zweites Installations-Skript für WhisperX und Ollama
-# Wird nach Repository-Klon ausgeführt
-
-exec >> /var/log/install-services.log 2>&1
-echo "=== SERVICES INSTALLATION GESTARTET ==="
-echo "Datum: $(date)"
-
-# Warte auf Repository-Verfügbarkeit
-if [ ! -d "/home/ec2-user/transcript-summarization" ]; then
-    echo "Warte auf Repository..."
-    MAX_WAIT=300
-    WAIT_COUNT=0
-    while [ $WAIT_COUNT -lt $MAX_WAIT ] && [ ! -d "/home/ec2-user/transcript-summarization" ]; do
-        sleep 5
-        WAIT_COUNT=$((WAIT_COUNT + 5))
-    done
-fi
-
-cd /home/ec2-user/transcript-summarization
-
-# container-setup.sh ausführen
-if [ -f "./container-setup.sh" ]; then
-    echo "Führe container-setup.sh aus..."
-    chmod +x ./container-setup.sh
-    echo "n" | timeout 1800 ./container-setup.sh 2>&1
-    SETUP_EXIT_CODE=$?
-    if [ $SETUP_EXIT_CODE -eq 0 ]; then
-        echo "container-setup.sh erfolgreich abgeschlossen"
-    elif [ $SETUP_EXIT_CODE -eq 124 ]; then
-        echo "WARNUNG: container-setup.sh Timeout nach 30 Minuten"
-    else
-        echo "FEHLER: container-setup.sh fehlgeschlagen (Exit Code: $SETUP_EXIT_CODE)"
-    fi
-else
-    echo "FEHLER: container-setup.sh nicht gefunden!"
+echo "Lade setup-docker-volume.sh..."
+if ! curl -fsSL https://raw.githubusercontent.com/dmuehlberg/transcript-summarization/main/setup-docker-volume.sh -o /root/setup-docker-volume.sh; then
+    echo "FEHLER: setup-docker-volume.sh konnte nicht geladen werden"
     exit 1
 fi
+chmod +x /root/setup-docker-volume.sh
+/root/setup-docker-volume.sh
 
-# Ollama-GPU Installation (nach WhisperX-Installation)
-echo "=== OLLAMA-GPU INSTALLATION ==="
-
-# Warte auf WhisperX-Container (max. 10 Minuten)
-echo "Warte auf WhisperX-Container..."
-WHISPERX_WAIT=600
-WHISPERX_COUNT=0
-WHISPERX_READY=false
-
-while [ $WHISPERX_COUNT -lt $WHISPERX_WAIT ]; do
-    if curl -s http://localhost:8000/health > /dev/null 2>&1; then
-        echo "✅ WhisperX-Container läuft"
-        WHISPERX_READY=true
-        break
-    fi
-    if [ $((WHISPERX_COUNT % 60)) -eq 0 ]; then
-        echo "Warte auf WhisperX... ($WHISPERX_COUNT/$WHISPERX_WAIT Sekunden)"
-    fi
-    sleep 10
-    WHISPERX_COUNT=$((WHISPERX_COUNT + 10))
-done
-
-if [ "$WHISPERX_READY" != "true" ]; then
-    echo "⚠️ Warnung: WhisperX-Container nicht erreichbar nach $WHISPERX_WAIT Sekunden"
-    echo "Ollama-Installation wird trotzdem versucht..."
-fi
-
-# Prüfe docker-compose Verfügbarkeit
-DOCKER_COMPOSE_CMD=""
-if command -v docker-compose &> /dev/null; then
-    DOCKER_COMPOSE_CMD="docker-compose"
-elif [ -f "/usr/local/bin/docker-compose" ]; then
-    DOCKER_COMPOSE_CMD="/usr/local/bin/docker-compose"
-else
-    echo "FEHLER: docker-compose nicht gefunden"
+echo "Lade install-services.sh..."
+if ! curl -fsSL https://raw.githubusercontent.com/dmuehlberg/transcript-summarization/main/install-services.sh -o /home/ec2-user/install-services.sh; then
+    echo "FEHLER: install-services.sh konnte nicht geladen werden"
     exit 1
 fi
+chmod +x /home/ec2-user/install-services.sh
 
-# Starte Ollama-GPU Container
-echo "Starte Ollama-GPU Container..."
-$DOCKER_COMPOSE_CMD --profile gpu-nvidia up -d ollama-gpu 2>&1
-
-# Warte auf Container-Start (max. 2 Minuten)
-echo "Warte auf Ollama-Container-Start..."
-MAX_WAIT=120
-WAIT_COUNT=0
-OLLAMA_READY=false
-
-while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
-    if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
-        echo "✅ Ollama-Container läuft"
-        OLLAMA_READY=true
-        break
-    fi
-    if [ $((WAIT_COUNT % 15)) -eq 0 ]; then
-        echo "Warte auf Ollama... ($WAIT_COUNT/$MAX_WAIT Sekunden)"
-    fi
-    sleep 5
-    WAIT_COUNT=$((WAIT_COUNT + 5))
-done
-
-# Pull qwen2.5:7b Modell
-if [ "$OLLAMA_READY" = "true" ]; then
-    echo "Pulle qwen2.5:7b Modell..."
-    
-    # Versuche Modell-Pull direkt im Container
-    if docker exec ollama ollama pull qwen2.5:7b 2>&1; then
-        echo "✅ qwen2.5:7b Modell erfolgreich gepullt"
-    else
-        echo "⚠️ Warnung: Direkter Pull fehlgeschlagen, versuche alternativen Ansatz..."
-        # Alternativer Ansatz: Temporärer Container mit shared volume
-        docker run --rm \
-            --network transcript-summarization_demo \
-            -v transcript-summarization_ollama_storage:/root/.ollama \
-            ollama/ollama:latest \
-            /bin/sh -c "sleep 3; OLLAMA_HOST=ollama:11434 ollama pull qwen2.5:7b" 2>&1
-        
-        if [ $? -eq 0 ]; then
-            echo "✅ qwen2.5:7b Modell erfolgreich gepullt (alternativer Ansatz)"
-        else
-            echo "⚠️ Warnung: Modell-Pull fehlgeschlagen, kann später manuell durchgeführt werden"
-        fi
-    fi
-else
-    echo "⚠️ Warnung: Ollama-Container nicht erreichbar, Modell-Pull wird übersprungen"
-fi
-
-echo "=== OLLAMA-GPU INSTALLATION ABGESCHLOSSEN ==="
-
-# Final Status
-echo "=== INSTALLATION STATUS ==="
-echo "Datum: $(date)"
-
-echo "Docker Container:"
-cd /home/ec2-user/transcript-summarization
-$DOCKER_COMPOSE_CMD ps 2>/dev/null || echo "Container Status nicht verfügbar"
-
-echo "Ollama Container:"
-docker ps --filter name=ollama --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || echo "Ollama Container Status nicht verfügbar"
-
-echo "Ollama API Check:"
-curl -s http://localhost:11434/api/tags > /dev/null 2>&1 && echo "✅ Ollama API: OK" || echo "⚠️ Ollama API: Nicht verfügbar"
-
-echo "Ollama Modell Check:"
-if curl -s http://localhost:11434/api/tags 2>/dev/null | grep -q "qwen2.5:7b"; then
-    echo "✅ qwen2.5:7b Modell verfügbar"
-else
-    echo "⚠️ qwen2.5:7b Modell nicht gefunden"
-fi
-
-PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
-echo "Public IP: $PUBLIC_IP"
-echo "API URL: http://$PUBLIC_IP:8000/docs"
-echo "Ollama API: http://$PUBLIC_IP:11434/api/tags"
-
-curl -s http://localhost:8000/health 2>/dev/null && echo "API Health Check: OK" || echo "API Health Check: Nicht verfügbar"
-
-echo "=== SERVICES INSTALLATION ABGESCHLOSSEN ==="
-INSTALLEOF
-
-chmod +x /home/ec2-user/install_services.sh
-
-# Zweites Skript im Hintergrund starten (als ec2-user)
-echo "Starte install_services.sh im Hintergrund..."
-sudo -u ec2-user nohup /home/ec2-user/install_services.sh > /var/log/install-services.log 2>&1 &
+echo "Starte install-services.sh im Hintergrund..."
+sudo -u ec2-user nohup /home/ec2-user/install-services.sh > /var/log/install-services.log 2>&1 &
 
 echo "=== USER-DATA ABGESCHLOSSEN ==="
-echo "Services-Installation läuft im Hintergrund"
-echo "Log: /var/log/install-services.log"
-echo "WhisperX-Setup abgeschlossen um $(date)"
-echo "=== INSTALLATION LOG ENDE ==="
+echo "Bootstrap-Skripte laufen im Hintergrund"
+echo "Logs:"
+echo " - /var/log/setup-docker-volume.log"
+echo " - /var/log/install-services.log"
+
 
 EOF
 )
@@ -775,6 +392,14 @@ EOF
                 # 2. Cloud-init Status
                 echo \"CLOUD-INIT STATUS:\"
                 sudo cloud-init status 2>/dev/null || echo \"unbekannt\"
+                
+                # 2.3. Docker Volume Setup Log (falls vorhanden)
+                if [ -f /var/log/setup-docker-volume.log ]; then
+                    echo \"DOCKER VOLUME SETUP LOG (letzte 5 Zeilen):\"
+                    sudo tail -5 /var/log/setup-docker-volume.log
+                else
+                    echo \"Docker Volume Setup Log: Noch nicht verfügbar\"
+                fi
                 
                 # 2.5. Services Installation Log (falls vorhanden)
                 if [ -f /var/log/install-services.log ]; then
