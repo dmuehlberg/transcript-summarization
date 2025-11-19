@@ -270,6 +270,10 @@ if ! curl -fsSL https://raw.githubusercontent.com/dmuehlberg/transcript-summariz
 fi
 chmod +x /home/ec2-user/install-services.sh
 
+# Log-Datei mit root-Rechten erstellen und Berechtigungen setzen
+touch /var/log/install-services.log
+chmod 666 /var/log/install-services.log
+
 echo "Starte install-services.sh im Hintergrund..."
 sudo -u ec2-user nohup /home/ec2-user/install-services.sh > /var/log/install-services.log 2>&1 &
 

@@ -6,6 +6,13 @@
 set -euo pipefail
 
 LOG_FILE="/var/log/install-services.log"
+
+# Prüfe ob Log-Datei beschreibbar ist, sonst Fallback auf Home-Verzeichnis
+if [ ! -w "${LOG_FILE}" ] 2>/dev/null; then
+    LOG_FILE="${HOME}/install-services.log"
+    echo "Warnung: /var/log/install-services.log nicht beschreibbar, verwende ${LOG_FILE}" >&2
+fi
+
 exec >> "${LOG_FILE}" 2>&1
 
 echo "=== SERVICES INSTALLATION GESTARTET ==="
