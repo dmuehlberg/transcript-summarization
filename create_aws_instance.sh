@@ -451,17 +451,11 @@ docker buildx create --use --name mybuilder
 
 echo "Docker Compose v2 und Buildx v0.18.0+ installiert"
 
-# ec2-user Setup-Skript schreiben
-cat > /home/ec2-user/ec2_setup.sh <<'EOS'
-#!/bin/bash
-
-echo "=== EC2-USER SETUP GESTARTET ==="
+# Repository klonen (direkt, ohne ec2_setup.sh Wrapper)
+echo "Klone Repository..."
 cd /home/ec2-user
-
-# Repository klonen (falls nicht vorhanden)
 if [ ! -d "transcript-summarization" ]; then
-    echo "Klone Repository..."
-    git clone https://github.com/dmuehlberg/transcript-summarization.git 2>&1
+    sudo -u ec2-user git clone https://github.com/dmuehlberg/transcript-summarization.git 2>&1
     if [ $? -eq 0 ]; then
         echo "Repository erfolgreich geklont"
     else
@@ -471,20 +465,19 @@ if [ ! -d "transcript-summarization" ]; then
 else
     echo "Repository bereits vorhanden"
     cd transcript-summarization
-    git pull 2>&1 || echo "Git pull fehlgeschlagen"
-    cd ..
+    sudo -u ec2-user git pull 2>&1 || echo "Git pull fehlgeschlagen"
 fi
 
-cd transcript-summarization
+cd /home/ec2-user/transcript-summarization
 
 # .env-Datei aus /tmp kopieren (falls verfügbar)
 if [ -f "/tmp/.env" ]; then
     echo "Kopiere .env-Datei mit HF_TOKEN..."
-    cp /tmp/.env .env
+    sudo -u ec2-user cp /tmp/.env .env
     echo "✅ .env-Datei mit HF_TOKEN kopiert"
 else
     echo "⚠️ .env-Datei nicht verfügbar - erstelle Standard .env"
-    cat > .env << 'ENVEOF'
+    sudo -u ec2-user cat > .env << 'ENVEOF'
 POSTGRES_USER=root
 POSTGRES_PASSWORD=postgres
 POSTGRES_DB=n8n
@@ -495,6 +488,30 @@ MEETING_TIME_WINDOW_MINUTES=5
 TARGETPLATFORM=linux/amd64
 ENVEOF
 fi
+
+# Zweites Installations-Skript erstellen
+echo "Erstelle install_services.sh Skript..."
+cat > /home/ec2-user/install_services.sh << 'INSTALLEOF'
+#!/bin/bash
+# Zweites Installations-Skript für WhisperX und Ollama
+# Wird nach Repository-Klon ausgeführt
+
+exec >> /var/log/install-services.log 2>&1
+echo "=== SERVICES INSTALLATION GESTARTET ==="
+echo "Datum: $(date)"
+
+# Warte auf Repository-Verfügbarkeit
+if [ ! -d "/home/ec2-user/transcript-summarization" ]; then
+    echo "Warte auf Repository..."
+    MAX_WAIT=300
+    WAIT_COUNT=0
+    while [ $WAIT_COUNT -lt $MAX_WAIT ] && [ ! -d "/home/ec2-user/transcript-summarization" ]; do
+        sleep 5
+        WAIT_COUNT=$((WAIT_COUNT + 5))
+    done
+fi
+
+cd /home/ec2-user/transcript-summarization
 
 # container-setup.sh ausführen
 if [ -f "./container-setup.sh" ]; then
@@ -511,24 +528,8 @@ if [ -f "./container-setup.sh" ]; then
     fi
 else
     echo "FEHLER: container-setup.sh nicht gefunden!"
-    echo "Verfügbare Dateien:"
-    ls -la 2>&1
-    # Fallback: Lade das Skript herunter
-    echo "Fallback: Lade container-setup.sh herunter..."
-    wget https://raw.githubusercontent.com/dmuehlberg/transcript-summarization/main/container-setup.sh -O ./container-setup.sh 2>&1
-    if [ -f "./container-setup.sh" ]; then
-        chmod +x ./container-setup.sh
-        echo "n" | timeout 1800 ./container-setup.sh 2>&1
-    else
-        echo "FEHLER: Fallback fehlgeschlagen"
-    fi
+    exit 1
 fi
-
-echo "=== EC2-USER SETUP ABGESCHLOSSEN ==="
-EOS
-
-chmod +x /home/ec2-user/ec2_setup.sh
-sudo -u ec2-user bash /home/ec2-user/ec2_setup.sh
 
 # Ollama-GPU Installation (nach WhisperX-Installation)
 echo "=== OLLAMA-GPU INSTALLATION ==="
@@ -556,14 +557,6 @@ if [ "$WHISPERX_READY" != "true" ]; then
     echo "⚠️ Warnung: WhisperX-Container nicht erreichbar nach $WHISPERX_WAIT Sekunden"
     echo "Ollama-Installation wird trotzdem versucht..."
 fi
-
-# Prüfe ob Repository vorhanden ist
-if [ ! -d "/home/ec2-user/transcript-summarization" ]; then
-    echo "⚠️ Warnung: Repository nicht gefunden, warte kurz..."
-    sleep 30
-fi
-
-cd /home/ec2-user/transcript-summarization
 
 # Prüfe docker-compose Verfügbarkeit
 DOCKER_COMPOSE_CMD=""
@@ -632,10 +625,11 @@ echo "=== INSTALLATION STATUS ==="
 echo "Datum: $(date)"
 
 echo "Docker Container:"
-sudo -u ec2-user bash -c 'cd /home/ec2-user/transcript-summarization && docker-compose ps 2>/dev/null || echo "Container Status nicht verfügbar"'
+cd /home/ec2-user/transcript-summarization
+$DOCKER_COMPOSE_CMD ps 2>/dev/null || echo "Container Status nicht verfügbar"
 
 echo "Ollama Container:"
-sudo -u ec2-user bash -c 'cd /home/ec2-user/transcript-summarization && docker ps --filter name=ollama --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || echo "Ollama Container Status nicht verfügbar"'
+docker ps --filter name=ollama --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || echo "Ollama Container Status nicht verfügbar"
 
 echo "Ollama API Check:"
 curl -s http://localhost:11434/api/tags > /dev/null 2>&1 && echo "✅ Ollama API: OK" || echo "⚠️ Ollama API: Nicht verfügbar"
@@ -650,9 +644,22 @@ fi
 PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
 echo "Public IP: $PUBLIC_IP"
 echo "API URL: http://$PUBLIC_IP:8000/docs"
+echo "Ollama API: http://$PUBLIC_IP:11434/api/tags"
 
 curl -s http://localhost:8000/health 2>/dev/null && echo "API Health Check: OK" || echo "API Health Check: Nicht verfügbar"
 
+echo "=== SERVICES INSTALLATION ABGESCHLOSSEN ==="
+INSTALLEOF
+
+chmod +x /home/ec2-user/install_services.sh
+
+# Zweites Skript im Hintergrund starten (als ec2-user)
+echo "Starte install_services.sh im Hintergrund..."
+sudo -u ec2-user nohup /home/ec2-user/install_services.sh > /var/log/install-services.log 2>&1 &
+
+echo "=== USER-DATA ABGESCHLOSSEN ==="
+echo "Services-Installation läuft im Hintergrund"
+echo "Log: /var/log/install-services.log"
 echo "WhisperX-Setup abgeschlossen um $(date)"
 echo "=== INSTALLATION LOG ENDE ==="
 
@@ -768,6 +775,14 @@ EOF
                 # 2. Cloud-init Status
                 echo \"CLOUD-INIT STATUS:\"
                 sudo cloud-init status 2>/dev/null || echo \"unbekannt\"
+                
+                # 2.5. Services Installation Log (falls vorhanden)
+                if [ -f /var/log/install-services.log ]; then
+                    echo \"SERVICES INSTALLATION LOG (letzte 5 Zeilen):\"
+                    sudo tail -5 /var/log/install-services.log
+                else
+                    echo \"Services Installation Log: Noch nicht verfügbar\"
+                fi
                 
                 # 3. Docker Container Status (falls Setup läuft)
                 if [ -d \"/home/ec2-user/transcript-summarization\" ]; then
