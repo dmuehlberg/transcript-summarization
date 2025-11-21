@@ -100,7 +100,7 @@
             "pg_field": "file_under_id",
             "pg_type": "text"
         },
-        "Contact Item Data": {
+        "Work Address Postal Code": {
             "pg_field": "meeting_series_start_date",
             "pg_type": "timestamp with time zone"
         },
@@ -152,11 +152,11 @@
             "pg_field": "unknown_817a",
             "pg_type": "text"
         },
-        "Address Book Extension Attribute1": {
+        "Unknown (0x8038)": {
             "pg_field": "meeting_series_rhythm",
             "pg_type": "text"
         },
-        "Address Book Is Member Of Distribution List": {
+        "Work Address Country": {
             "pg_field": "meeting_series_end_date",
             "pg_type": "timestamp with time zone"
         },
@@ -282,15 +282,15 @@
             "pg_field": "has_picture",
             "pg_type": "text"
         },
-        "AddressBookExtensionAttribute1": {
+        "Unknown (0x8038)": {
             "pg_field": "meeting_series_rhythm",
             "pg_type": "text"
         },
-        "ContactItemData": {
+        "Work Address Postal Code": {
             "pg_field": "meeting_series_start_date",
             "pg_type": "timestamp with time zone"
         },
-        "AddressBookIsMemberOfDistributionList": {
+        "Work Address Country": {
             "pg_field": "meeting_series_end_date",
             "pg_type": "timestamp with time zone"
         },
