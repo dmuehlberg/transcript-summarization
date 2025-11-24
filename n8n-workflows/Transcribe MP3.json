@@ -9,10 +9,10 @@
       "type": "n8n-nodes-base.readWriteFile",
       "typeVersion": 1,
       "position": [
-        -5400,
-        860
+        -4240,
+        1392
       ],
-      "id": "33f8c7c5-cd1e-4ecf-af71-67124becff9a",
+      "id": "b5c2ca8f-70b9-4f04-bb86-03e80397227f",
       "name": "Read MP3 File"
     },
     {
@@ -33,10 +33,10 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -3200,
-        860
+        -1840,
+        1392
       ],
-      "id": "8a2a02a6-9e7d-4dda-86a6-9b7b64c56b2c",
+      "id": "d1457bb9-8491-4bfb-a527-9fb7c0fe5d43",
       "name": "Set processId"
     },
     {
@@ -47,10 +47,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -2940,
-        860
+        -1568,
+        1392
       ],
-      "id": "8af470bc-3180-4a6e-92bf-3dc03d229179",
+      "id": "3802e7ca-639a-4a1b-8bc8-20802e2a4b55",
       "name": "Check Transcription Status"
     },
     {
@@ -114,10 +114,10 @@
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
       "position": [
-        -2520,
-        860
+        -1152,
+        1392
       ],
-      "id": "1d80968b-a45c-4dac-8825-45c9054f2dbd",
+      "id": "e43f0066-330c-4324-83c1-2bf9e4c75360",
       "name": "Transcription finished?"
     },
     {
@@ -127,10 +127,10 @@
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
       "position": [
-        -2340,
-        980
+        -976,
+        1504
       ],
-      "id": "2d4822e4-a833-42dd-96d4-36311d695313",
+      "id": "f0ac01b8-4891-4ef3-a171-393b3841e7a7",
       "name": "Wait",
       "webhookId": "9bf9a2b6-5a69-42d7-99a2-0931e04bc858"
     },
@@ -170,10 +170,10 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -2080,
-        760
+        -720,
+        1280
       ],
-      "id": "f9939bdc-ec76-46a9-ac90-36240c7f5977",
+      "id": "e772ca1d-f842-42d7-92b3-005739e494f9",
       "name": "Collect Transcription_Details"
     },
     {
@@ -286,10 +286,10 @@
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
       "position": [
-        -4740,
-        860
+        -3584,
+        1392
       ],
-      "id": "5be31318-9287-4868-a4a8-937506641b63",
+      "id": "7c1d1326-a450-497e-a6ba-85e536865ffa",
       "name": "Switch"
     },
     {
@@ -310,10 +310,10 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -4960,
-        860
+        -3808,
+        1392
       ],
-      "id": "616285d0-8be8-421c-ac83-1240cde65b02",
+      "id": "9a1c8daa-dbc4-49fb-838e-89af2548507a",
       "name": "Set Infrastructure (Remote or Local)"
     },
     {
@@ -334,10 +334,10 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -4280,
-        800
+        -3120,
+        1328
       ],
-      "id": "47191546-62f3-4c21-9dcf-9f6fd0379641",
+      "id": "097abc13-841a-40a6-8dbe-a4cf8a5f60d4",
       "name": "Set Local Transcription Host"
     },
     {
@@ -358,10 +358,10 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -4280,
-        1000
+        -3120,
+        1520
       ],
-      "id": "34b5d32d-8272-4025-b1a8-758b70034230",
+      "id": "78bb792e-8837-43fb-b384-d375439bc00b",
       "name": "Set Remote Transcription Host"
     },
     {
@@ -371,10 +371,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1860,
-        760
+        -496,
+        1280
       ],
-      "id": "78bc55e4-1c60-4ca1-a264-a7873810e9fe",
+      "id": "72f6b87c-e6c4-435c-932f-aa550d8dbd32",
       "name": "Merge Transcript Segments"
     },
     {
@@ -384,10 +384,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1640,
-        760
+        -272,
+        1280
       ],
-      "id": "fd932d55-b00e-4973-a0eb-c0a9cde570c0",
+      "id": "d78d48c3-a3a9-4b55-94fe-229d208a0da2",
       "name": "Prepare Binary File for Transcript"
     },
     {
@@ -402,10 +402,10 @@
       "type": "n8n-nodes-base.readWriteFile",
       "typeVersion": 1,
       "position": [
-        -1420,
-        760
+        -48,
+        1280
       ],
-      "id": "d71526a0-6d95-4755-9d15-a7fbe4510d5f",
+      "id": "d53f042b-544d-48f0-8fc2-2190e766c4e7",
       "name": "Write Transcript TXT File to Disk"
     },
     {
@@ -418,10 +418,10 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -1200,
-        760
+        160,
+        1280
       ],
-      "id": "11814e41-efe6-4458-ba1c-74ff825d5a48",
+      "id": "20bbc77f-96f6-40ce-aff7-e1780d306171",
       "name": "Build JSON"
     },
     {
@@ -436,10 +436,10 @@
       "type": "n8n-nodes-base.convertToFile",
       "typeVersion": 1.1,
       "position": [
-        -980,
-        760
+        400,
+        1280
       ],
-      "id": "b1ad6abc-9497-41a5-b994-4ce907442c33",
+      "id": "3d7c985f-1c82-4fc4-b5a6-8f9df2cc0e9f",
       "name": "Convert to File"
     },
     {
@@ -454,10 +454,10 @@
       "type": "n8n-nodes-base.readWriteFile",
       "typeVersion": 1,
       "position": [
-        -760,
-        760
+        608,
+        1280
       ],
-      "id": "d2c20549-6aca-4162-bb76-073adfc360d4",
+      "id": "a57dfb6a-b51c-4f8f-9ff8-8ef66d055afd",
       "name": "Read/Write Files from Disk"
     },
     {
@@ -479,10 +479,10 @@
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1.1,
       "position": [
-        -6500,
-        860
+        -5344,
+        1392
       ],
-      "id": "ec075000-f0eb-489c-a55c-dff5842a0843",
+      "id": "4f4d79e1-fe47-445f-a598-6fb13433f6a6",
       "name": "When Executed by Another Workflow"
     },
     {
@@ -503,10 +503,10 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -3940,
-        900
+        -2576,
+        1424
       ],
-      "id": "c4c8ef07-43e8-4a02-bdb9-33708906441d",
+      "id": "c086d9ea-78cf-4670-a0da-0a650055b6b6",
       "name": "Set Final Transcription Host"
     },
     {
@@ -527,10 +527,10 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -2120,
-        980
+        -752,
+        1504
       ],
-      "id": "bc0a9a92-1ecc-4212-86c3-c0b642581c09",
+      "id": "a9d66b1e-b56c-432c-96ac-433259555add",
       "name": "Set Process ID"
     },
     {
@@ -643,10 +643,10 @@
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
       "position": [
-        -3760,
-        900
+        -2400,
+        1424
       ],
-      "id": "252a61de-1e80-44a3-9792-a1e40b2271b3",
+      "id": "a8599bdc-4ee3-4bdf-a2a5-8364d0e3e81b",
       "name": "Switch1"
     },
     {
@@ -667,10 +667,10 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -4280,
-        1220
+        -2912,
+        1744
       ],
-      "id": "4f73f24b-bc73-4293-b7a6-b0e46c775b63",
+      "id": "ef2653d0-7803-4252-9bf9-b86397871ad6",
       "name": "Set Remote AWS Transcription Host"
     },
     {
@@ -729,10 +729,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -3480,
-        1120
+        -2112,
+        1648
       ],
-      "id": "7f5f9115-e3b0-4bf8-a7ae-9c5c5c6049af",
+      "id": "ce6ac191-1c56-4b6c-9cfe-afc33ade9904",
       "name": "Start Transcription on T4 GPU (Send HTTP POST)",
       "alwaysOutputData": false
     },
@@ -792,10 +792,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -3480,
-        880
+        -2112,
+        1408
       ],
-      "id": "2a3c9e8c-f5da-4ab5-a28b-a8c895514409",
+      "id": "91ba56e2-567c-4821-b09c-15447514d438",
       "name": "Start Local Transcription (Send HTTP POST)",
       "alwaysOutputData": false
     },
@@ -855,10 +855,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -3480,
-        1380
+        -2112,
+        1904
       ],
-      "id": "d6c9d434-1152-4864-a708-d9c6c7492ab0",
+      "id": "4b0a8fd1-9f9f-4f20-9e8f-d2433e8e2c98",
       "name": "Start Transcription on A10G GPU (Send HTTP POST)",
       "alwaysOutputData": false
     },
@@ -879,9 +879,9 @@
               "type": "string"
             },
             {
-              "id": "73018d54-97a7-4256-b0c4-6d8fcea4405d",
+              "id": "73e07988-08bf-4d9f-b363-f7bf49b75443",
               "name": "language",
-              "value": "={{ $('Merge').item.json.language }}",
+              "value": "={{ $('Merge').all().find(item => item.json.language)?.json.language }}",
               "type": "string"
             }
           ]
@@ -892,10 +892,10 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -5180,
-        860
+        -4016,
+        1392
       ],
-      "id": "5de8fa10-91c3-4899-a2b9-bd914edd7eae",
+      "id": "ddeaba41-fca3-4898-875c-1c129f0e7cfa",
       "name": "Set Filename, Path and Language"
     },
     {
@@ -903,10 +903,10 @@
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
       "position": [
-        -6500,
-        640
+        -5344,
+        1168
       ],
-      "id": "5cd8aead-3376-4f75-9754-e648719de4ee",
+      "id": "53318815-4dd8-42f1-973f-064d1e78b9e6",
       "name": "When clicking ‘Test workflow’"
     },
     {
@@ -914,10 +914,10 @@
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3.1,
       "position": [
-        -5880,
-        760
+        -4720,
+        1280
       ],
-      "id": "2d8e7fba-8d39-4f59-9489-8ea42d6725a4",
+      "id": "422fd3eb-2fb2-4d23-bb0b-fa8586c361e1",
       "name": "Merge"
     },
     {
@@ -949,10 +949,10 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -6280,
-        640
+        -5120,
+        1168
       ],
-      "id": "abf091bb-a268-40d3-b602-2c0c8f4caf22",
+      "id": "e68430f6-810c-4c4a-90f7-9aa12030ba41",
       "name": "Set filePath, baseFileName and language"
     },
     {
@@ -983,10 +983,10 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
-        -4500,
-        1080
+        -3408,
+        1680
       ],
-      "id": "8e08f08e-fbf6-446d-b845-2f141e3c35f9",
+      "id": "e0d68e03-7aee-472c-a09c-9c120639eb69",
       "name": "Select AWS Host from Database",
       "credentials": {
         "postgres": {
@@ -994,6 +994,21 @@
           "name": "Postgres account"
         }
       }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -3200,
+        1664
+      ],
+      "id": "c6ab6da0-f3c1-4fd1-80b7-dbd4f80ecb3b",
+      "name": "Merge1"
     }
   ],
   "pinData": {
@@ -1110,11 +1125,21 @@
             "node": "Select AWS Host from Database",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 0
           }
         ],
         [
           {
             "node": "Select AWS Host from Database",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge1",
             "type": "main",
             "index": 0
           }
@@ -1366,6 +1391,17 @@
       "main": [
         [
           {
+            "node": "Merge1",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge1": {
+      "main": [
+        [
+          {
             "node": "Set Remote AWS Transcription Host",
             "type": "main",
             "index": 0
@@ -1378,7 +1414,7 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "96f6d27b-dffa-4fbc-b0b4-7957d8a0e25b",
+  "versionId": "8209b0fd-bcc2-4e6d-9896-b9a9afc225f0",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "e19a58ffb0fd248efa26d031fe3b9360ad1bd1b828d9ae749d875af6b5124b71"
