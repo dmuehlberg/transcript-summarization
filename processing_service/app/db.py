@@ -56,6 +56,12 @@ def init_db():
             invitation_text TEXT
         );
     """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS transcription_settings (
+            parameter TEXT PRIMARY KEY,
+            value TEXT
+        );
+    """)
     conn.commit()
     cur.close()
     conn.close()
@@ -198,4 +204,29 @@ def get_pending_transcriptions():
     rows = cur.fetchall()
     cur.close()
     conn.close()
-    return rows 
+    return rows
+
+def get_transcription_setting(parameter: str) -> str | None:
+    """Liest einen Setting-Wert aus der Datenbank."""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT value FROM transcription_settings WHERE parameter = %s
+    """, (parameter,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return row[0] if row else None
+
+def upsert_transcription_setting(parameter: str, value: str):
+    """Speichert oder aktualisiert einen Setting-Wert."""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO transcription_settings (parameter, value)
+        VALUES (%s, %s)
+        ON CONFLICT (parameter) DO UPDATE SET value = EXCLUDED.value
+    """, (parameter, value))
+    conn.commit()
+    cur.close()
+    conn.close() 

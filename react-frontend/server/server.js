@@ -392,6 +392,76 @@ app.put('/api/table-config/:tableName', async (req, res) => {
   }
 });
 
+// Get transcription setting
+app.get('/api/transcription-settings/:parameter', async (req, res) => {
+  try {
+    const { parameter } = req.params;
+    
+    const query = 'SELECT parameter, value FROM transcription_settings WHERE parameter = $1';
+    const result = await pool.query(query, [parameter]);
+    
+    if (result.rows.length === 0) {
+      return res.json({
+        data: { parameter, value: null },
+        message: `Setting '${parameter}' not found`
+      });
+    }
+    
+    res.json({
+      data: result.rows[0],
+      message: `Setting '${parameter}' loaded successfully`
+    });
+  } catch (error) {
+    logger.error('Error fetching transcription setting:', error);
+    res.status(500).json({ error: 'Failed to fetch transcription setting' });
+  }
+});
+
+// Get all transcription settings
+app.get('/api/transcription-settings', async (req, res) => {
+  try {
+    const query = 'SELECT parameter, value FROM transcription_settings ORDER BY parameter';
+    const result = await pool.query(query);
+    
+    res.json({
+      data: result.rows,
+      message: 'All transcription settings loaded successfully'
+    });
+  } catch (error) {
+    logger.error('Error fetching transcription settings:', error);
+    res.status(500).json({ error: 'Failed to fetch transcription settings' });
+  }
+});
+
+// Update transcription setting
+app.put('/api/transcription-settings/:parameter', async (req, res) => {
+  try {
+    const { parameter } = req.params;
+    const { value } = req.body;
+    
+    if (value === undefined) {
+      return res.status(400).json({ error: 'value is required' });
+    }
+    
+    const query = `
+      INSERT INTO transcription_settings (parameter, value)
+      VALUES ($1, $2)
+      ON CONFLICT (parameter) DO UPDATE SET value = EXCLUDED.value
+      RETURNING parameter, value
+    `;
+    
+    const result = await pool.query(query, [parameter, value]);
+    
+    res.json({
+      data: result.rows[0],
+      message: `Setting '${parameter}' updated successfully`
+    });
+  } catch (error) {
+    logger.error('Error updating transcription setting:', error);
+    res.status(500).json({ error: 'Failed to update transcription setting' });
+  }
+});
+
 // Error handling middleware
 app.use((error, req, res, next) => {
   logger.error('Unhandled error:', error);

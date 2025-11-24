@@ -127,4 +127,22 @@ export const csvImportApi = {
   },
 };
 
+// Transcription Settings API
+export const transcriptionSettingsApi = {
+  get: async (parameter: string): Promise<ApiResponse<{ parameter: string; value: string | null }>> => {
+    const response = await api.get(`/transcription-settings/${parameter}`);
+    return response.data;
+  },
+  
+  getAll: async (): Promise<ApiResponse<Array<{ parameter: string; value: string | null }>>> => {
+    const response = await api.get('/transcription-settings');
+    return response.data;
+  },
+  
+  update: async (parameter: string, value: string): Promise<ApiResponse<{ parameter: string; value: string }>> => {
+    const response = await api.put(`/transcription-settings/${parameter}`, { value });
+    return response.data;
+  },
+};
+
 export default api; 

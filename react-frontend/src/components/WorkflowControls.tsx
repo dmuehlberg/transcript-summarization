@@ -1,12 +1,16 @@
 
-import { useMutation, useQuery } from '@tanstack/react-query';
+import React, { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
-import { workflowApi, healthApi } from '@/lib/api';
+import { workflowApi, healthApi, transcriptionSettingsApi } from '@/lib/api';
 import { Play, AlertCircle, CheckCircle, XCircle } from 'lucide-react';
 import { FileUploadButton } from './FileUploadButton';
 
 export const WorkflowControls: React.FC = () => {
+  const queryClient = useQueryClient();
+  const [awsHostValue, setAwsHostValue] = useState<string>('');
+
   // Health Status Query
   const { data: healthData, isLoading: healthLoading } = useQuery({
     queryKey: ['health'],
@@ -21,6 +25,17 @@ export const WorkflowControls: React.FC = () => {
     refetchInterval: 5000, // Alle 5 Sekunden
   });
 
+  // AWS Host Setting Query
+  const { data: awsHostData, isLoading: awsHostLoading } = useQuery({
+    queryKey: ['transcription-settings', 'aws_host'],
+    queryFn: () => transcriptionSettingsApi.get('aws_host'),
+    onSuccess: (data) => {
+      if (data.data?.value) {
+        setAwsHostValue(data.data.value);
+      }
+    },
+  });
+
   // Start Workflow Mutation
   const startWorkflowMutation = useMutation({
     mutationFn: () => workflowApi.start(),
@@ -32,6 +47,30 @@ export const WorkflowControls: React.FC = () => {
       console.error('Fehler beim Starten des Workflows:', error);
     },
   });
+
+  // Save AWS Host Mutation
+  const saveAwsHostMutation = useMutation({
+    mutationFn: (value: string) => transcriptionSettingsApi.update('aws_host', value),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transcription-settings', 'aws_host'] });
+    },
+    onError: (error) => {
+      console.error('Fehler beim Speichern des AWS Host:', error);
+    },
+  });
+
+  const handleSaveAwsHost = () => {
+    if (awsHostValue.trim()) {
+      saveAwsHostMutation.mutate(awsHostValue.trim());
+    }
+  };
+
+  const handleAwsHostKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleSaveAwsHost();
+      e.currentTarget.blur();
+    }
+  };
 
   const handleStartWorkflow = () => {
     startWorkflowMutation.mutate();
@@ -85,6 +124,38 @@ export const WorkflowControls: React.FC = () => {
             )}
           </div>
         </div>
+      </div>
+
+      {/* AWS Host Input */}
+      <div className="mt-4 mb-4">
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          AWS Host/IP
+        </label>
+        <div className="flex items-center space-x-2">
+          <input
+            type="text"
+            value={awsHostValue}
+            onChange={(e) => setAwsHostValue(e.target.value)}
+            onBlur={handleSaveAwsHost}
+            onKeyDown={handleAwsHostKeyDown}
+            placeholder="z.B. 192.168.1.100 oder ec2-xxx.amazonaws.com"
+            disabled={awsHostLoading || saveAwsHostMutation.isPending}
+            className="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+          />
+          {saveAwsHostMutation.isPending && (
+            <div className="animate-spin h-5 w-5 border-2 border-blue-500 rounded-full border-t-transparent"></div>
+          )}
+        </div>
+        {saveAwsHostMutation.isError && (
+          <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+            Fehler beim Speichern
+          </p>
+        )}
+        {saveAwsHostMutation.isSuccess && !saveAwsHostMutation.isPending && (
+          <p className="mt-1 text-xs text-green-600 dark:text-green-400">
+            Gespeichert
+          </p>
+        )}
       </div>
 
       <div className="flex items-center justify-between">

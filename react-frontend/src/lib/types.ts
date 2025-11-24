@@ -71,4 +71,9 @@ export interface TableColumnConfig {
 
 export interface ColumnSizingState {
   [key: string]: number;
+}
+
+export interface TranscriptionSetting {
+  parameter: string;
+  value: string | null;
 } 
