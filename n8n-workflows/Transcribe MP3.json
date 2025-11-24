@@ -33,7 +33,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -3420,
+        -3200,
         860
       ],
       "id": "8a2a02a6-9e7d-4dda-86a6-9b7b64c56b2c",
@@ -47,7 +47,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -3160,
+        -2940,
         860
       ],
       "id": "8af470bc-3180-4a6e-92bf-3dc03d229179",
@@ -114,7 +114,7 @@
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
       "position": [
-        -2740,
+        -2520,
         860
       ],
       "id": "1d80968b-a45c-4dac-8825-45c9054f2dbd",
@@ -127,7 +127,7 @@
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
       "position": [
-        -2560,
+        -2340,
         980
       ],
       "id": "2d4822e4-a833-42dd-96d4-36311d695313",
@@ -170,7 +170,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -2300,
+        -2080,
         760
       ],
       "id": "f9939bdc-ec76-46a9-ac90-36240c7f5977",
@@ -299,7 +299,7 @@
             {
               "id": "f462dde0-9383-42d6-bcb4-57769f422b58",
               "name": "infrastructure",
-              "value": "local",
+              "value": "aws_t4",
               "type": "string"
             }
           ]
@@ -334,7 +334,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -4500,
+        -4280,
         800
       ],
       "id": "47191546-62f3-4c21-9dcf-9f6fd0379641",
@@ -358,7 +358,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -4500,
+        -4280,
         1000
       ],
       "id": "34b5d32d-8272-4025-b1a8-758b70034230",
@@ -371,7 +371,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -2080,
+        -1860,
         760
       ],
       "id": "78bc55e4-1c60-4ca1-a264-a7873810e9fe",
@@ -384,7 +384,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1860,
+        -1640,
         760
       ],
       "id": "fd932d55-b00e-4973-a0eb-c0a9cde570c0",
@@ -402,7 +402,7 @@
       "type": "n8n-nodes-base.readWriteFile",
       "typeVersion": 1,
       "position": [
-        -1640,
+        -1420,
         760
       ],
       "id": "d71526a0-6d95-4755-9d15-a7fbe4510d5f",
@@ -418,7 +418,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -1420,
+        -1200,
         760
       ],
       "id": "11814e41-efe6-4458-ba1c-74ff825d5a48",
@@ -436,7 +436,7 @@
       "type": "n8n-nodes-base.convertToFile",
       "typeVersion": 1.1,
       "position": [
-        -1200,
+        -980,
         760
       ],
       "id": "b1ad6abc-9497-41a5-b994-4ce907442c33",
@@ -454,7 +454,7 @@
       "type": "n8n-nodes-base.readWriteFile",
       "typeVersion": 1,
       "position": [
-        -980,
+        -760,
         760
       ],
       "id": "d2c20549-6aca-4162-bb76-073adfc360d4",
@@ -503,7 +503,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -4160,
+        -3940,
         900
       ],
       "id": "c4c8ef07-43e8-4a02-bdb9-33708906441d",
@@ -527,7 +527,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -2340,
+        -2120,
         980
       ],
       "id": "bc0a9a92-1ecc-4212-86c3-c0b642581c09",
@@ -643,7 +643,7 @@
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
       "position": [
-        -3980,
+        -3760,
         900
       ],
       "id": "252a61de-1e80-44a3-9792-a1e40b2271b3",
@@ -656,7 +656,7 @@
             {
               "id": "25c5729e-a0c1-4f21-a1a9-61c49a74e9c3",
               "name": "transcriptionHost",
-              "value": "3.70.137.226",
+              "value": "={{ $json.value }}",
               "type": "string"
             }
           ]
@@ -667,7 +667,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -4500,
+        -4280,
         1220
       ],
       "id": "4f73f24b-bc73-4293-b7a6-b0e46c775b63",
@@ -729,7 +729,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -3700,
+        -3480,
         1120
       ],
       "id": "7f5f9115-e3b0-4bf8-a7ae-9c5c5c6049af",
@@ -792,7 +792,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -3700,
+        -3480,
         880
       ],
       "id": "2a3c9e8c-f5da-4ab5-a28b-a8c895514409",
@@ -855,7 +855,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -3700,
+        -3480,
         1380
       ],
       "id": "d6c9d434-1152-4864-a708-d9c6c7492ab0",
@@ -927,13 +927,13 @@
             {
               "id": "f5ad11e7-47a3-475e-aba3-475bda8128f5",
               "name": "filePath",
-              "value": "/data/shared/transcription_processing/2025-06-17 16-36-00.mp3",
+              "value": "/data/shared/transcription_processing/2025-11-21 09-54-17.mp3",
               "type": "string"
             },
             {
               "id": "d5fdb1e1-991e-4e49-ab56-30f93a572c1b",
               "name": "baseFileName",
-              "value": "2025-06-17 16-36-00",
+              "value": "2025-11-21 09-54-17",
               "type": "string"
             },
             {
@@ -954,18 +954,58 @@
       ],
       "id": "abf091bb-a268-40d3-b602-2c0c8f4caf22",
       "name": "Set filePath, baseFileName and language"
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "transcription_settings",
+          "mode": "list",
+          "cachedResultName": "transcription_settings"
+        },
+        "limit": 1,
+        "where": {
+          "values": [
+            {
+              "column": "parameter",
+              "value": "aws_host"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -4500,
+        1080
+      ],
+      "id": "8e08f08e-fbf6-446d-b845-2f141e3c35f9",
+      "name": "Select AWS Host from Database",
+      "credentials": {
+        "postgres": {
+          "id": "vETPF55iMKScXl8i",
+          "name": "Postgres account"
+        }
+      }
     }
   ],
   "pinData": {
     "When Executed by Another Workflow": [
       {
         "json": {
-          "filePath": "/data/shared/transcription_processing/2025-06-17 16-36-00.mp3"
+          "filePath": "/data/shared/transcription_processing/2025-11-21 09-54-17.mp3"
         }
       },
       {
         "json": {
-          "baseFileName": "2025-06-17 16-36-00"
+          "baseFileName": "2025-11-21 09-54-17"
         }
       },
       {
@@ -1067,14 +1107,14 @@
         ],
         [
           {
-            "node": "Set Remote AWS Transcription Host",
+            "node": "Select AWS Host from Database",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Set Remote AWS Transcription Host",
+            "node": "Select AWS Host from Database",
             "type": "main",
             "index": 0
           }
@@ -1321,14 +1361,26 @@
           }
         ]
       ]
+    },
+    "Select AWS Host from Database": {
+      "main": [
+        [
+          {
+            "node": "Set Remote AWS Transcription Host",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": false,
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "406a890c-3ce3-4124-99f0-b7a6a45b1ece",
+  "versionId": "96f6d27b-dffa-4fbc-b0b4-7957d8a0e25b",
   "meta": {
+    "templateCredsSetupCompleted": true,
     "instanceId": "e19a58ffb0fd248efa26d031fe3b9360ad1bd1b828d9ae749d875af6b5124b71"
   },
   "id": "Bq831QTbodw3b9Tv",
