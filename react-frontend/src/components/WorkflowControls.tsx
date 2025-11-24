@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -29,12 +29,14 @@ export const WorkflowControls: React.FC = () => {
   const { data: awsHostData, isLoading: awsHostLoading } = useQuery({
     queryKey: ['transcription-settings', 'aws_host'],
     queryFn: () => transcriptionSettingsApi.get('aws_host'),
-    onSuccess: (data) => {
-      if (data.data?.value) {
-        setAwsHostValue(data.data.value);
-      }
-    },
   });
+
+  // Update local state when data is loaded
+  useEffect(() => {
+    if (awsHostData?.data?.value) {
+      setAwsHostValue(awsHostData.data.value);
+    }
+  }, [awsHostData]);
 
   // Start Workflow Mutation
   const startWorkflowMutation = useMutation({
