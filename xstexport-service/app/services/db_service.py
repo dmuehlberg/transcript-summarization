@@ -340,13 +340,14 @@ class DatabaseService:
     ) -> Dict[str, Any]:
         """
         Orchestriert die gesamte LLM-Verarbeitung für Meeting-Series.
+        Nach erfolgreicher LLM-Verarbeitung werden automatisch einzelne Termine generiert.
         
         Args:
             table_name: Name der Tabelle (Standard: "calendar_data")
             llm_service: Optionaler LLMService (wird erstellt falls None)
         
         Returns:
-            Dictionary mit Statistik (total, success, failed)
+            Dictionary mit Statistik (total, success, failed, occurrences_stats)
         """
         if llm_service is None:
             from app.services.llm_service import LLMService
@@ -387,6 +388,22 @@ class DatabaseService:
             except Exception as e:
                 logger.error(f"Fehler bei LLM-Verarbeitung für Zeile {row['id']}: {str(e)}")
                 stats['failed'] += 1
+        
+        # Nach erfolgreicher LLM-Verarbeitung: Termine generieren
+        try:
+            from app.services.calendar_series_service import CalendarSeriesService
+            calendar_series_service = CalendarSeriesService(self)
+            
+            occurrences_stats = self.process_series_to_occurrences(
+                table_name,
+                calendar_series_service
+            )
+            
+            stats['occurrences_stats'] = occurrences_stats
+            logger.info(f"Termin-Generierung abgeschlossen: {occurrences_stats}")
+        except Exception as e:
+            logger.warning(f"Termin-Generierung fehlgeschlagen: {str(e)}")
+            # Nicht als kritischer Fehler behandeln
         
         return stats
     
@@ -436,4 +453,213 @@ class DatabaseService:
         if 'exception' in exception_container:
             raise exception_container['exception']
         
-        return result_container['result'] 
+        return result_container['result']
+    
+    def get_series_rows_to_process(
+        self, 
+        table_name: str = "calendar_data"
+    ) -> List[Dict[str, Any]]:
+        """
+        Ruft alle Serientermin-Datensätze ab, die noch nicht in einzelne Termine aufgeteilt wurden.
+        
+        Args:
+            table_name: Name der Tabelle (Standard: "calendar_data")
+        
+        Returns:
+            Liste von Dictionaries mit allen Feldern des Serientermin-Datensatzes
+        """
+        try:
+            sql = text(f"""
+                SELECT *
+                FROM {table_name}
+                WHERE meeting_series_start_time IS NOT NULL
+                  AND meeting_series_end_time IS NOT NULL
+                  AND meeting_series_frequency IS NOT NULL
+                  AND meeting_series_frequency != ''
+            """)
+            
+            with self.engine.connect() as conn:
+                result = conn.execute(sql)
+                columns = result.keys()
+                rows = []
+                for row in result:
+                    row_dict = dict(zip(columns, row))
+                    rows.append(row_dict)
+                
+                logger.info(f"Gefunden: {len(rows)} Serientermine zum Verarbeiten")
+                return rows
+        except SQLAlchemyError as e:
+            logger.error(f"Fehler beim Abrufen der Serientermine: {str(e)}")
+            raise
+    
+    def check_occurrence_exists(
+        self,
+        start_date: datetime,
+        subject: str,
+        series_start_time: datetime,
+        table_name: str = "calendar_data"
+    ) -> bool:
+        """
+        Prüft, ob ein Termin mit bestimmten start_date und subject bereits existiert.
+        
+        Args:
+            start_date: Startdatum des zu prüfenden Termins
+            subject: Betreff des Termins
+            series_start_time: Startzeitpunkt der Serie (zum Ausschließen des Serientermins selbst)
+            table_name: Name der Tabelle (Standard: "calendar_data")
+        
+        Returns:
+            True wenn Termin bereits existiert, False sonst
+        """
+        try:
+            sql = text(f"""
+                SELECT COUNT(*) 
+                FROM {table_name}
+                WHERE start_date = :start_date
+                  AND subject = :subject
+                  AND (meeting_series_start_time IS NULL 
+                       OR meeting_series_start_time != :series_start_time)
+            """)
+            
+            with self.engine.connect() as conn:
+                result = conn.execute(sql, {
+                    'start_date': start_date,
+                    'subject': subject if subject else '',
+                    'series_start_time': series_start_time
+                })
+                count = result.scalar()
+                return count > 0
+        except SQLAlchemyError as e:
+            logger.error(f"Fehler beim Prüfen auf Duplikate: {str(e)}")
+            return False  # Bei Fehler: nicht als Duplikat behandeln
+    
+    def insert_occurrences_batch(
+        self,
+        occurrences: List[Dict[str, Any]],
+        table_name: str = "calendar_data"
+    ) -> int:
+        """
+        Fügt mehrere Termine in einem Batch-Insert ein.
+        
+        Args:
+            occurrences: Liste von Dictionaries, jeder repräsentiert einen Termin
+            table_name: Name der Tabelle (Standard: "calendar_data")
+        
+        Returns:
+            Anzahl der eingefügten Zeilen
+        """
+        if not occurrences:
+            return 0
+        
+        try:
+            # Lade Mapping, um alle Spaltennamen zu erhalten
+            columns = []
+            for field_name, field_info in self.mapping.items():
+                columns.append(field_info['pg_field'])
+            
+            # Filtere nur Spalten, die in occurrences vorhanden sind
+            first_occurrence = occurrences[0]
+            available_columns = [col for col in columns if col in first_occurrence]
+            
+            # Erstelle VALUES-Liste
+            values_list = []
+            for occ in occurrences:
+                values = [occ.get(col) for col in available_columns]
+                values_list.append(values)
+            
+            # Batch-Insert mit execute_values
+            with self.engine.raw_connection() as conn:
+                cursor = conn.cursor()
+                execute_values(
+                    cursor,
+                    f"""
+                    INSERT INTO {table_name} ({', '.join(available_columns)})
+                    VALUES %s
+                    """,
+                    values_list,
+                    page_size=100
+                )
+                conn.commit()
+                cursor.close()
+            
+            inserted_count = len(occurrences)
+            logger.info(f"{inserted_count} Termine erfolgreich eingefügt")
+            return inserted_count
+        except Exception as e:
+            logger.error(f"Fehler beim Batch-Insert: {str(e)}")
+            raise
+    
+    def process_series_to_occurrences(
+        self,
+        table_name: str = "calendar_data",
+        calendar_series_service: Optional[Any] = None,
+        until_date: Optional[datetime] = None
+    ) -> Dict[str, Any]:
+        """
+        Verarbeitet alle Serientermine und generiert einzelne Termine.
+        
+        Args:
+            table_name: Name der Tabelle (Standard: "calendar_data")
+            calendar_series_service: Optionaler CalendarSeriesService (wird erstellt falls None)
+            until_date: Optionales Enddatum für Termin-Generierung
+        
+        Returns:
+            Dictionary mit Statistik (total_series, total_occurrences, inserted, skipped_duplicates, errors)
+        """
+        if calendar_series_service is None:
+            from app.services.calendar_series_service import CalendarSeriesService
+            calendar_series_service = CalendarSeriesService(self)
+        
+        series_rows = self.get_series_rows_to_process(table_name)
+        stats = {
+            'total_series': len(series_rows),
+            'total_occurrences': 0,
+            'inserted': 0,
+            'skipped_duplicates': 0,
+            'errors': 0
+        }
+        
+        for series_row in series_rows:
+            try:
+                # Generiere alle Termine für diese Serie
+                occurrences = calendar_series_service.generate_series_occurrences(
+                    series_row,
+                    until_date
+                )
+                
+                stats['total_occurrences'] += len(occurrences)
+                
+                # Prüfe auf Duplikate und filtere sie heraus
+                series_start_time = series_row.get('meeting_series_start_time')
+                subject = series_row.get('subject', '')
+                
+                # Konvertiere series_start_time zu datetime falls nötig
+                if isinstance(series_start_time, str):
+                    series_start_time_dt = datetime.fromisoformat(series_start_time.replace('Z', '+00:00'))
+                elif isinstance(series_start_time, datetime):
+                    series_start_time_dt = series_start_time
+                else:
+                    series_start_time_dt = None
+                
+                valid_occurrences = []
+                for occ in occurrences:
+                    if series_start_time_dt and self.check_occurrence_exists(
+                        occ['start_date'],
+                        subject,
+                        series_start_time_dt,
+                        table_name
+                    ):
+                        stats['skipped_duplicates'] += 1
+                    else:
+                        valid_occurrences.append(occ)
+                
+                # Batch-Insert der gültigen Termine
+                if valid_occurrences:
+                    inserted = self.insert_occurrences_batch(valid_occurrences, table_name)
+                    stats['inserted'] += inserted
+                
+            except Exception as e:
+                logger.error(f"Fehler bei Verarbeitung von Serientermin {series_row.get('id')}: {str(e)}")
+                stats['errors'] += 1
+        
+        return stats 

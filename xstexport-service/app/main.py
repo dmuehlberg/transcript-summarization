@@ -448,3 +448,41 @@ async def process_meeting_series(
             status_code=500,
             detail=f"Fehler bei LLM-Verarbeitung: {str(e)}"
         )
+
+@app.post("/generate-series-occurrences")
+async def generate_series_occurrences(
+    table_name: str = Form("calendar_data", description="Name der Tabelle"),
+    until_date: Optional[str] = Form(None, description="Enddatum für Generierung (ISO 8601)")
+):
+    """
+    Generiert einzelne Termine aus allen Serientermindefinitionen.
+    Nützlich für Re-Processing oder nach manuellen DB-Updates.
+    """
+    try:
+        from app.services.calendar_series_service import CalendarSeriesService
+        from datetime import datetime
+        
+        until_dt = None
+        if until_date:
+            until_dt = datetime.fromisoformat(until_date.replace('Z', '+00:00'))
+        
+        calendar_series_service = CalendarSeriesService(db_service)
+        stats = db_service.process_series_to_occurrences(
+            table_name,
+            calendar_series_service,
+            until_dt
+        )
+        
+        return JSONResponse(
+            content={
+                "status": "success",
+                "message": "Termin-Generierung abgeschlossen",
+                "statistics": stats
+            }
+        )
+    except Exception as e:
+        logger.error(f"Fehler bei Termin-Generierung: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Fehler bei Termin-Generierung: {str(e)}"
+        )
