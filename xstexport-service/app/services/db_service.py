@@ -89,6 +89,30 @@ class DatabaseService:
             logger.error(f"Fehler beim Erstellen der Tabelle: {str(e)}")
             raise
 
+    def get_transcription_setting(self, parameter: str) -> Optional[str]:
+        """
+        Liest einen Setting-Wert aus der transcription_settings Tabelle.
+        
+        Args:
+            parameter: Name des Parameters (z.B. "aws_host")
+        
+        Returns:
+            Wert des Parameters oder None wenn nicht vorhanden
+        """
+        try:
+            with self.engine.connect() as conn:
+                result = conn.execute(
+                    text("SELECT value FROM transcription_settings WHERE parameter = :parameter"),
+                    {"parameter": parameter}
+                )
+                row = result.fetchone()
+                if row:
+                    return row[0]
+                return None
+        except SQLAlchemyError as e:
+            logger.warning(f"Fehler beim Lesen des Settings '{parameter}': {str(e)}")
+            return None
+
     def read_csv_safely(self, file_path: str) -> pd.DataFrame:
         """Liest eine CSV-Datei sicher ein und behandelt verschiedene Trennzeichen."""
         try:
@@ -327,7 +351,7 @@ class DatabaseService:
         if llm_service is None:
             from app.services.llm_service import LLMService
             from app.config.database import get_ollama_config
-            ollama_config = get_ollama_config()
+            ollama_config = get_ollama_config(self)  # self (DatabaseService) übergeben
             llm_service = LLMService(ollama_config['base_url'], ollama_config['model'])
         
         rows = self.get_rows_with_meeting_series(table_name)

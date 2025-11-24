@@ -48,7 +48,7 @@ async def startup_event():
         # Prüfe Ollama-Verfügbarkeit (nicht-blockierend)
         try:
             from app.services.llm_service import LLMService
-            ollama_config = get_ollama_config()
+            ollama_config = get_ollama_config(db_service)  # db_service übergeben
             llm_service = LLMService(ollama_config['base_url'], ollama_config['model'])
             is_available, message = await llm_service.check_availability()
             if is_available:
