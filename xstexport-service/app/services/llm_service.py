@@ -24,6 +24,7 @@ class LLMService:
         self.ollama_base_url = ollama_base_url.rstrip('/')
         self.model = model
         self.timeout = timeout
+        logger.info(f"LLMService initialisiert mit Timeout: {self.timeout} Sekunden")
     
     async def parse_meeting_series(
         self, 
@@ -122,7 +123,11 @@ End Date: {end_date}"""
             "format": "json"
         }
         
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        # Erstelle explizites Timeout-Objekt für httpx
+        timeout_obj = httpx.Timeout(self.timeout, connect=10.0)
+        logger.debug(f"HTTP-Request mit Timeout: {self.timeout}s (connect: 10.0s)")
+        
+        async with httpx.AsyncClient(timeout=timeout_obj) as client:
             response = await client.post(url, json=payload)
             response.raise_for_status()
             

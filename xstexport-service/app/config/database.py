@@ -70,6 +70,7 @@ def get_ollama_config(db_service: Optional[Any] = None) -> Dict[str, Any]:
     timeout_str = os.getenv("OLLAMA_TIMEOUT", "30")
     try:
         timeout = float(timeout_str)
+        logger.info(f"OLLAMA_TIMEOUT aus Umgebungsvariable gelesen: {timeout} Sekunden")
     except (ValueError, TypeError):
         logger.warning(f"Ungültiger OLLAMA_TIMEOUT-Wert '{timeout_str}', verwende Fallback 30.0")
         timeout = 30.0
