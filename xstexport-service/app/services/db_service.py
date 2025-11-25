@@ -572,19 +572,24 @@ class DatabaseService:
                 values_list.append(values)
             
             # Batch-Insert mit execute_values
-            with self.engine.raw_connection() as conn:
+            # Verwende engine.connect() als Context Manager, dann .connection für psycopg2
+            with self.engine.connect() as sqlalchemy_conn:
+                # Hole die zugrunde liegende psycopg2-Verbindung
+                conn = sqlalchemy_conn.connection
                 cursor = conn.cursor()
-                execute_values(
-                    cursor,
-                    f"""
-                    INSERT INTO {table_name} ({', '.join(available_columns)})
-                    VALUES %s
-                    """,
-                    values_list,
-                    page_size=100
-                )
-                conn.commit()
-                cursor.close()
+                try:
+                    execute_values(
+                        cursor,
+                        f"""
+                        INSERT INTO {table_name} ({', '.join(available_columns)})
+                        VALUES %s
+                        """,
+                        values_list,
+                        page_size=100
+                    )
+                    conn.commit()
+                finally:
+                    cursor.close()
             
             inserted_count = len(occurrences)
             logger.info(f"{inserted_count} Termine erfolgreich eingefügt")
