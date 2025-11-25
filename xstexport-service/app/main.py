@@ -49,7 +49,11 @@ async def startup_event():
         try:
             from app.services.llm_service import LLMService
             ollama_config = get_ollama_config(db_service)  # db_service übergeben
-            llm_service = LLMService(ollama_config['base_url'], ollama_config['model'])
+            llm_service = LLMService(
+                ollama_config['base_url'], 
+                ollama_config['model'],
+                ollama_config.get('timeout', 30.0)
+            )
             is_available, message = await llm_service.check_availability()
             if is_available:
                 logger.info(f"✅ Ollama-Prüfung erfolgreich: {message}")

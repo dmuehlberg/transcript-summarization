@@ -353,7 +353,11 @@ class DatabaseService:
             from app.services.llm_service import LLMService
             from app.config.database import get_ollama_config
             ollama_config = get_ollama_config(self)  # self (DatabaseService) übergeben
-            llm_service = LLMService(ollama_config['base_url'], ollama_config['model'])
+            llm_service = LLMService(
+                ollama_config['base_url'], 
+                ollama_config['model'],
+                ollama_config.get('timeout', 30.0)
+            )
         
         rows = self.get_rows_with_meeting_series(table_name)
         stats = {'total': len(rows), 'success': 0, 'failed': 0}

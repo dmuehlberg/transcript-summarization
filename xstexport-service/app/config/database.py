@@ -33,7 +33,7 @@ def get_db_config():
         "password": os.getenv("DB_PASSWORD", "postgres")
     }
 
-def get_ollama_config(db_service: Optional[Any] = None) -> Dict[str, str]:
+def get_ollama_config(db_service: Optional[Any] = None) -> Dict[str, Any]:
     """
     Gibt die Ollama-Konfiguration zurück.
     Liest aws_host aus der Datenbank, falls db_service übergeben wird.
@@ -42,7 +42,7 @@ def get_ollama_config(db_service: Optional[Any] = None) -> Dict[str, str]:
         db_service: Optionaler DatabaseService zum Lesen aus der DB
     
     Returns:
-        Dictionary mit 'base_url' und 'model'
+        Dictionary mit 'base_url', 'model' und 'timeout'
     """
     base_url = None
     
@@ -66,7 +66,16 @@ def get_ollama_config(db_service: Optional[Any] = None) -> Dict[str, str]:
         base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
         logger.info(f"Ollama-Host aus .env/Standard verwendet: {base_url}")
     
+    # Timeout aus .env lesen mit Fallback auf 30 Sekunden
+    timeout_str = os.getenv("OLLAMA_TIMEOUT", "30")
+    try:
+        timeout = float(timeout_str)
+    except (ValueError, TypeError):
+        logger.warning(f"Ungültiger OLLAMA_TIMEOUT-Wert '{timeout_str}', verwende Fallback 30.0")
+        timeout = 30.0
+    
     return {
         "base_url": base_url,
-        "model": os.getenv("OLLAMA_MODEL", "phi4-mini:3.8b")
+        "model": os.getenv("OLLAMA_MODEL", "phi4-mini:3.8b"),
+        "timeout": timeout
     } 

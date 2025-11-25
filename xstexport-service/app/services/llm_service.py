@@ -12,17 +12,18 @@ logger = logging.getLogger(__name__)
 class LLMService:
     """Service für LLM-basierte Konvertierung von Meeting-Series-Beschreibungen in RRULE-Felder."""
     
-    def __init__(self, ollama_base_url: str, model: str = "phi4-mini:3.8b"):
+    def __init__(self, ollama_base_url: str, model: str = "phi4-mini:3.8b", timeout: float = 30.0):
         """
         Initialisiert den LLMService.
         
         Args:
             ollama_base_url: Basis-URL des Ollama-Servers (z.B. "http://localhost:11434")
             model: Name des zu verwendenden Modells (Standard: "phi4-mini:3.8b")
+            timeout: Timeout in Sekunden für LLM-Requests (Standard: 30.0)
         """
         self.ollama_base_url = ollama_base_url.rstrip('/')
         self.model = model
-        self.timeout = 30.0  # 30 Sekunden Timeout
+        self.timeout = timeout
     
     async def parse_meeting_series(
         self, 
