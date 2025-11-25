@@ -356,7 +356,8 @@ class DatabaseService:
             llm_service = LLMService(
                 ollama_config['base_url'], 
                 ollama_config['model'],
-                ollama_config.get('timeout', 30.0)
+                ollama_config.get('timeout', 30.0),
+                ollama_config.get('num_ctx')
             )
         
         rows = self.get_rows_with_meeting_series(table_name)

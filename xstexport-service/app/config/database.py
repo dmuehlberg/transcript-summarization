@@ -75,8 +75,20 @@ def get_ollama_config(db_service: Optional[Any] = None) -> Dict[str, Any]:
         logger.warning(f"Ungültiger OLLAMA_TIMEOUT-Wert '{timeout_str}', verwende Fallback 30.0")
         timeout = 30.0
     
+    # Größe des Kontextfensters (Tokens) mit Default 4096
+    num_ctx_str = os.getenv("OLLAMA_NUM_CTX", "4096")
+    try:
+        num_ctx = int(num_ctx_str)
+        if num_ctx <= 0:
+            raise ValueError("num_ctx muss > 0 sein")
+        logger.info(f"OLLAMA_NUM_CTX gesetzt auf {num_ctx}")
+    except (ValueError, TypeError):
+        logger.warning(f"Ungültiger OLLAMA_NUM_CTX-Wert '{num_ctx_str}', verwende Fallback 4096")
+        num_ctx = 4096
+    
     return {
         "base_url": base_url,
         "model": os.getenv("OLLAMA_MODEL", "phi4-mini:3.8b"),
-        "timeout": timeout
+        "timeout": timeout,
+        "num_ctx": num_ctx
     } 

@@ -12,7 +12,13 @@ logger = logging.getLogger(__name__)
 class LLMService:
     """Service für LLM-basierte Konvertierung von Meeting-Series-Beschreibungen in RRULE-Felder."""
     
-    def __init__(self, ollama_base_url: str, model: str = "phi4-mini:3.8b", timeout: float = 30.0):
+    def __init__(
+        self, 
+        ollama_base_url: str, 
+        model: str = "phi4-mini:3.8b", 
+        timeout: float = 30.0,
+        num_ctx: Optional[int] = None
+    ):
         """
         Initialisiert den LLMService.
         
@@ -20,11 +26,14 @@ class LLMService:
             ollama_base_url: Basis-URL des Ollama-Servers (z.B. "http://localhost:11434")
             model: Name des zu verwendenden Modells (Standard: "phi4-mini:3.8b")
             timeout: Timeout in Sekunden für LLM-Requests (Standard: 30.0)
+            num_ctx: Größe des Kontextfensters (Tokens) für Ollama-Requests
         """
         self.ollama_base_url = ollama_base_url.rstrip('/')
         self.model = model
         self.timeout = timeout
-        logger.info(f"LLMService initialisiert mit Timeout: {self.timeout} Sekunden")
+        self.num_ctx = num_ctx
+        ctx_info = f", num_ctx: {self.num_ctx}" if self.num_ctx else ""
+        logger.info(f"LLMService initialisiert mit Timeout: {self.timeout} Sekunden{ctx_info}")
     
     async def parse_meeting_series(
         self, 
@@ -122,6 +131,8 @@ End Date: {end_date}"""
             "stream": False,
             "format": "json"
         }
+        if self.num_ctx:
+            payload["options"] = {"num_ctx": self.num_ctx}
         
         # Erstelle explizites Timeout-Objekt für httpx
         timeout_obj = httpx.Timeout(self.timeout, connect=10.0)

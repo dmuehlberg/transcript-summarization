@@ -52,7 +52,8 @@ async def startup_event():
             llm_service = LLMService(
                 ollama_config['base_url'], 
                 ollama_config['model'],
-                ollama_config.get('timeout', 30.0)
+                ollama_config.get('timeout', 30.0),
+                ollama_config.get('num_ctx')
             )
             is_available, message = await llm_service.check_availability()
             if is_available:
