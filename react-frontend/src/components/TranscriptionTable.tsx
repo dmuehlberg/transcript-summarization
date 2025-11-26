@@ -114,7 +114,11 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = () => {
       transcriptionsWithMultipleMeetings.map(t => {
         if (!t.recording_date) return null;
         const date = new Date(t.recording_date);
-        return date.toISOString().split('T')[0]; // YYYY-MM-DD
+        // Extrahiere Datum in lokaler Zeitzone (YYYY-MM-DD)
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
       }).filter(Boolean) as string[]
     )
   );
@@ -332,7 +336,12 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = () => {
             return <span className="text-gray-500">Kein Datum verfügbar</span>;
           }
           
-          const dateOnly = new Date(recordingDate).toISOString().split('T')[0];
+          // Extrahiere Datum in lokaler Zeitzone (YYYY-MM-DD)
+          const date = new Date(recordingDate);
+          const year = date.getFullYear();
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          const day = String(date.getDate()).padStart(2, '0');
+          const dateOnly = `${year}-${month}-${day}`;
           const meetings = meetingsByDate.get(dateOnly) || [];
           
           // Finde den aktuell ausgewählten Meeting-Index (falls bereits verknüpft)

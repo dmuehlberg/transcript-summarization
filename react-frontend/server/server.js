@@ -268,19 +268,43 @@ app.get('/api/calendar/day', async (req, res) => {
       return res.status(400).json({ error: 'date is required (format: YYYY-MM-DD)' });
     }
 
+    logger.info(`Fetching calendar data for date: ${date}`);
+
+    // calendar_data verwendet TIMESTAMPTZ
+    // Verwende DATE() Funktion, die automatisch in der Session-Zeitzone arbeitet
+    // Kombiniere display_to und display_cc zu attendees
     const query = `
-      SELECT id, subject, start_date, end_date, location, attendees
-      FROM calendar_entries 
-      WHERE DATE(start_date) = DATE($1)
+      SELECT 
+        id,
+        subject,
+        start_date,
+        end_date,
+        has_picture as location,
+        COALESCE(
+          CASE 
+            WHEN display_to IS NOT NULL AND display_cc IS NOT NULL AND display_to != '' AND display_cc != ''
+            THEN display_to || '; ' || display_cc
+            WHEN display_to IS NOT NULL AND display_to != ''
+            THEN display_to
+            WHEN display_cc IS NOT NULL AND display_cc != ''
+            THEN display_cc
+            ELSE NULL
+          END,
+          ''
+        ) as attendees
+      FROM calendar_data 
+      WHERE DATE(start_date) = $1::date
       ORDER BY start_date ASC
     `;
     
     const result = await pool.query(query, [date]);
+    
+    logger.info(`Found ${result.rows.length} meetings for date ${date}`);
 
     res.json({ data: result.rows });
   } catch (error) {
     logger.error('Error fetching calendar data by day:', error);
-    res.status(500).json({ error: 'Failed to fetch calendar data by day' });
+    res.status(500).json({ error: 'Failed to fetch calendar data by day', details: error.message });
   }
 });
 
