@@ -59,6 +59,11 @@ export const transcriptionApi = {
     return response.data;
   },
 
+  updateMeetingTitle: async (id: number, meeting_title: string): Promise<ApiResponse<Transcription>> => {
+    const response = await api.patch(`/transcriptions/${id}/meeting-title`, { meeting_title });
+    return response.data;
+  },
+
   linkCalendar: async (id: number, calendarData: Partial<CalendarEntry>): Promise<ApiResponse<Transcription>> => {
     const response = await api.post(`/transcriptions/${id}/link-calendar`, calendarData);
     return response.data;

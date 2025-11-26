@@ -190,6 +190,42 @@ app.patch('/api/transcriptions/:id/language', async (req, res) => {
   }
 });
 
+// Update meeting title manually
+app.patch('/api/transcriptions/:id/meeting-title', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { meeting_title } = req.body;
+
+    if (!meeting_title || typeof meeting_title !== 'string') {
+      return res.status(400).json({ error: 'meeting_title is required and must be a string' });
+    }
+
+    const trimmedTitle = meeting_title.trim();
+    if (trimmedTitle.length === 0) {
+      return res.status(400).json({ error: 'meeting_title cannot be empty' });
+    }
+
+    if (trimmedTitle.length > 255) {
+      return res.status(400).json({ error: 'meeting_title cannot exceed 255 characters' });
+    }
+
+    const query = 'UPDATE transcriptions SET meeting_title = $1 WHERE id = $2 RETURNING *';
+    const result = await pool.query(query, [trimmedTitle, id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Transcription not found' });
+    }
+
+    res.json({ 
+      data: result.rows[0], 
+      message: 'Meeting title updated successfully' 
+    });
+  } catch (error) {
+    logger.error('Error updating meeting title:', error);
+    res.status(500).json({ error: 'Failed to update meeting title' });
+  }
+});
+
 // Link calendar data to transcription
 app.post('/api/transcriptions/:id/link-calendar', async (req, res) => {
   const client = await pool.connect();

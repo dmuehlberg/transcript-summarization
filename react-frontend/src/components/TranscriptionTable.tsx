@@ -34,6 +34,7 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = () => {
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
   const [editingCell, setEditingCell] = useState<{ id: number; column: string } | null>(null);
   const [editValue, setEditValue] = useState('');
+  const [manualEdit, setManualEdit] = useState<{ id: number; value: string } | null>(null);
   // const [savedColumnSizing, setSavedColumnSizing] = useState<SavedColumnSizingState>({});
 
   // Fetch transcriptions
@@ -58,6 +59,16 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transcriptions'] });
       setEditingCell(null);
+    },
+  });
+
+  // Update meeting title mutation
+  const updateMeetingTitleMutation = useMutation({
+    mutationFn: ({ id, meeting_title }: { id: number; meeting_title: string }) =>
+      transcriptionApi.updateMeetingTitle(id, meeting_title),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transcriptions'] });
+      setManualEdit(null);
     },
   });
 
@@ -104,9 +115,9 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = () => {
     }
   }, [columnConfig]);
 
-  // Find all unique dates for transcriptions with "Mehrere Meetings gefunden"
+  // Find all unique dates for transcriptions with "Mehrere Meetings gefunden" or NULL meeting_title
   const transcriptionsWithMultipleMeetings = transcriptionsData?.data?.filter(
-    t => t.meeting_title === "Mehrere Meetings gefunden" && t.recording_date
+    t => (t.meeting_title === "Mehrere Meetings gefunden" || !t.meeting_title) && t.recording_date
   ) || [];
   
   console.log('Transcriptions with multiple meetings:', transcriptionsWithMultipleMeetings.length);
@@ -357,13 +368,60 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = () => {
         const meetingTitle = getValue();
         const transcription = row.original;
         
-        // Prüfe ob mehrere Meetings gefunden
-        if (meetingTitle === "Mehrere Meetings gefunden") {
+        // Prüfe ob Dropdown benötigt wird (NULL oder "Mehrere Meetings gefunden")
+        const needsDropdown = !meetingTitle || meetingTitle === "Mehrere Meetings gefunden";
+        
+        // Wenn kein recording_date vorhanden, normale Anzeige
+        if (!transcription.recording_date) {
+          return <span>{meetingTitle || '-'}</span>;
+        }
+        
+        // Prüfe ob manueller Edit-Modus aktiv ist
+        const isManualEditing = manualEdit?.id === transcription.id;
+        
+        if (isManualEditing) {
+          // Inline-Edit-Modus für manuellen Eintrag
+          return (
+            <div className="flex items-center space-x-2">
+              <Input
+                value={manualEdit.value}
+                onChange={(e) => setManualEdit({ id: transcription.id, value: e.target.value })}
+                placeholder="Meeting-Titel eingeben..."
+                maxLength={255}
+                className="flex-1"
+                autoFocus
+              />
+              <Button
+                size="sm"
+                onClick={() => {
+                  const trimmedValue = manualEdit.value.trim();
+                  if (trimmedValue.length > 0) {
+                    updateMeetingTitleMutation.mutate({
+                      id: transcription.id,
+                      meeting_title: trimmedValue,
+                    });
+                  }
+                }}
+                disabled={updateMeetingTitleMutation.isPending || manualEdit.value.trim().length === 0}
+              >
+                <Check className="h-3 w-3" />
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setManualEdit(null)}
+                disabled={updateMeetingTitleMutation.isPending}
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+          );
+        }
+        
+        // Dropdown anzeigen wenn benötigt
+        if (needsDropdown) {
           // Extrahiere Datum aus recording_date
           const recordingDate = transcription.recording_date;
-          if (!recordingDate) {
-            return <span className="text-gray-500">Kein Datum verfügbar</span>;
-          }
           
           // Extrahiere Datum in lokaler Zeitzone (YYYY-MM-DD)
           const date = new Date(recordingDate);
@@ -385,7 +443,16 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = () => {
             <Select
               value={selectedMeetingIndex >= 0 ? selectedMeetingIndex.toString() : ''}
               onChange={(e) => {
-                const index = parseInt(e.target.value);
+                const value = e.target.value;
+                
+                // Prüfe ob "manueller Eintrag..." ausgewählt wurde
+                if (value === 'manual') {
+                  setManualEdit({ id: transcription.id, value: meetingTitle || '' });
+                  return;
+                }
+                
+                // Normale Meeting-Auswahl
+                const index = parseInt(value);
                 if (index >= 0 && index < meetings.length) {
                   const selectedMeeting = meetings[index];
                   linkCalendarMutation.mutate({
@@ -401,7 +468,7 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = () => {
                   });
                 }
               }}
-              disabled={linkCalendarMutation.isPending}
+              disabled={linkCalendarMutation.isPending || updateMeetingTitleMutation.isPending}
               className="w-full"
             >
               <option value="">Bitte wählen...</option>
@@ -410,6 +477,7 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = () => {
                   {formatTime(meeting.start_date)} - {meeting.subject}
                 </option>
               ))}
+              <option value="manual">manueller Eintrag…</option>
             </Select>
           );
         }
