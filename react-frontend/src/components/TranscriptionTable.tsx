@@ -350,6 +350,7 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = () => {
                   linkCalendarMutation.mutate({
                     id: transcription.id,
                     calendarEntry: {
+                      id: selectedMeeting.id,
                       subject: selectedMeeting.subject,
                       start_date: selectedMeeting.start_date,
                       end_date: selectedMeeting.end_date,
