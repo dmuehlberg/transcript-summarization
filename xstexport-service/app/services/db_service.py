@@ -194,26 +194,48 @@ class DatabaseService:
                     
                     if pg_type == 'TIMESTAMP' or pg_type == 'timestamp with time zone':
                         # Konvertiere zu datetime
-                        df_mapped[pg_field] = pd.to_datetime(df_mapped[pg_field], errors='coerce')
+                        df_mapped[pg_field] = pd.to_datetime(df_mapped[pg_field], errors='coerce', utc=False)
                         
-                        # Behandle Zeitzonen-Konvertierung
-                        if df_mapped[pg_field].dt.tz is None:
-                            # Naive Datumsangaben: Interpretiere als lokale Zeit (z.B. Europe/Berlin)
-                            # und konvertiere dann zu UTC
-                            # Dies berücksichtigt automatisch Sommer-/Winterzeit
-                            # Verwende tz_localize mit der lokalen Zeitzone, dann tz_convert zu UTC
-                            df_mapped[pg_field] = df_mapped[pg_field].dt.tz_localize(
-                                local_tz, 
-                                ambiguous='infer', 
-                                nonexistent='shift_forward'
+                        # WICHTIG: CSV-Daten aus PST/OST-Dateien enthalten UTC-Zeiten, die für das
+                        # Startdatum (z.B. April) korrekt sind, aber für andere Termine (z.B. November)
+                        # falsch, weil die wiederkehrenden Termine die Startdatum-Zeit verwenden.
+                        # 
+                        # Beispiel: CSV enthält "2025-04-02 07:30:00Z" (UTC)
+                        # - Das ist korrekt für April: 09:30 lokal (Sommerzeit UTC+2) = 07:30 UTC
+                        # - Aber für November sollte es sein: 09:30 lokal (Winterzeit UTC+1) = 08:30 UTC
+                        #
+                        # Lösung: Extrahiere die lokale Zeit (09:30) und konvertiere dann für jedes
+                        # Datum die korrekte UTC-Zeit basierend auf Sommer-/Winterzeit.
+                        
+                        # Prüfe, ob die Daten bereits eine Zeitzone haben
+                        has_tz = df_mapped[pg_field].dt.tz is not None
+                        
+                        if has_tz:
+                            # CSV-Daten enthalten UTC-Zeiten, die für das Startdatum korrekt sind
+                            # Konvertiere zu lokaler Zeit, um die lokale Zeit zu extrahieren
+                            logger.info(f"Zeitzone für {pg_field} bereits gesetzt. Extrahiere lokale Zeit aus UTC-Daten.")
+                            
+                            # Konvertiere zu lokaler Zeitzone (verwendet das Datum aus der CSV für die Zeitzone)
+                            df_mapped[pg_field] = df_mapped[pg_field].dt.tz_convert(local_tz)
+                            
+                            # Extrahiere nur die Zeitkomponente (Stunde, Minute, Sekunde) als naive Zeit
+                            # WICHTIG: Wir behalten das Datum bei, aber die Zeitzone wird basierend auf
+                            # dem Datum korrekt angewendet, wenn wir tz_localize verwenden
+                            df_mapped[pg_field] = df_mapped[pg_field].apply(
+                                lambda x: x.replace(tzinfo=None) if pd.notna(x) else x
                             )
-                            # Konvertiere von lokaler Zeit zu UTC
-                            df_mapped[pg_field] = df_mapped[pg_field].dt.tz_convert('UTC')
-                            logger.info(f"Zeitzone für {pg_field}: Naive Datumsangaben als {timezone_str} interpretiert und zu UTC konvertiert")
-                        else:
-                            # Falls bereits Zeitzone gesetzt ist, konvertiere direkt zu UTC
-                            df_mapped[pg_field] = df_mapped[pg_field].dt.tz_convert('UTC')
-                            logger.info(f"Zeitzone für {pg_field} zu UTC konvertiert")
+                        
+                        # Jetzt haben wir naive Datumsangaben mit der lokalen Zeit
+                        # Interpretiere als lokale Zeit (z.B. Europe/Berlin) und konvertiere zu UTC
+                        # Dies berücksichtigt automatisch Sommer-/Winterzeit basierend auf dem Datum
+                        df_mapped[pg_field] = df_mapped[pg_field].dt.tz_localize(
+                            local_tz, 
+                            ambiguous='infer', 
+                            nonexistent='shift_forward'
+                        )
+                        # Konvertiere von lokaler Zeit zu UTC
+                        df_mapped[pg_field] = df_mapped[pg_field].dt.tz_convert('UTC')
+                        logger.info(f"Zeitzone für {pg_field}: Datumsangaben als {timezone_str} interpretiert und zu UTC konvertiert (berücksichtigt Sommer-/Winterzeit basierend auf Datum)")
                     elif pg_type == 'INTEGER':
                         df_mapped[pg_field] = pd.to_numeric(df_mapped[pg_field], errors='coerce').fillna(0).astype(int)
                     elif pg_type == 'BOOLEAN':

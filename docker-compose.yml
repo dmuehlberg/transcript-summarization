@@ -72,6 +72,7 @@ services:
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-phi4-mini:3.8b}
       - OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-30}
+      - TIMEZONE=${TIMEZONE:-Europe/Berlin}
     depends_on:
       postgres:
         condition: service_healthy
