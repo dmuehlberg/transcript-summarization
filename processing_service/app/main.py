@@ -45,6 +45,9 @@ class CorrectionRequest(BaseModel):
 class MeetingInfoRequest(BaseModel):
     recording_date: Optional[str] = None
 
+class MeetingsByDateRequest(BaseModel):
+    recording_date: str
+
 @app.post("/correct-transcript")
 async def correct_transcript(
     request: Request,
@@ -295,7 +298,7 @@ def get_meeting_info(request: MeetingInfoRequest):
                     info_dict = {
                         "meeting_start_date": None,
                         "meeting_end_date": None,
-                        "meeting_title": "Multiple Meetings found",
+                        "meeting_title": "Mehrere Meetings gefunden",
                         "meeting_location": None,
                         "invitation_text": None,
                         "participants": None
@@ -337,6 +340,88 @@ def get_meeting_info(request: MeetingInfoRequest):
                 results.append({"id": transcription_id, "error": str(e)})
         
         return {"status": "success", "processed": len(results), "details": results}
+        
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/get_meetings_by_date")
+def get_meetings_by_date(recording_date: str):
+    """
+    Lädt alle Meetings eines Tages basierend auf dem recording_date.
+    Parameter: recording_date (Format: YYYY-MM-DD oder YYYY-MM-DD HH-MM)
+    """
+    try:
+        # Zeitzone aus .env laden
+        timezone_str = os.getenv("TIMEZONE", "Europe/Berlin")
+        local_tz = pytz.timezone(timezone_str)
+        
+        # Parse recording_date
+        try:
+            # Versuche zuerst mit Zeit
+            if " " in recording_date and "-" in recording_date.split(" ")[1]:
+                recording_date_parsed = datetime.strptime(recording_date, "%Y-%m-%d %H-%M")
+            else:
+                # Nur Datum
+                recording_date_parsed = datetime.strptime(recording_date, "%Y-%m-%d")
+            recording_date_local = local_tz.localize(recording_date_parsed)
+            recording_date_utc = recording_date_local.astimezone(pytz.UTC)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="recording_date muss im Format YYYY-MM-DD oder YYYY-MM-DD HH-MM sein")
+        
+        # Extrahiere nur das Datum (ohne Uhrzeit)
+        date_only = recording_date_local.date()
+        date_start = local_tz.localize(datetime.combine(date_only, datetime.min.time()))
+        date_end = local_tz.localize(datetime.combine(date_only, datetime.max.time()))
+        date_start_utc = date_start.astimezone(pytz.UTC)
+        date_end_utc = date_end.astimezone(pytz.UTC)
+        
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Suche alle Meetings des Tages
+        cur.execute("""
+            SELECT start_date, end_date, subject, has_picture, user_entry_id, display_to, display_cc
+            FROM calendar_data
+            WHERE start_date >= %s AND start_date <= %s
+            ORDER BY start_date ASC
+        """, (date_start_utc, date_end_utc))
+        rows = cur.fetchall()
+        
+        # Formatiere Ergebnisse
+        meetings = []
+        for row in rows:
+            start_date, end_date, subject, has_picture, user_entry_id, display_to, display_cc = row
+            
+            # Teilnehmernamen kombinieren und deduplizieren
+            import re as _re
+            tokens = set()
+            for field in [display_to, display_cc]:
+                if not field:
+                    continue
+                parts = _re.split(r"[;,]", field)
+                for part in parts:
+                    words = part.strip().split()
+                    for word in words:
+                        clean = _re.sub(r"[^\wäöüÄÖÜß-]", "", word)
+                        if clean:
+                            tokens.add(clean)
+            participants = ";".join(sorted(tokens))
+            
+            meetings.append({
+                "start_date": start_date.isoformat() if start_date else None,
+                "end_date": end_date.isoformat() if end_date else None,
+                "subject": subject,
+                "location": has_picture,
+                "invitation_text": user_entry_id,
+                "participants": participants
+            })
+        
+        cur.close()
+        conn.close()
+        
+        return {"status": "success", "meetings": meetings}
         
     except HTTPException as e:
         raise e

@@ -259,6 +259,31 @@ app.get('/api/calendar', async (req, res) => {
   }
 });
 
+// Get calendar data by day (for meeting dropdown)
+app.get('/api/calendar/day', async (req, res) => {
+  try {
+    const { date } = req.query;
+
+    if (!date) {
+      return res.status(400).json({ error: 'date is required (format: YYYY-MM-DD)' });
+    }
+
+    const query = `
+      SELECT id, subject, start_date, end_date, location, attendees
+      FROM calendar_entries 
+      WHERE DATE(start_date) = DATE($1)
+      ORDER BY start_date ASC
+    `;
+    
+    const result = await pool.query(query, [date]);
+
+    res.json({ data: result.rows });
+  } catch (error) {
+    logger.error('Error fetching calendar data by day:', error);
+    res.status(500).json({ error: 'Failed to fetch calendar data by day' });
+  }
+});
+
 // Start workflow
 app.post('/api/workflow/start', async (req, res) => {
   try {

@@ -16,16 +16,16 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Select } from './ui/select';
 import { StatusBadge } from './StatusBadge';
-import { transcriptionApi, tableConfigApi } from '@/lib/api';
-import { formatDuration, formatDate, getLanguageOptions } from '@/lib/data-formatters';
+import { transcriptionApi, tableConfigApi, calendarApi } from '@/lib/api';
+import { formatDuration, formatDate, formatTime, getLanguageOptions } from '@/lib/data-formatters';
+import type { CalendarEntry } from '@/lib/types';
 import type { Transcription, TableColumnConfig, ColumnSizingState as SavedColumnSizingState } from '@/lib/types';
-import { Trash2, Calendar, Check, X } from 'lucide-react';
+import { Trash2, Check, X } from 'lucide-react';
 
 interface TranscriptionTableProps {
-  onSelectMeeting: (transcriptionId: number, startDate: string) => void;
 }
 
-export const TranscriptionTable: React.FC<TranscriptionTableProps> = ({ onSelectMeeting }) => {
+export const TranscriptionTable: React.FC<TranscriptionTableProps> = () => {
   const queryClient = useQueryClient();
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
@@ -103,6 +103,98 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = ({ onSelect
       // setSavedColumnSizing(configMap);
     }
   }, [columnConfig]);
+
+  // Find all unique dates for transcriptions with "Mehrere Meetings gefunden"
+  const transcriptionsWithMultipleMeetings = transcriptionsData?.data?.filter(
+    t => t.meeting_title === "Mehrere Meetings gefunden" && t.recording_date
+  ) || [];
+  
+  const uniqueDates = Array.from(
+    new Set(
+      transcriptionsWithMultipleMeetings.map(t => {
+        if (!t.recording_date) return null;
+        const date = new Date(t.recording_date);
+        return date.toISOString().split('T')[0]; // YYYY-MM-DD
+      }).filter(Boolean) as string[]
+    )
+  );
+
+  // Fetch meetings for each unique date using individual queries
+  // Note: React Hooks rules require hooks to be called in the same order.
+  // We'll create queries for up to 10 unique dates (should be sufficient for most cases)
+  const meetingsByDate = new Map<string, CalendarEntry[]>();
+  
+  // Create queries for each unique date (limited to 10 to prevent too many queries)
+  const datesToQuery = uniqueDates.slice(0, 10);
+  
+  const query1 = useQuery({
+    queryKey: ['calendar-day', datesToQuery[0]],
+    queryFn: () => calendarApi.getByDay(datesToQuery[0]!),
+    enabled: !!datesToQuery[0],
+  });
+  const query2 = useQuery({
+    queryKey: ['calendar-day', datesToQuery[1]],
+    queryFn: () => calendarApi.getByDay(datesToQuery[1]!),
+    enabled: !!datesToQuery[1],
+  });
+  const query3 = useQuery({
+    queryKey: ['calendar-day', datesToQuery[2]],
+    queryFn: () => calendarApi.getByDay(datesToQuery[2]!),
+    enabled: !!datesToQuery[2],
+  });
+  const query4 = useQuery({
+    queryKey: ['calendar-day', datesToQuery[3]],
+    queryFn: () => calendarApi.getByDay(datesToQuery[3]!),
+    enabled: !!datesToQuery[3],
+  });
+  const query5 = useQuery({
+    queryKey: ['calendar-day', datesToQuery[4]],
+    queryFn: () => calendarApi.getByDay(datesToQuery[4]!),
+    enabled: !!datesToQuery[4],
+  });
+  const query6 = useQuery({
+    queryKey: ['calendar-day', datesToQuery[5]],
+    queryFn: () => calendarApi.getByDay(datesToQuery[5]!),
+    enabled: !!datesToQuery[5],
+  });
+  const query7 = useQuery({
+    queryKey: ['calendar-day', datesToQuery[6]],
+    queryFn: () => calendarApi.getByDay(datesToQuery[6]!),
+    enabled: !!datesToQuery[6],
+  });
+  const query8 = useQuery({
+    queryKey: ['calendar-day', datesToQuery[7]],
+    queryFn: () => calendarApi.getByDay(datesToQuery[7]!),
+    enabled: !!datesToQuery[7],
+  });
+  const query9 = useQuery({
+    queryKey: ['calendar-day', datesToQuery[8]],
+    queryFn: () => calendarApi.getByDay(datesToQuery[8]!),
+    enabled: !!datesToQuery[8],
+  });
+  const query10 = useQuery({
+    queryKey: ['calendar-day', datesToQuery[9]],
+    queryFn: () => calendarApi.getByDay(datesToQuery[9]!),
+    enabled: !!datesToQuery[9],
+  });
+  
+  // Map query results to dates
+  const queries = [query1, query2, query3, query4, query5, query6, query7, query8, query9, query10];
+  queries.forEach((query, index) => {
+    const date = datesToQuery[index];
+    if (date && query.data?.data) {
+      meetingsByDate.set(date, query.data.data);
+    }
+  });
+
+  // Link calendar mutation
+  const linkCalendarMutation = useMutation({
+    mutationFn: ({ id, calendarEntry }: { id: number; calendarEntry: CalendarEntry }) =>
+      transcriptionApi.linkCalendar(id, calendarEntry),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transcriptions'] });
+    },
+  });
 
 
 
@@ -228,7 +320,61 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = ({ onSelect
       size: 200,
       minSize: 150,
       enableResizing: true,
-      cell: ({ getValue }) => <span>{getValue()}</span>,
+      cell: ({ row, getValue }) => {
+        const meetingTitle = getValue();
+        const transcription = row.original;
+        
+        // Prüfe ob mehrere Meetings gefunden
+        if (meetingTitle === "Mehrere Meetings gefunden") {
+          // Extrahiere Datum aus recording_date
+          const recordingDate = transcription.recording_date;
+          if (!recordingDate) {
+            return <span className="text-gray-500">Kein Datum verfügbar</span>;
+          }
+          
+          const dateOnly = new Date(recordingDate).toISOString().split('T')[0];
+          const meetings = meetingsByDate.get(dateOnly) || [];
+          
+          // Finde den aktuell ausgewählten Meeting-Index (falls bereits verknüpft)
+          const selectedMeetingIndex = meetings.findIndex(
+            m => m.start_date === transcription.meeting_start_date
+          );
+          
+          return (
+            <Select
+              value={selectedMeetingIndex >= 0 ? selectedMeetingIndex.toString() : ''}
+              onChange={(e) => {
+                const index = parseInt(e.target.value);
+                if (index >= 0 && index < meetings.length) {
+                  const selectedMeeting = meetings[index];
+                  linkCalendarMutation.mutate({
+                    id: transcription.id,
+                    calendarEntry: {
+                      subject: selectedMeeting.subject,
+                      start_date: selectedMeeting.start_date,
+                      end_date: selectedMeeting.end_date,
+                      location: selectedMeeting.location,
+                      attendees: selectedMeeting.attendees,
+                    }
+                  });
+                }
+              }}
+              disabled={linkCalendarMutation.isPending}
+              className="w-full"
+            >
+              <option value="">Bitte wählen...</option>
+              {meetings.map((meeting, index) => (
+                <option key={index} value={index.toString()}>
+                  {formatTime(meeting.start_date)} - {meeting.subject}
+                </option>
+              ))}
+            </Select>
+          );
+        }
+        
+        // Normale Anzeige
+        return <span>{meetingTitle || '-'}</span>;
+      },
     }),
     
     // Meeting start date
@@ -274,33 +420,6 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = ({ onSelect
       minSize: 100,
       enableResizing: true,
       cell: ({ getValue }) => <span>{formatDate(getValue())}</span>,
-    }),
-    
-    // Actions
-    columnHelper.display({
-      id: 'actions',
-      size: 150,
-      minSize: 120,
-      enableResizing: true,
-      header: 'Aktionen',
-      cell: ({ row }) => (
-        <div className="flex items-center space-x-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              const transcription = row.original;
-              if (transcription.meeting_start_date) {
-                onSelectMeeting(transcription.id, transcription.meeting_start_date);
-              }
-            }}
-            disabled={!row.original.meeting_start_date}
-          >
-            <Calendar className="h-3 w-3 mr-1" />
-            Meeting wählen
-          </Button>
-        </div>
-      ),
     }),
   ];
 

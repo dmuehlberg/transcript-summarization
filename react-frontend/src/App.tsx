@@ -1,34 +1,7 @@
-import { useState } from 'react';
 import { WorkflowControls } from './components/WorkflowControls';
 import { TranscriptionTable } from './components/TranscriptionTable';
-import { CalendarTable } from './components/CalendarTable';
-
-type Screen = 'dashboard' | 'calendar';
-
-interface CalendarScreenState {
-  transcriptionId: number;
-  startDate: string;
-}
 
 function App() {
-  const [currentScreen, setCurrentScreen] = useState<Screen>('dashboard');
-  const [calendarState, setCalendarState] = useState<CalendarScreenState | null>(null);
-
-  const handleSelectMeeting = (transcriptionId: number, startDate: string) => {
-    setCalendarState({ transcriptionId, startDate });
-    setCurrentScreen('calendar');
-  };
-
-  const handleCalendarBack = () => {
-    setCurrentScreen('dashboard');
-    setCalendarState(null);
-  };
-
-  const handleCalendarSuccess = () => {
-    setCurrentScreen('dashboard');
-    setCalendarState(null);
-  };
-
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
       <div className="w-full max-w-none px-4 py-8">
@@ -42,21 +15,8 @@ function App() {
         </header>
 
         <main>
-          {currentScreen === 'dashboard' && (
-            <>
-              <WorkflowControls />
-              <TranscriptionTable onSelectMeeting={handleSelectMeeting} />
-            </>
-          )}
-
-          {currentScreen === 'calendar' && calendarState && (
-            <CalendarTable
-              transcriptionId={calendarState.transcriptionId}
-              startDate={calendarState.startDate}
-              onBack={handleCalendarBack}
-              onSuccess={handleCalendarSuccess}
-            />
-          )}
+          <WorkflowControls />
+          <TranscriptionTable />
         </main>
       </div>
     </div>

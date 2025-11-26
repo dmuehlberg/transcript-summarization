@@ -71,6 +71,10 @@ export const calendarApi = {
     const response = await api.get('/calendar', { params: { start_date: startDate } });
     return response.data;
   },
+  getByDay: async (date: string): Promise<ApiResponse<CalendarEntry[]>> => {
+    const response = await api.get('/calendar/day', { params: { date } });
+    return response.data;
+  },
 };
 
 // Workflow APIs

@@ -23,6 +23,19 @@ export const formatDate = (dateString: string | null): string => {
   }
 };
 
+export const formatTime = (dateString: string | null): string => {
+  if (!dateString) return '-';
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleTimeString('de-DE', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return dateString;
+  }
+};
+
 export const getStatusColor = (status: string): string => {
   switch (status) {
     case 'finished':
