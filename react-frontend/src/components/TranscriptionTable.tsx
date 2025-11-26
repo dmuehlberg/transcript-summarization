@@ -64,11 +64,18 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = () => {
 
   // Update meeting title mutation
   const updateMeetingTitleMutation = useMutation({
-    mutationFn: ({ id, meeting_title }: { id: number; meeting_title: string }) =>
-      transcriptionApi.updateMeetingTitle(id, meeting_title),
+    mutationFn: ({ id, meeting_title }: { id: number; meeting_title: string }) => {
+      console.log('updateMeetingTitleMutation called with:', { id, meeting_title });
+      return transcriptionApi.updateMeetingTitle(id, meeting_title);
+    },
     onSuccess: () => {
+      console.log('Meeting title updated successfully');
       queryClient.invalidateQueries({ queryKey: ['transcriptions'] });
       setManualEdit(null);
+    },
+    onError: (error) => {
+      console.error('Error updating meeting title:', error);
+      alert('Fehler beim Speichern des Meeting-Titels: ' + (error instanceof Error ? error.message : 'Unbekannter Fehler'));
     },
   });
 
@@ -381,11 +388,47 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = () => {
         
         if (isManualEditing) {
           // Inline-Edit-Modus für manuellen Eintrag
+          const handleSave = () => {
+            console.log('handleSave called, manualEdit:', manualEdit);
+            if (!manualEdit) {
+              console.error('manualEdit is null');
+              return;
+            }
+            const trimmedValue = manualEdit.value.trim();
+            console.log('Trimmed value:', trimmedValue, 'Length:', trimmedValue.length);
+            if (trimmedValue.length > 0) {
+              console.log('Calling mutation with:', { id: transcription.id, meeting_title: trimmedValue });
+              updateMeetingTitleMutation.mutate({
+                id: transcription.id,
+                meeting_title: trimmedValue,
+              });
+            } else {
+              console.log('Value is empty, not calling mutation');
+            }
+          };
+
+          const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              e.stopPropagation();
+              handleSave();
+            } else if (e.key === 'Escape') {
+              e.preventDefault();
+              e.stopPropagation();
+              setManualEdit(null);
+            }
+          };
+
           return (
-            <div className="flex items-center space-x-2">
+            <div 
+              className="flex items-center space-x-2"
+              onClick={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
               <Input
                 value={manualEdit.value}
                 onChange={(e) => setManualEdit({ id: transcription.id, value: e.target.value })}
+                onKeyDown={handleKeyDown}
                 placeholder="Meeting-Titel eingeben..."
                 maxLength={255}
                 className="flex-1"
@@ -393,24 +436,26 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = () => {
               />
               <Button
                 size="sm"
-                onClick={() => {
-                  const trimmedValue = manualEdit.value.trim();
-                  if (trimmedValue.length > 0) {
-                    updateMeetingTitleMutation.mutate({
-                      id: transcription.id,
-                      meeting_title: trimmedValue,
-                    });
-                  }
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleSave();
                 }}
                 disabled={updateMeetingTitleMutation.isPending || manualEdit.value.trim().length === 0}
+                type="button"
               >
                 <Check className="h-3 w-3" />
               </Button>
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => setManualEdit(null)}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setManualEdit(null);
+                }}
                 disabled={updateMeetingTitleMutation.isPending}
+                type="button"
               >
                 <X className="h-3 w-3" />
               </Button>
