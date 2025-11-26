@@ -109,19 +109,26 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = () => {
     t => t.meeting_title === "Mehrere Meetings gefunden" && t.recording_date
   ) || [];
   
+  console.log('Transcriptions with multiple meetings:', transcriptionsWithMultipleMeetings.length);
+  
   const uniqueDates = Array.from(
     new Set(
       transcriptionsWithMultipleMeetings.map(t => {
         if (!t.recording_date) return null;
         const date = new Date(t.recording_date);
         // Extrahiere Datum in lokaler Zeitzone (YYYY-MM-DD)
+        // Verwende toLocaleDateString für konsistente Extraktion
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const day = String(date.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
+        const dateStr = `${year}-${month}-${day}`;
+        console.log('Extracted date from recording_date:', t.recording_date, 'Date object:', date, '->', dateStr);
+        return dateStr;
       }).filter(Boolean) as string[]
     )
   );
+  
+  console.log('Unique dates to query:', uniqueDates);
 
   // Fetch meetings for each unique date using individual queries
   // Note: React Hooks rules require hooks to be called in the same order.
@@ -130,11 +137,21 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = () => {
   
   // Create queries for each unique date (limited to 10 to prevent too many queries)
   const datesToQuery = uniqueDates.slice(0, 10);
+  console.log('Dates to query (after slice):', datesToQuery);
   
   const query1 = useQuery({
     queryKey: ['calendar-day', datesToQuery[0]],
-    queryFn: () => calendarApi.getByDay(datesToQuery[0]!),
+    queryFn: () => {
+      console.log('Querying calendar for date:', datesToQuery[0]);
+      return calendarApi.getByDay(datesToQuery[0]!);
+    },
     enabled: !!datesToQuery[0],
+    onSuccess: (data) => {
+      console.log('Query 1 success for date', datesToQuery[0], ':', data);
+    },
+    onError: (error) => {
+      console.error('Query 1 error for date', datesToQuery[0], ':', error);
+    },
   });
   const query2 = useQuery({
     queryKey: ['calendar-day', datesToQuery[1]],
@@ -186,10 +203,22 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = () => {
   const queries = [query1, query2, query3, query4, query5, query6, query7, query8, query9, query10];
   queries.forEach((query, index) => {
     const date = datesToQuery[index];
-    if (date && query.data?.data) {
-      meetingsByDate.set(date, query.data.data);
+    if (date) {
+      console.log(`Query ${index + 1} for date ${date}:`, {
+        isLoading: query.isLoading,
+        isError: query.isError,
+        error: query.error,
+        data: query.data,
+        dataCount: query.data?.data?.length || 0
+      });
+      if (query.data?.data) {
+        meetingsByDate.set(date, query.data.data);
+        console.log(`Set ${query.data.data.length} meetings for date ${date}`);
+      }
     }
   });
+  
+  console.log('Meetings by date map:', Array.from(meetingsByDate.entries()));
 
   // Link calendar mutation
   const linkCalendarMutation = useMutation({
@@ -342,7 +371,10 @@ export const TranscriptionTable: React.FC<TranscriptionTableProps> = () => {
           const month = String(date.getMonth() + 1).padStart(2, '0');
           const day = String(date.getDate()).padStart(2, '0');
           const dateOnly = `${year}-${month}-${day}`;
+          console.log('Dropdown: Looking up meetings for date:', dateOnly, 'recording_date:', recordingDate, 'Date object:', date);
+          console.log('Dropdown: All dates in meetingsByDate:', Array.from(meetingsByDate.keys()));
           const meetings = meetingsByDate.get(dateOnly) || [];
+          console.log('Dropdown: Found meetings for', dateOnly, ':', meetings.length, meetings);
           
           // Finde den aktuell ausgewählten Meeting-Index (falls bereits verknüpft)
           const selectedMeetingIndex = meetings.findIndex(

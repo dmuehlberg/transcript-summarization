@@ -300,10 +300,23 @@ app.get('/api/calendar/day', async (req, res) => {
     const result = await pool.query(query, [date]);
     
     logger.info(`Found ${result.rows.length} meetings for date ${date}`);
+    
+    if (result.rows.length === 0) {
+      // Debug: Prüfe ob überhaupt Daten in calendar_data vorhanden sind
+      const debugQuery = await pool.query(`
+        SELECT COUNT(*) as total, 
+               MIN(start_date) as min_date, 
+               MAX(start_date) as max_date,
+               COUNT(CASE WHEN DATE(start_date) = $1::date THEN 1 END) as count_for_date
+        FROM calendar_data
+      `, [date]);
+      logger.info(`Debug info for date ${date}:`, debugQuery.rows[0]);
+    }
 
     res.json({ data: result.rows });
   } catch (error) {
     logger.error('Error fetching calendar data by day:', error);
+    logger.error('Error stack:', error.stack);
     res.status(500).json({ error: 'Failed to fetch calendar data by day', details: error.message });
   }
 });

@@ -72,8 +72,15 @@ export const calendarApi = {
     return response.data;
   },
   getByDay: async (date: string): Promise<ApiResponse<CalendarEntry[]>> => {
-    const response = await api.get('/calendar/day', { params: { date } });
-    return response.data;
+    console.log('API: getByDay called with date:', date);
+    try {
+      const response = await api.get('/calendar/day', { params: { date } });
+      console.log('API: getByDay response:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('API: getByDay error:', error);
+      throw error;
+    }
   },
 };
 
