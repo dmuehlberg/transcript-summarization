@@ -16,6 +16,10 @@ import tempfile
 import pytz
 import asyncio
 import threading
+from dotenv import load_dotenv
+
+# Lade .env-Datei für TIMEZONE-Konfiguration
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -178,21 +182,36 @@ class DatabaseService:
             df_mapped.columns = [column_mapping[col] for col in df_mapped.columns]
             
             # Konvertiere Datentypen
+            # Lade Zeitzone aus .env (Standard: Europe/Berlin)
+            timezone_str = os.getenv("TIMEZONE", "Europe/Berlin")
+            local_tz = pytz.timezone(timezone_str)
+            logger.info(f"Verwende Zeitzone für Datumskonvertierung: {timezone_str}")
+            
             for field_name, field_info in mapping_to_use.items():
                 if field_name in df.columns:
                     pg_field = field_info['pg_field']
                     pg_type = field_info.get('pg_type', 'TEXT')
                     
                     if pg_type == 'TIMESTAMP' or pg_type == 'timestamp with time zone':
-                        # Konvertiere zu datetime und setze UTC Zeitzone
+                        # Konvertiere zu datetime
                         df_mapped[pg_field] = pd.to_datetime(df_mapped[pg_field], errors='coerce')
-                        # Setze UTC Zeitzone für alle Datumsfelder (da PST-Daten in UTC+0 kommen)
-                        # Nur setzen wenn noch keine Zeitzone gesetzt ist
+                        
+                        # Behandle Zeitzonen-Konvertierung
                         if df_mapped[pg_field].dt.tz is None:
-                            df_mapped[pg_field] = df_mapped[pg_field].dt.tz_localize('UTC', ambiguous='infer', nonexistent='shift_forward')
-                            logger.info(f"Zeitzone für {pg_field} auf UTC gesetzt")
+                            # Naive Datumsangaben: Interpretiere als lokale Zeit (z.B. Europe/Berlin)
+                            # und konvertiere dann zu UTC
+                            # Dies berücksichtigt automatisch Sommer-/Winterzeit
+                            # Verwende tz_localize mit der lokalen Zeitzone, dann tz_convert zu UTC
+                            df_mapped[pg_field] = df_mapped[pg_field].dt.tz_localize(
+                                local_tz, 
+                                ambiguous='infer', 
+                                nonexistent='shift_forward'
+                            )
+                            # Konvertiere von lokaler Zeit zu UTC
+                            df_mapped[pg_field] = df_mapped[pg_field].dt.tz_convert('UTC')
+                            logger.info(f"Zeitzone für {pg_field}: Naive Datumsangaben als {timezone_str} interpretiert und zu UTC konvertiert")
                         else:
-                            # Falls bereits Zeitzone gesetzt ist, konvertiere zu UTC
+                            # Falls bereits Zeitzone gesetzt ist, konvertiere direkt zu UTC
                             df_mapped[pg_field] = df_mapped[pg_field].dt.tz_convert('UTC')
                             logger.info(f"Zeitzone für {pg_field} zu UTC konvertiert")
                     elif pg_type == 'INTEGER':
