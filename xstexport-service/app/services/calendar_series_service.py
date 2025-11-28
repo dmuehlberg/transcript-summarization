@@ -156,16 +156,31 @@ class CalendarSeriesService:
             for idx, occ_start in enumerate(valid_occurrences_dates):
                 logger.info(f"[TIMEZONE] Termin {idx+1}/{len(valid_occurrences_dates)}: occ_start (von rrule) = {occ_start}, tzinfo = {occ_start.tzinfo}")
                 
-                # WICHTIG: Konvertiere occ_start zu UTC, falls es timezone-aware ist
-                # Die rrule gibt timezone-aware datetime-Objekte zurück (in lokaler Zeit),
-                # aber die Datenbank erwartet UTC.
+                # KRITISCH: Die rrule behält die Zeitzone des dtstart bei, auch wenn das Datum
+                # in eine andere Zeitzone (Sommer-/Winterzeit) fällt.
+                # Beispiel: dtstart = 2025-04-03 09:30:00+02:00 (Sommerzeit)
+                #           rrule generiert: 2025-11-26 09:30:00+02:00 (falsch! sollte +01:00 sein)
+                #
+                # Lösung: Extrahiere die naive Zeit (09:30) und lokalisiere sie für das
+                # spezifische Datum neu, damit die korrekte Zeitzone (Sommer-/Winterzeit)
+                # automatisch angewendet wird.
+                
                 if occ_start.tzinfo is not None:
-                    occ_start_utc = occ_start.astimezone(pytz.UTC)
-                    logger.info(f"[TIMEZONE] Termin {idx+1}: occ_start (timezone-aware) {occ_start} -> UTC: {occ_start_utc}")
+                    # Extrahiere naive Zeit (Datum + Uhrzeit ohne Zeitzone)
+                    occ_start_naive = occ_start.replace(tzinfo=None)
+                    logger.info(f"[TIMEZONE] Termin {idx+1}: Extrahiere naive Zeit: {occ_start_naive}")
+                    
+                    # Lokalisiere für das spezifische Datum neu (berücksichtigt automatisch DST)
+                    occ_start_corrected = local_tz.localize(occ_start_naive, is_dst=None)
+                    logger.info(f"[TIMEZONE] Termin {idx+1}: Neu lokalisiert für Datum {occ_start_naive.date()}: {occ_start_corrected} (ursprünglich: {occ_start})")
+                    
+                    # Konvertiere zu UTC
+                    occ_start_utc = occ_start_corrected.astimezone(pytz.UTC)
+                    logger.info(f"[TIMEZONE] Termin {idx+1}: occ_start korrigiert: {occ_start} -> {occ_start_corrected} -> UTC: {occ_start_utc}")
                 else:
-                    # Falls naive: interpretiere als lokale Zeit und konvertiere zu UTC
+                    # Falls naive: lokalisiere direkt
                     logger.info(f"[TIMEZONE] Termin {idx+1}: occ_start ist naive, lokalisiere als {timezone_str}")
-                    occ_start_localized = local_tz.localize(occ_start)
+                    occ_start_localized = local_tz.localize(occ_start, is_dst=None)
                     occ_start_utc = occ_start_localized.astimezone(pytz.UTC)
                     logger.info(f"[TIMEZONE] Termin {idx+1}: occ_start (naive) {occ_start} -> lokalisiert {occ_start_localized} -> UTC: {occ_start_utc}")
                 
