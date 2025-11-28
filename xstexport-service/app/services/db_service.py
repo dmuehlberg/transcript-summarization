@@ -213,10 +213,17 @@ class DatabaseService:
                         if has_tz:
                             # CSV-Daten enthalten UTC-Zeiten, die für das Startdatum korrekt sind
                             # Konvertiere zu lokaler Zeit, um die lokale Zeit zu extrahieren
-                            logger.info(f"Zeitzone für {pg_field} bereits gesetzt. Extrahiere lokale Zeit aus UTC-Daten.")
+                            logger.info(f"[TIMEZONE] Zeitzone für {pg_field} bereits gesetzt. Extrahiere lokale Zeit aus UTC-Daten.")
+                            
+                            # Logge erste paar Werte für Debugging
+                            sample_values = df_mapped[pg_field].head(3).tolist()
+                            logger.info(f"[TIMEZONE] {pg_field} - Beispielwerte VOR Konvertierung (UTC): {sample_values}")
                             
                             # Konvertiere zu lokaler Zeitzone (verwendet das Datum aus der CSV für die Zeitzone)
                             df_mapped[pg_field] = df_mapped[pg_field].dt.tz_convert(local_tz)
+                            
+                            sample_values_local = df_mapped[pg_field].head(3).tolist()
+                            logger.info(f"[TIMEZONE] {pg_field} - Beispielwerte NACH tz_convert zu {timezone_str}: {sample_values_local}")
                             
                             # Extrahiere nur die Zeitkomponente (Stunde, Minute, Sekunde) als naive Zeit
                             # WICHTIG: Wir behalten das Datum bei, aber die Zeitzone wird basierend auf
@@ -224,18 +231,29 @@ class DatabaseService:
                             df_mapped[pg_field] = df_mapped[pg_field].apply(
                                 lambda x: x.replace(tzinfo=None) if pd.notna(x) else x
                             )
+                            
+                            sample_values_naive = df_mapped[pg_field].head(3).tolist()
+                            logger.info(f"[TIMEZONE] {pg_field} - Beispielwerte NACH Entfernen der Zeitzone (naive, behält Datum): {sample_values_naive}")
                         
                         # Jetzt haben wir naive Datumsangaben mit der lokalen Zeit
                         # Interpretiere als lokale Zeit (z.B. Europe/Berlin) und konvertiere zu UTC
                         # Dies berücksichtigt automatisch Sommer-/Winterzeit basierend auf dem Datum
+                        logger.info(f"[TIMEZONE] {pg_field} - Lokalisiere naive Datumsangaben als {timezone_str} (berücksichtigt automatisch Sommer-/Winterzeit)")
                         df_mapped[pg_field] = df_mapped[pg_field].dt.tz_localize(
                             local_tz, 
                             ambiguous='infer', 
                             nonexistent='shift_forward'
                         )
+                        
+                        sample_values_localized = df_mapped[pg_field].head(3).tolist()
+                        logger.info(f"[TIMEZONE] {pg_field} - Beispielwerte NACH tz_localize ({timezone_str}): {sample_values_localized}")
+                        
                         # Konvertiere von lokaler Zeit zu UTC
                         df_mapped[pg_field] = df_mapped[pg_field].dt.tz_convert('UTC')
-                        logger.info(f"Zeitzone für {pg_field}: Datumsangaben als {timezone_str} interpretiert und zu UTC konvertiert (berücksichtigt Sommer-/Winterzeit basierend auf Datum)")
+                        
+                        sample_values_utc = df_mapped[pg_field].head(3).tolist()
+                        logger.info(f"[TIMEZONE] {pg_field} - Beispielwerte NACH tz_convert zu UTC (final): {sample_values_utc}")
+                        logger.info(f"[TIMEZONE] {pg_field}: Datumsangaben als {timezone_str} interpretiert und zu UTC konvertiert (berücksichtigt Sommer-/Winterzeit basierend auf Datum)")
                     elif pg_type == 'INTEGER':
                         df_mapped[pg_field] = pd.to_numeric(df_mapped[pg_field], errors='coerce').fillna(0).astype(int)
                     elif pg_type == 'BOOLEAN':
@@ -331,6 +349,14 @@ class DatabaseService:
             # Konvertiere Datentypen für PostgreSQL
             start_time = rrule_data.get('meeting_series_start_time')
             end_time = rrule_data.get('meeting_series_end_time')
+            
+            logger.info(f"[TIMEZONE] update_meeting_series_fields: row_id = {row_id}")
+            logger.info(f"[TIMEZONE] update_meeting_series_fields: meeting_series_start_time (Rohwert) = {start_time}, Typ = {type(start_time)}")
+            if isinstance(start_time, datetime):
+                logger.info(f"[TIMEZONE] update_meeting_series_fields: meeting_series_start_time (datetime) = {start_time}, tzinfo = {start_time.tzinfo}")
+                if start_time.tzinfo:
+                    logger.info(f"[TIMEZONE] update_meeting_series_fields: meeting_series_start_time in UTC = {start_time.astimezone(pytz.UTC) if start_time.tzinfo != pytz.UTC else start_time}")
+            
             frequency = self._convert_to_text(rrule_data.get('meeting_series_frequency'))
             interval = self._convert_to_int(rrule_data.get('meeting_series_interval'))
             weekdays = self._convert_to_text(rrule_data.get('meeting_series_weekdays'))
@@ -355,7 +381,7 @@ class DatabaseService:
             """)
             
             with self.engine.connect() as conn:
-                conn.execute(sql, {
+                params = {
                     'id': row_id,
                     'start_time': start_time,
                     'end_time': end_time,
@@ -365,9 +391,14 @@ class DatabaseService:
                     'monthday': monthday,
                     'weekday_nth': weekday_nth,
                     'months': months if months else None,
-                    'exceptions': exceptions
-                })
+                    'exceptions': exceptions if exceptions else None
+                }
+                logger.info(f"[TIMEZONE] update_meeting_series_fields: Schreibe in DB - start_time = {params['start_time']}, Typ = {type(params['start_time'])}")
+                if isinstance(params['start_time'], datetime):
+                    logger.info(f"[TIMEZONE] update_meeting_series_fields: start_time.tzinfo = {params['start_time'].tzinfo}")
+                conn.execute(sql, params)
                 conn.commit()
+                logger.info(f"[TIMEZONE] update_meeting_series_fields: Erfolgreich in DB geschrieben für row_id = {row_id}")
             
             logger.debug(f"Zeile {row_id} erfolgreich aktualisiert")
         except SQLAlchemyError as e:
@@ -406,12 +437,18 @@ class DatabaseService:
         
         for row in rows:
             try:
+                logger.info(f"[TIMEZONE] process_meeting_series_with_llm: Verarbeite row_id = {row['id']}")
+                
                 # Konvertiere start_date und end_date zu Strings falls nötig
                 start_date = row['meeting_series_start_date']
                 end_date = row['meeting_series_end_date']
                 
+                logger.info(f"[TIMEZONE] process_meeting_series_with_llm: start_date (Rohwert) = {start_date}, Typ = {type(start_date)}")
+                logger.info(f"[TIMEZONE] process_meeting_series_with_llm: end_date (Rohwert) = {end_date}, Typ = {type(end_date)}")
+                
                 if isinstance(start_date, datetime):
                     start_date = start_date.isoformat()
+                    logger.info(f"[TIMEZONE] process_meeting_series_with_llm: start_date nach isoformat() = {start_date}")
                 elif start_date is None:
                     start_date = ""
                 else:
@@ -419,16 +456,23 @@ class DatabaseService:
                 
                 if isinstance(end_date, datetime):
                     end_date = end_date.isoformat()
+                    logger.info(f"[TIMEZONE] process_meeting_series_with_llm: end_date nach isoformat() = {end_date}")
                 elif end_date is None:
                     end_date = ""
                 else:
                     end_date = str(end_date)
+                
+                logger.info(f"[TIMEZONE] process_meeting_series_with_llm: Rufe LLM auf mit rhythm = '{row['meeting_series_rhythm']}', start_date = '{start_date}', end_date = '{end_date}'")
                 
                 rrule_data = await llm_service.parse_meeting_series(
                     row['meeting_series_rhythm'],
                     start_date,
                     end_date
                 )
+                
+                logger.info(f"[TIMEZONE] process_meeting_series_with_llm: LLM-Response (rrule_data) = {rrule_data}")
+                logger.info(f"[TIMEZONE] process_meeting_series_with_llm: meeting_series_start_time aus LLM = {rrule_data.get('meeting_series_start_time')}")
+                
                 self.update_meeting_series_fields(row['id'], rrule_data, table_name)
                 stats['success'] += 1
             except Exception as e:
