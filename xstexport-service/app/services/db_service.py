@@ -439,6 +439,11 @@ class DatabaseService:
             try:
                 logger.info(f"[TIMEZONE] process_meeting_series_with_llm: Verarbeite row_id = {row['id']}")
                 
+                # WICHTIG: Konvertiere UTC-Zeiten zu lokalen Zeiten, bevor sie an das LLM übergeben werden
+                # Das LLM erwartet lokale Zeiten (Europe/Berlin), nicht UTC-Zeiten
+                timezone_str = os.getenv("TIMEZONE", "Europe/Berlin")
+                local_tz = pytz.timezone(timezone_str)
+                
                 # Konvertiere start_date und end_date zu Strings falls nötig
                 start_date = row['meeting_series_start_date']
                 end_date = row['meeting_series_end_date']
@@ -446,23 +451,78 @@ class DatabaseService:
                 logger.info(f"[TIMEZONE] process_meeting_series_with_llm: start_date (Rohwert) = {start_date}, Typ = {type(start_date)}")
                 logger.info(f"[TIMEZONE] process_meeting_series_with_llm: end_date (Rohwert) = {end_date}, Typ = {type(end_date)}")
                 
+                # Konvertiere UTC zu lokaler Zeit für das LLM
                 if isinstance(start_date, datetime):
-                    start_date = start_date.isoformat()
-                    logger.info(f"[TIMEZONE] process_meeting_series_with_llm: start_date nach isoformat() = {start_date}")
+                    # Stelle sicher, dass es UTC ist
+                    if start_date.tzinfo is None:
+                        start_date_utc = pytz.UTC.localize(start_date)
+                    elif start_date.tzinfo != pytz.UTC:
+                        start_date_utc = start_date.astimezone(pytz.UTC)
+                    else:
+                        start_date_utc = start_date
+                    
+                    # Konvertiere zu lokaler Zeit
+                    start_date_local = start_date_utc.astimezone(local_tz)
+                    start_date = start_date_local.isoformat()
+                    logger.info(f"[TIMEZONE] process_meeting_series_with_llm: start_date UTC = {start_date_utc} -> lokal = {start_date_local} -> ISO = {start_date}")
                 elif start_date is None:
                     start_date = ""
                 else:
-                    start_date = str(start_date)
+                    # Versuche zu parsen falls es ein String ist
+                    try:
+                        if isinstance(start_date, str):
+                            dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+                            if dt.tzinfo is None:
+                                dt_utc = pytz.UTC.localize(dt)
+                            elif dt.tzinfo != pytz.UTC:
+                                dt_utc = dt.astimezone(pytz.UTC)
+                            else:
+                                dt_utc = dt
+                            dt_local = dt_utc.astimezone(local_tz)
+                            start_date = dt_local.isoformat()
+                            logger.info(f"[TIMEZONE] process_meeting_series_with_llm: start_date (String) UTC = {dt_utc} -> lokal = {dt_local} -> ISO = {start_date}")
+                        else:
+                            start_date = str(start_date)
+                    except Exception as e:
+                        logger.warning(f"[TIMEZONE] process_meeting_series_with_llm: Konnte start_date nicht konvertieren: {e}, verwende Original: {start_date}")
+                        start_date = str(start_date)
                 
                 if isinstance(end_date, datetime):
-                    end_date = end_date.isoformat()
-                    logger.info(f"[TIMEZONE] process_meeting_series_with_llm: end_date nach isoformat() = {end_date}")
+                    # Stelle sicher, dass es UTC ist
+                    if end_date.tzinfo is None:
+                        end_date_utc = pytz.UTC.localize(end_date)
+                    elif end_date.tzinfo != pytz.UTC:
+                        end_date_utc = end_date.astimezone(pytz.UTC)
+                    else:
+                        end_date_utc = end_date
+                    
+                    # Konvertiere zu lokaler Zeit
+                    end_date_local = end_date_utc.astimezone(local_tz)
+                    end_date = end_date_local.isoformat()
+                    logger.info(f"[TIMEZONE] process_meeting_series_with_llm: end_date UTC = {end_date_utc} -> lokal = {end_date_local} -> ISO = {end_date}")
                 elif end_date is None:
                     end_date = ""
                 else:
-                    end_date = str(end_date)
+                    # Versuche zu parsen falls es ein String ist
+                    try:
+                        if isinstance(end_date, str):
+                            dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+                            if dt.tzinfo is None:
+                                dt_utc = pytz.UTC.localize(dt)
+                            elif dt.tzinfo != pytz.UTC:
+                                dt_utc = dt.astimezone(pytz.UTC)
+                            else:
+                                dt_utc = dt
+                            dt_local = dt_utc.astimezone(local_tz)
+                            end_date = dt_local.isoformat()
+                            logger.info(f"[TIMEZONE] process_meeting_series_with_llm: end_date (String) UTC = {dt_utc} -> lokal = {dt_local} -> ISO = {end_date}")
+                        else:
+                            end_date = str(end_date)
+                    except Exception as e:
+                        logger.warning(f"[TIMEZONE] process_meeting_series_with_llm: Konnte end_date nicht konvertieren: {e}, verwende Original: {end_date}")
+                        end_date = str(end_date)
                 
-                logger.info(f"[TIMEZONE] process_meeting_series_with_llm: Rufe LLM auf mit rhythm = '{row['meeting_series_rhythm']}', start_date = '{start_date}', end_date = '{end_date}'")
+                logger.info(f"[TIMEZONE] process_meeting_series_with_llm: Rufe LLM auf mit rhythm = '{row['meeting_series_rhythm']}', start_date (lokal) = '{start_date}', end_date (lokal) = '{end_date}'")
                 
                 rrule_data = await llm_service.parse_meeting_series(
                     row['meeting_series_rhythm'],
