@@ -142,6 +142,7 @@ services:
     restart: unless-stopped
     environment:
       - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_COMMUNITY_NODES_ENABLED=true
     ports:
       - 5678:5678
     volumes:
