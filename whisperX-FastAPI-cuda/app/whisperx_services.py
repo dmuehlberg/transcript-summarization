@@ -4,7 +4,9 @@ import gc
 from datetime import datetime
 
 import torch
+import torch.serialization
 from fastapi import Depends
+from omegaconf import ListConfig
 from sqlalchemy.orm import Session
 from whisperx.diarize import DiarizationPipeline
 from whisperx import (
@@ -20,6 +22,11 @@ from .logger import logger  # Import the logger from the new module
 from .schemas import AlignedTranscription, SpeechToTextProcessingParams, TaskStatus
 from .tasks import update_task_status_in_db
 from .transcript import filter_aligned_transcription
+
+# Fix für PyTorch 2.8.0+: Markiere omegaconf.listconfig.ListConfig als sicher
+# für torch.load() mit weights_only=True (Standard seit PyTorch 2.6+)
+# Dies ist notwendig, da pyannote VAD-Modelle omegaconf-Objekte enthalten
+torch.serialization.add_safe_globals([ListConfig])
 
 LANG = Config.LANG
 HF_TOKEN = Config.HF_TOKEN
