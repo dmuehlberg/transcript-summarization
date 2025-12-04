@@ -68,10 +68,15 @@ all_omegaconf_classes.extend(main_classes)
 # Entferne Duplikate
 all_omegaconf_classes = list(set(all_omegaconf_classes))
 
-# 4. Alle typing-Klassen
+# 4. Alle typing-Objekte (inkl. _SpecialForm, _SpecialGenericAlias, TypeVar, etc.)
+# typing.Any und andere spezielle typing-Objekte sind keine type-Objekte,
+# daher müssen wir auch Objekte erfassen, die aus dem typing-Modul stammen
 all_typing_types = [
     obj for name, obj in vars(typing).items()
-    if isinstance(obj, type) and not name.startswith("_")
+    if not name.startswith("_") and (
+        isinstance(obj, type) or
+        (hasattr(obj, "__module__") and obj.__module__ == "typing")
+    )
 ]
 
 # Kombiniere alle Typen und entferne Duplikate
