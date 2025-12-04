@@ -3,6 +3,7 @@
 import gc
 from datetime import datetime
 import typing
+import builtins
 
 import torch
 import torch.serialization
@@ -25,10 +26,32 @@ from .schemas import AlignedTranscription, SpeechToTextProcessingParams, TaskSta
 from .tasks import update_task_status_in_db
 from .transcript import filter_aligned_transcription
 
-# Fix für PyTorch 2.8.0+: Markiere omegaconf- und typing-Klassen als sicher
+# Fix für PyTorch 2.8.0+: Markiere omegaconf-, typing- und eingebaute Typen als sicher
 # für torch.load() mit weights_only=True (Standard seit PyTorch 2.6+)
-# Dies ist notwendig, da pyannote VAD-Modelle omegaconf- und typing-Objekte enthalten
-torch.serialization.add_safe_globals([ListConfig, DictConfig, ContainerMetadata, typing.Any])
+# Dies ist notwendig, da pyannote VAD-Modelle omegaconf-, typing- und eingebaute Objekte enthalten
+# Häufige eingebaute Typen, die in Modellen verwendet werden
+common_builtin_types = [
+    builtins.list,
+    builtins.dict,
+    builtins.tuple,
+    builtins.set,
+    builtins.frozenset,
+    builtins.str,
+    builtins.int,
+    builtins.float,
+    builtins.bool,
+    builtins.bytes,
+    builtins.bytearray,
+    type(None),  # NoneType
+]
+
+torch.serialization.add_safe_globals([
+    ListConfig,
+    DictConfig,
+    ContainerMetadata,
+    typing.Any,
+    *common_builtin_types,
+])
 
 LANG = Config.LANG
 HF_TOKEN = Config.HF_TOKEN
