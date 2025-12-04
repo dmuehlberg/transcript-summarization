@@ -5,12 +5,13 @@ from datetime import datetime
 import typing
 import builtins
 import collections
+import omegaconf
+import omegaconf.nodes
+import omegaconf.base
 
 import torch
 import torch.serialization
 from fastapi import Depends
-from omegaconf import DictConfig, ListConfig
-from omegaconf.base import ContainerMetadata
 from sqlalchemy.orm import Session
 from whisperx.diarize import DiarizationPipeline
 from whisperx import (
@@ -27,41 +28,61 @@ from .schemas import AlignedTranscription, SpeechToTextProcessingParams, TaskSta
 from .tasks import update_task_status_in_db
 from .transcript import filter_aligned_transcription
 
-# Fix für PyTorch 2.8.0+: Markiere omegaconf-, typing-, collections- und eingebaute Typen als sicher
+# Fix für PyTorch 2.8.0+: Vollständig generalisierte Lösung - alle relevanten Typen als sicher markieren
 # für torch.load() mit weights_only=True (Standard seit PyTorch 2.6+)
-# Dies ist notwendig, da pyannote VAD-Modelle omegaconf-, typing-, collections- und eingebaute Objekte enthalten
-# Häufige eingebaute Typen, die in Modellen verwendet werden
-common_builtin_types = [
-    builtins.list,
-    builtins.dict,
-    builtins.tuple,
-    builtins.set,
-    builtins.frozenset,
-    builtins.str,
-    builtins.int,
-    builtins.float,
-    builtins.bool,
-    builtins.bytes,
-    builtins.bytearray,
-    type(None),  # NoneType
+# Dies ist notwendig, da pyannote VAD-Modelle viele verschiedene Typen aus verschiedenen Modulen enthalten
+# Vollständig generalisierte Lösung: Alle eingebauten Typen + collections + omegaconf + typing
+
+# 1. Alle eingebauten Typen (builtins)
+all_builtin_types = [
+    obj for name, obj in vars(builtins).items()
+    if isinstance(obj, type) and not name.startswith("_")
 ]
 
-# Häufige collections-Klassen, die in Modellen verwendet werden
-common_collections_types = [
-    collections.defaultdict,
-    collections.OrderedDict,
-    collections.Counter,
-    collections.deque,
+# 2. Alle collections-Klassen
+all_collections_types = [
+    getattr(collections, name) for name in dir(collections)
+    if not name.startswith("_") and isinstance(getattr(collections, name, None), type)
 ]
 
-torch.serialization.add_safe_globals([
-    ListConfig,
-    DictConfig,
-    ContainerMetadata,
-    typing.Any,
-    *common_builtin_types,
-    *common_collections_types,
-])
+# 3. Alle omegaconf-Klassen (nodes + base + direkt)
+all_omegaconf_classes = []
+# omegaconf.nodes
+node_classes = [
+    getattr(omegaconf.nodes, name) for name in dir(omegaconf.nodes)
+    if not name.startswith("_") and isinstance(getattr(omegaconf.nodes, name, None), type)
+]
+all_omegaconf_classes.extend(node_classes)
+# omegaconf.base
+base_classes = [
+    getattr(omegaconf.base, name) for name in dir(omegaconf.base)
+    if not name.startswith("_") and isinstance(getattr(omegaconf.base, name, None), type)
+]
+all_omegaconf_classes.extend(base_classes)
+# omegaconf direkt
+main_classes = [
+    getattr(omegaconf, name) for name in dir(omegaconf)
+    if not name.startswith("_") and isinstance(getattr(omegaconf, name, None), type)
+]
+all_omegaconf_classes.extend(main_classes)
+# Entferne Duplikate
+all_omegaconf_classes = list(set(all_omegaconf_classes))
+
+# 4. Alle typing-Klassen
+all_typing_types = [
+    obj for name, obj in vars(typing).items()
+    if isinstance(obj, type) and not name.startswith("_")
+]
+
+# Kombiniere alle Typen und entferne Duplikate
+all_safe_types = list(set(
+    all_builtin_types +
+    all_collections_types +
+    all_omegaconf_classes +
+    all_typing_types
+))
+
+torch.serialization.add_safe_globals(all_safe_types)
 
 LANG = Config.LANG
 HF_TOKEN = Config.HF_TOKEN
