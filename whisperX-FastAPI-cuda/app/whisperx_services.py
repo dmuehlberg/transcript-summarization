@@ -2,6 +2,7 @@
 
 import gc
 from datetime import datetime
+import typing
 
 import torch
 import torch.serialization
@@ -24,10 +25,10 @@ from .schemas import AlignedTranscription, SpeechToTextProcessingParams, TaskSta
 from .tasks import update_task_status_in_db
 from .transcript import filter_aligned_transcription
 
-# Fix für PyTorch 2.8.0+: Markiere omegaconf-Klassen als sicher
+# Fix für PyTorch 2.8.0+: Markiere omegaconf- und typing-Klassen als sicher
 # für torch.load() mit weights_only=True (Standard seit PyTorch 2.6+)
-# Dies ist notwendig, da pyannote VAD-Modelle omegaconf-Objekte enthalten
-torch.serialization.add_safe_globals([ListConfig, DictConfig, ContainerMetadata])
+# Dies ist notwendig, da pyannote VAD-Modelle omegaconf- und typing-Objekte enthalten
+torch.serialization.add_safe_globals([ListConfig, DictConfig, ContainerMetadata, typing.Any])
 
 LANG = Config.LANG
 HF_TOKEN = Config.HF_TOKEN
