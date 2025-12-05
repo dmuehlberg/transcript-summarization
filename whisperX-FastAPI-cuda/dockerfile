@@ -1,5 +1,6 @@
-## Verwenden Sie das neueres PyTorch-Image mit cuDNN 8 (bessere Kompatibilität mit WhisperX 3.4.2)
-FROM pytorch/pytorch:2.1.0-cuda11.8-cudnn8-devel
+## Verwenden Sie das neueres PyTorch-Image mit cuDNN 9 (kompatibel mit PyTorch 2.8.0+)
+## PyTorch 2.8.0+ benötigt cuDNN 9 für weights_only=True Kompatibilität
+FROM pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel
 
 # Alternative: NVIDIA CUDA Image (falls PyTorch-Image nicht verfügbar)
 #FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
@@ -40,7 +41,7 @@ COPY app/gunicorn_logging.conf .
 COPY requirements requirements/
 
 # Überprüfen und anzeigen der CUDA-Bibliotheken und ihrer Pfade für Diagnosezwecke
-# cuDNN 8 sollte jetzt verfügbar sein (libcudnn_ops_infer.so.8)
+# cuDNN 9 sollte jetzt verfügbar sein (libcudnn_ops_infer.so.9)
 RUN find /usr -name "libcudnn*.so*" | sort
 
 # PyTorch ist bereits im Image installiert, aber wir müssen die Versionen fixieren
