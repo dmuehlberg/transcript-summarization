@@ -107,30 +107,44 @@ for name in dir(torch):
 # Entferne Duplikate
 all_torch_classes = list(set(all_torch_classes))
 
-# 6. Alle pyannote.audio-Klassen aus allen pyannote.audio-Submodulen
-# Durchsuche alle pyannote.audio-Submodule und extrahiere alle type-Objekte
-all_pyannote_classes = []
-for name in dir(pyannote.audio):
-    if name.startswith("_"):
-        continue
-    try:
-        obj = getattr(pyannote.audio, name)
-        # Prüfe, ob es ein Modul ist
-        if inspect.ismodule(obj):
-            # Prüfe, ob es ein pyannote-Submodul ist
-            if hasattr(obj, "__name__") and obj.__name__.startswith("pyannote"):
-                # Sammle alle type-Objekte aus diesem Modul
-                module_classes = [
-                    getattr(obj, attr_name) for attr_name in dir(obj)
-                    if not attr_name.startswith("_") and isinstance(getattr(obj, attr_name, None), type)
-                ]
-                all_pyannote_classes.extend(module_classes)
-    except Exception:
-        # Ignoriere Fehler beim Zugriff auf Attribute
-        pass
+# 6. Alle pyannote.audio-Klassen aus allen pyannote.audio-Submodulen (rekursiv)
+# Durchsuche alle pyannote.audio-Submodule rekursiv und extrahiere alle type-Objekte
+# Rekursiv, um auch verschachtelte Submodule wie pyannote.audio.core.model zu erfassen
+def collect_pyannote_classes_recursive(module, collected_classes, visited_modules, max_depth=5, current_depth=0):
+    """Rekursiv alle Klassen aus einem pyannote-Modul und seinen Submodulen sammeln"""
+    if module in visited_modules or current_depth >= max_depth:
+        return
+    
+    visited_modules.add(module)
+    module_name = getattr(module, "__name__", "")
+    
+    # Nur pyannote-Module verarbeiten
+    if not module_name.startswith("pyannote"):
+        return
+    
+    # Sammle direkte Klassen und durchsuche Submodule rekursiv
+    for attr_name in dir(module):
+        if attr_name.startswith("_"):
+            continue
+        try:
+            obj = getattr(module, attr_name)
+            if isinstance(obj, type):
+                collected_classes.add(obj)
+            elif inspect.ismodule(obj):
+                # Rekursiv in Submodule gehen
+                collect_pyannote_classes_recursive(
+                    obj, collected_classes, visited_modules, max_depth, current_depth + 1
+                )
+        except Exception:
+            # Ignoriere Fehler beim Zugriff auf Attribute
+            pass
 
-# Entferne Duplikate
-all_pyannote_classes = list(set(all_pyannote_classes))
+all_pyannote_classes_set = set()
+visited_pyannote_modules = set()
+collect_pyannote_classes_recursive(
+    pyannote.audio, all_pyannote_classes_set, visited_pyannote_modules
+)
+all_pyannote_classes = list(all_pyannote_classes_set)
 
 # Kombiniere alle Typen und entferne Duplikate
 all_safe_types = list(set(
