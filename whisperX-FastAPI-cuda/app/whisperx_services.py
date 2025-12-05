@@ -12,6 +12,7 @@ import inspect
 
 import torch
 import torch.serialization
+import pyannote.audio
 from fastapi import Depends
 from sqlalchemy.orm import Session
 from whisperx.diarize import DiarizationPipeline
@@ -32,7 +33,7 @@ from .transcript import filter_aligned_transcription
 # Fix für PyTorch 2.8.0+: Vollständig generalisierte Lösung - alle relevanten Typen als sicher markieren
 # für torch.load() mit weights_only=True (Standard seit PyTorch 2.6+)
 # Dies ist notwendig, da pyannote VAD-Modelle viele verschiedene Typen aus verschiedenen Modulen enthalten
-# Vollständig generalisierte Lösung: Alle eingebauten Typen + collections + omegaconf + typing + torch
+# Vollständig generalisierte Lösung: Alle eingebauten Typen + collections + omegaconf + typing + torch + pyannote.audio
 
 # 1. Alle eingebauten Typen (builtins)
 all_builtin_types = [
@@ -106,13 +107,39 @@ for name in dir(torch):
 # Entferne Duplikate
 all_torch_classes = list(set(all_torch_classes))
 
+# 6. Alle pyannote.audio-Klassen aus allen pyannote.audio-Submodulen
+# Durchsuche alle pyannote.audio-Submodule und extrahiere alle type-Objekte
+all_pyannote_classes = []
+for name in dir(pyannote.audio):
+    if name.startswith("_"):
+        continue
+    try:
+        obj = getattr(pyannote.audio, name)
+        # Prüfe, ob es ein Modul ist
+        if inspect.ismodule(obj):
+            # Prüfe, ob es ein pyannote-Submodul ist
+            if hasattr(obj, "__name__") and obj.__name__.startswith("pyannote"):
+                # Sammle alle type-Objekte aus diesem Modul
+                module_classes = [
+                    getattr(obj, attr_name) for attr_name in dir(obj)
+                    if not attr_name.startswith("_") and isinstance(getattr(obj, attr_name, None), type)
+                ]
+                all_pyannote_classes.extend(module_classes)
+    except Exception:
+        # Ignoriere Fehler beim Zugriff auf Attribute
+        pass
+
+# Entferne Duplikate
+all_pyannote_classes = list(set(all_pyannote_classes))
+
 # Kombiniere alle Typen und entferne Duplikate
 all_safe_types = list(set(
     all_builtin_types +
     all_collections_types +
     all_omegaconf_classes +
     all_typing_types +
-    all_torch_classes
+    all_torch_classes +
+    all_pyannote_classes
 ))
 
 torch.serialization.add_safe_globals(all_safe_types)
