@@ -7,7 +7,8 @@ FROM pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel
 
 ENV PYTHON_VERSION=3.10
 # Stellen Sie sicher, dass sowohl die CUDA- als auch die cuDNN-Bibliotheken im Pfad sind
-ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/include:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH
+# cuDNN 9 Bibliotheken befinden sich im Conda-Pfad (nicht in Standard-CUDA-Pfaden)
+ENV LD_LIBRARY_PATH=/opt/conda/lib/python3.11/site-packages/nvidia/cudnn/lib:/usr/local/cuda/lib64:/usr/local/cuda/include:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH
 
 # AWS-spezifische Mirror-Konfiguration hinzufügen
 RUN sed -i 's/archive.ubuntu.com/eu-central-1.ec2.archive.ubuntu.com/g' /etc/apt/sources.list && \
@@ -42,7 +43,8 @@ COPY requirements requirements/
 
 # Überprüfen und anzeigen der CUDA-Bibliotheken und ihrer Pfade für Diagnosezwecke
 # cuDNN 9 sollte jetzt verfügbar sein (libcudnn_ops_infer.so.9)
-RUN find /usr -name "libcudnn*.so*" | sort
+# Suche in /usr und /opt/conda (Conda-Pfad für cuDNN 9)
+RUN find /usr /opt/conda -name "libcudnn*.so*" 2>/dev/null | sort
 
 # PyTorch ist bereits im Image installiert, aber wir müssen die Versionen fixieren
 # für Kompatibilität mit pyannote.audio (benötigt AudioMetaData in torchaudio 2.8.x)
