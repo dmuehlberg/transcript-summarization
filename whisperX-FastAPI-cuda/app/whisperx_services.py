@@ -8,6 +8,7 @@ import collections
 import omegaconf
 import omegaconf.nodes
 import omegaconf.base
+import inspect
 
 import torch
 import torch.serialization
@@ -31,7 +32,7 @@ from .transcript import filter_aligned_transcription
 # Fix für PyTorch 2.8.0+: Vollständig generalisierte Lösung - alle relevanten Typen als sicher markieren
 # für torch.load() mit weights_only=True (Standard seit PyTorch 2.6+)
 # Dies ist notwendig, da pyannote VAD-Modelle viele verschiedene Typen aus verschiedenen Modulen enthalten
-# Vollständig generalisierte Lösung: Alle eingebauten Typen + collections + omegaconf + typing
+# Vollständig generalisierte Lösung: Alle eingebauten Typen + collections + omegaconf + typing + torch
 
 # 1. Alle eingebauten Typen (builtins)
 all_builtin_types = [
@@ -80,12 +81,38 @@ all_typing_types = [
     )
 ]
 
+# 5. Alle torch-Klassen aus allen torch-Submodulen
+# Durchsuche alle torch-Submodule und extrahiere alle type-Objekte
+all_torch_classes = []
+for name in dir(torch):
+    if name.startswith("_"):
+        continue
+    try:
+        obj = getattr(torch, name)
+        # Prüfe, ob es ein Modul ist
+        if inspect.ismodule(obj):
+            # Prüfe, ob es ein torch-Submodul ist
+            if hasattr(obj, "__name__") and obj.__name__.startswith("torch"):
+                # Sammle alle type-Objekte aus diesem Modul
+                module_classes = [
+                    getattr(obj, attr_name) for attr_name in dir(obj)
+                    if not attr_name.startswith("_") and isinstance(getattr(obj, attr_name, None), type)
+                ]
+                all_torch_classes.extend(module_classes)
+    except Exception:
+        # Ignoriere Fehler beim Zugriff auf Attribute
+        pass
+
+# Entferne Duplikate
+all_torch_classes = list(set(all_torch_classes))
+
 # Kombiniere alle Typen und entferne Duplikate
 all_safe_types = list(set(
     all_builtin_types +
     all_collections_types +
     all_omegaconf_classes +
-    all_typing_types
+    all_typing_types +
+    all_torch_classes
 ))
 
 torch.serialization.add_safe_globals(all_safe_types)
