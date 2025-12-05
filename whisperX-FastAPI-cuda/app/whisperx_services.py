@@ -68,14 +68,15 @@ all_omegaconf_classes.extend(main_classes)
 # Entferne Duplikate
 all_omegaconf_classes = list(set(all_omegaconf_classes))
 
-# 4. Alle typing-Objekte (inkl. _SpecialForm, _SpecialGenericAlias, TypeVar, etc.)
+# 4. Alle typing-Objekte (inkl. _SpecialForm, _SpecialGenericAlias, etc.)
 # typing.Any und andere spezielle typing-Objekte sind keine type-Objekte,
-# daher müssen wir auch Objekte erfassen, die aus dem typing-Modul stammen
+# aber PyTorch benötigt __qualname__ für alle Safe Globals
+# Daher filtern wir nur Objekte, die type sind oder __qualname__ haben
 all_typing_types = [
     obj for name, obj in vars(typing).items()
     if not name.startswith("_") and (
         isinstance(obj, type) or
-        (hasattr(obj, "__module__") and obj.__module__ == "typing")
+        hasattr(obj, "__qualname__")
     )
 ]
 
