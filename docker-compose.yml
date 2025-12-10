@@ -62,6 +62,8 @@ services:
       - "8200:8200"
     volumes:
       - ./data/ost:/data/ost
+    env_file:
+      - .env
     environment:
       - DATABASE_URL=postgresql://root:postgres@postgres:5432/n8n
       - DB_HOST=postgres
@@ -73,6 +75,10 @@ services:
       - OLLAMA_MODEL=${OLLAMA_MODEL:-phi4-mini:3.8b}
       - OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-30}
       - TIMEZONE=${TIMEZONE:-Europe/Berlin}
+      - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4}
+      - OPENAI_TIMEOUT=${OPENAI_TIMEOUT:-30}
     depends_on:
       postgres:
         condition: service_healthy
