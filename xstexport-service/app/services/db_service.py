@@ -395,15 +395,11 @@ class DatabaseService:
             Dictionary mit Statistik (total, success, failed, occurrences_stats)
         """
         if llm_service is None:
-            from app.services.llm_service import LLMService
-            from app.config.database import get_ollama_config
-            ollama_config = get_ollama_config(self)  # self (DatabaseService) übergeben
-            llm_service = LLMService(
-                ollama_config['base_url'], 
-                ollama_config['model'],
-                ollama_config.get('timeout', 30.0),
-                ollama_config.get('num_ctx')
-            )
+            from app.services.llm_service import LLMService, create_llm_provider
+            from app.config.database import get_llm_config
+            llm_config = get_llm_config(self)  # self (DatabaseService) übergeben
+            provider = create_llm_provider(llm_config)
+            llm_service = LLMService(provider)
         
         rows = self.get_rows_with_meeting_series(table_name)
         stats = {'total': len(rows), 'success': 0, 'failed': 0}

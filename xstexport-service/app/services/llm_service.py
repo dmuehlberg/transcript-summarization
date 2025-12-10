@@ -6,34 +6,62 @@ from datetime import datetime
 import pytz
 from pathlib import Path
 
+from app.services.llm_providers.base_provider import BaseLLMProvider
+
 logger = logging.getLogger(__name__)
+
+
+def create_llm_provider(config: Dict[str, Any]) -> BaseLLMProvider:
+    """
+    Factory-Funktion zum Erstellen eines LLM-Provider basierend auf der Konfiguration.
+    
+    Args:
+        config: Dictionary mit LLM-Konfiguration (von get_llm_config())
+    
+    Returns:
+        BaseLLMProvider Instanz (OllamaProvider oder OpenAIProvider)
+    
+    Raises:
+        ValueError: Wenn der Provider nicht unterstützt wird
+    """
+    provider_name = config.get("provider", "ollama").lower()
+    
+    if provider_name == "ollama":
+        from app.services.llm_providers.ollama_provider import OllamaProvider
+        ollama_config = config.get("ollama", {})
+        return OllamaProvider(
+            base_url=ollama_config["base_url"],
+            model=ollama_config["model"],
+            timeout=ollama_config.get("timeout", 30.0),
+            num_ctx=ollama_config.get("num_ctx")
+        )
+    elif provider_name == "openai":
+        from app.services.llm_providers.openai_provider import OpenAIProvider
+        openai_config = config.get("openai", {})
+        api_key = openai_config.get("api_key", "")
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY muss in .env gesetzt sein für OpenAI Provider")
+        return OpenAIProvider(
+            api_key=api_key,
+            model=openai_config.get("model", "gpt-4"),
+            timeout=openai_config.get("timeout", 30.0)
+        )
+    else:
+        raise ValueError(f"Unbekannter LLM-Provider: {provider_name}. Unterstützt: 'ollama', 'openai'")
 
 
 class LLMService:
     """Service für LLM-basierte Konvertierung von Meeting-Series-Beschreibungen in RRULE-Felder."""
     
-    def __init__(
-        self, 
-        ollama_base_url: str, 
-        model: str = "phi4-mini:3.8b", 
-        timeout: float = 30.0,
-        num_ctx: Optional[int] = None
-    ):
+    def __init__(self, provider: BaseLLMProvider):
         """
         Initialisiert den LLMService.
         
         Args:
-            ollama_base_url: Basis-URL des Ollama-Servers (z.B. "http://localhost:11434")
-            model: Name des zu verwendenden Modells (Standard: "phi4-mini:3.8b")
-            timeout: Timeout in Sekunden für LLM-Requests (Standard: 30.0)
-            num_ctx: Größe des Kontextfensters (Tokens) für Ollama-Requests
+            provider: LLM-Provider-Instanz (OllamaProvider oder OpenAIProvider)
         """
-        self.ollama_base_url = ollama_base_url.rstrip('/')
-        self.model = model
-        self.timeout = timeout
-        self.num_ctx = num_ctx
-        ctx_info = f", num_ctx: {self.num_ctx}" if self.num_ctx else ""
-        logger.info(f"LLMService initialisiert mit Timeout: {self.timeout} Sekunden{ctx_info}")
+        self.provider = provider
+        logger.info(f"LLMService initialisiert mit Provider: {type(provider).__name__}")
     
     async def parse_meeting_series(
         self, 
@@ -63,7 +91,7 @@ class LLMService:
         
         for attempt in range(max_retries):
             try:
-                response_text = await self._call_ollama(system_prompt, user_prompt)
+                response_text = await self._call_llm(system_prompt, user_prompt)
                 
                 rrule_data = self._parse_json_response(response_text)
                 
@@ -117,9 +145,9 @@ class LLMService:
 Start Date: {start_date}
 End Date: {end_date}"""
     
-    async def _call_ollama(self, system_prompt: str, user_prompt: str) -> str:
+    async def _call_llm(self, system_prompt: str, user_prompt: str) -> str:
         """
-        Ruft die Ollama API auf.
+        Ruft den konfigurierten LLM-Provider auf.
         
         Args:
             system_prompt: System-Prompt für das LLM
@@ -128,29 +156,7 @@ End Date: {end_date}"""
         Returns:
             Response-Text vom LLM
         """
-        url = f"{self.ollama_base_url}/api/generate"
-        
-        payload = {
-            "model": self.model,
-            "system": system_prompt,
-            "prompt": user_prompt,
-            "stream": False,
-            "format": "json"
-        }
-        if self.num_ctx:
-            payload["options"] = {"num_ctx": self.num_ctx}
-        
-        # Erstelle explizites Timeout-Objekt für httpx
-        timeout_obj = httpx.Timeout(self.timeout, connect=10.0)
-        logger.debug(f"HTTP-Request mit Timeout: {self.timeout}s (connect: 10.0s)")
-        
-        async with httpx.AsyncClient(timeout=timeout_obj) as client:
-            response = await client.post(url, json=payload)
-            response.raise_for_status()
-            
-            # Ollama gibt die Antwort im "response" Feld zurück
-            result = response.json()
-            return result.get("response", "")
+        return await self.provider.generate(system_prompt, user_prompt)
     
     def _parse_json_response(self, response: str) -> Dict[str, Any]:
         """
@@ -356,36 +362,10 @@ End Date: {end_date}"""
     
     async def check_availability(self) -> Tuple[bool, str]:
         """
-        Prüft, ob Ollama erreichbar ist und das konfigurierte Modell verfügbar ist.
+        Prüft, ob der konfigurierte LLM-Provider erreichbar ist.
         
         Returns:
             Tuple (erfolgreich: bool, nachricht: str)
         """
-        try:
-            # Prüfe zuerst, ob Ollama erreichbar ist
-            url = f"{self.ollama_base_url}/api/tags"
-            
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                try:
-                    response = await client.get(url)
-                    response.raise_for_status()
-                except httpx.RequestError as e:
-                    return False, f"Ollama-Server nicht erreichbar unter {self.ollama_base_url}: {str(e)}"
-                except httpx.HTTPStatusError as e:
-                    return False, f"Ollama-Server antwortet mit Fehler {e.response.status_code}: {str(e)}"
-                
-                # Prüfe, ob das Modell verfügbar ist
-                models_data = response.json()
-                available_models = [model.get("name", "") for model in models_data.get("models", [])]
-                
-                if self.model not in available_models:
-                    available_str = ", ".join(available_models[:5])  # Erste 5 Modelle anzeigen
-                    if len(available_models) > 5:
-                        available_str += f" ... (insgesamt {len(available_models)} Modelle)"
-                    return False, f"Modell '{self.model}' nicht verfügbar. Verfügbare Modelle: {available_str if available_models else 'keine'}"
-                
-                return True, f"Ollama erreichbar und Modell '{self.model}' verfügbar"
-                
-        except Exception as e:
-            return False, f"Unerwarteter Fehler bei Ollama-Prüfung: {str(e)}"
+        return await self.provider.check_availability()
 

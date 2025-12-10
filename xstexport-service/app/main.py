@@ -15,7 +15,7 @@ from app.services.file_extractor import extract_calendar_from_existing_file, ext
 from app.services.file_service import list_app_files, list_data_directory_files
 from app.services.pst_folder_service import list_pst_folders
 from app.services.db_service import DatabaseService
-from app.config.database import get_db_config, get_ollama_config
+from app.config.database import get_db_config
 
 # Logger konfigurieren
 logging.basicConfig(level=logging.INFO)
@@ -45,23 +45,21 @@ async def startup_event():
         # Tabelle erstellen, falls sie noch nicht existiert
         db_service.create_table_if_not_exists()
         
-        # Prüfe Ollama-Verfügbarkeit (nicht-blockierend)
+        # Prüfe LLM-Provider-Verfügbarkeit (nicht-blockierend)
         try:
-            from app.services.llm_service import LLMService
-            ollama_config = get_ollama_config(db_service)  # db_service übergeben
-            llm_service = LLMService(
-                ollama_config['base_url'], 
-                ollama_config['model'],
-                ollama_config.get('timeout', 30.0),
-                ollama_config.get('num_ctx')
-            )
+            from app.services.llm_service import LLMService, create_llm_provider
+            from app.config.database import get_llm_config
+            llm_config = get_llm_config(db_service)  # db_service übergeben
+            provider = create_llm_provider(llm_config)
+            llm_service = LLMService(provider)
             is_available, message = await llm_service.check_availability()
+            provider_name = llm_config.get('provider', 'ollama').upper()
             if is_available:
-                logger.info(f"✅ Ollama-Prüfung erfolgreich: {message}")
+                logger.info(f"✅ {provider_name}-Prüfung erfolgreich: {message}")
             else:
-                logger.warning(f"⚠️ Ollama-Prüfung fehlgeschlagen: {message}")
+                logger.warning(f"⚠️ {provider_name}-Prüfung fehlgeschlagen: {message}")
         except Exception as e:
-            logger.warning(f"⚠️ Ollama-Prüfung konnte nicht durchgeführt werden: {str(e)}")
+            logger.warning(f"⚠️ LLM-Provider-Prüfung konnte nicht durchgeführt werden: {str(e)}")
             # Container startet trotzdem weiter
         
     except Exception as e:

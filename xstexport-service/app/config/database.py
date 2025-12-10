@@ -91,4 +91,50 @@ def get_ollama_config(db_service: Optional[Any] = None) -> Dict[str, Any]:
         "model": os.getenv("OLLAMA_MODEL", "phi4-mini:3.8b"),
         "timeout": timeout,
         "num_ctx": num_ctx
-    } 
+    }
+
+def get_llm_config(db_service: Optional[Any] = None) -> Dict[str, Any]:
+    """
+    Gibt die LLM-Konfiguration für alle unterstützten Provider zurück.
+    Liest den Provider aus .env und lädt die entsprechenden Parameter.
+    
+    Args:
+        db_service: Optionaler DatabaseService zum Lesen aus der DB (für OLLAMA aws_host)
+    
+    Returns:
+        Dictionary mit 'provider', 'ollama' und 'openai' Konfigurationen
+    """
+    # Lese Provider aus .env (Standard: "ollama")
+    provider = os.getenv("LLM_PROVIDER", "ollama").lower()
+    logger.info(f"LLM Provider aus .env gelesen: {provider}")
+    
+    # OLLAMA-Konfiguration (verwendet get_ollama_config für Konsistenz)
+    ollama_config = get_ollama_config(db_service)
+    
+    # OpenAI-Konfiguration
+    openai_api_key = os.getenv("OPENAI_API_KEY", "")
+    openai_model = os.getenv("OPENAI_MODEL", "gpt-4")
+    
+    # OpenAI Timeout aus .env lesen mit Fallback auf 30 Sekunden
+    openai_timeout_str = os.getenv("OPENAI_TIMEOUT", "30")
+    try:
+        openai_timeout = float(openai_timeout_str)
+        logger.info(f"OPENAI_TIMEOUT aus Umgebungsvariable gelesen: {openai_timeout} Sekunden")
+    except (ValueError, TypeError):
+        logger.warning(f"Ungültiger OPENAI_TIMEOUT-Wert '{openai_timeout_str}', verwende Fallback 30.0")
+        openai_timeout = 30.0
+    
+    return {
+        "provider": provider,
+        "ollama": {
+            "base_url": ollama_config["base_url"],
+            "model": ollama_config["model"],
+            "timeout": ollama_config["timeout"],
+            "num_ctx": ollama_config.get("num_ctx")
+        },
+        "openai": {
+            "api_key": openai_api_key,
+            "model": openai_model,
+            "timeout": openai_timeout
+        }
+    }
