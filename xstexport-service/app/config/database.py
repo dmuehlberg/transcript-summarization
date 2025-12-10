@@ -124,6 +124,11 @@ def get_llm_config(db_service: Optional[Any] = None) -> Dict[str, Any]:
         logger.warning(f"Ungültiger OPENAI_TIMEOUT-Wert '{openai_timeout_str}', verwende Fallback 30.0")
         openai_timeout = 30.0
     
+    # OpenAI Structured Outputs aus .env lesen mit Fallback auf True
+    openai_use_structured_outputs_str = os.getenv("OPENAI_USE_STRUCTURED_OUTPUTS", "true").lower()
+    openai_use_structured_outputs = openai_use_structured_outputs_str in ("true", "1", "yes", "on")
+    logger.info(f"OPENAI_USE_STRUCTURED_OUTPUTS aus Umgebungsvariable gelesen: {openai_use_structured_outputs}")
+    
     return {
         "provider": provider,
         "ollama": {
@@ -135,6 +140,7 @@ def get_llm_config(db_service: Optional[Any] = None) -> Dict[str, Any]:
         "openai": {
             "api_key": openai_api_key,
             "model": openai_model,
-            "timeout": openai_timeout
+            "timeout": openai_timeout,
+            "use_structured_outputs": openai_use_structured_outputs
         }
     }

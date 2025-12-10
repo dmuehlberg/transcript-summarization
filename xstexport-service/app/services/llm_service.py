@@ -44,7 +44,8 @@ def create_llm_provider(config: Dict[str, Any]) -> BaseLLMProvider:
         return OpenAIProvider(
             api_key=api_key,
             model=openai_config.get("model", "gpt-4"),
-            timeout=openai_config.get("timeout", 30.0)
+            timeout=openai_config.get("timeout", 30.0),
+            use_structured_outputs=openai_config.get("use_structured_outputs", True)
         )
     else:
         raise ValueError(f"Unbekannter LLM-Provider: {provider_name}. Unterstützt: 'ollama', 'openai'")
