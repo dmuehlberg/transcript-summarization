@@ -139,8 +139,9 @@ class OpenAIProvider(BaseLLMProvider):
                     "role": "user",
                     "content": user_prompt
                 }
-            ],
-            "temperature": 0.0  # Für deterministische Ergebnisse
+            ]
+            # temperature wird weggelassen, da einige Modelle nur den Default-Wert (1) unterstützen
+            # Für deterministische Ergebnisse sollte das System-Prompt ausreichend sein
         }
         
         # Verwende Structured Outputs, falls aktiviert und unterstützt
