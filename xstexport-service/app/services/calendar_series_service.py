@@ -59,14 +59,10 @@ class CalendarSeriesService:
                 return []
             
             # Konvertiere meeting_series_start_time zu datetime falls nötig
-            logger.info(f"[TIMEZONE] generate_series_occurrences: meeting_series_start_time (Rohwert) = {meeting_series_start_time}, Typ = {type(meeting_series_start_time)}")
-            
             if isinstance(meeting_series_start_time, str):
                 dtstart_utc = datetime.fromisoformat(meeting_series_start_time.replace('Z', '+00:00'))
-                logger.info(f"[TIMEZONE] meeting_series_start_time als String geparst: {dtstart_utc}, tzinfo = {dtstart_utc.tzinfo}")
             elif isinstance(meeting_series_start_time, datetime):
                 dtstart_utc = meeting_series_start_time
-                logger.info(f"[TIMEZONE] meeting_series_start_time bereits datetime: {dtstart_utc}, tzinfo = {dtstart_utc.tzinfo}")
             else:
                 logger.warning(f"[TIMEZONE] Ungültiges meeting_series_start_time für Serientermin {series_row.get('id')}")
                 return []
@@ -82,18 +78,12 @@ class CalendarSeriesService:
             # Konvertiere UTC zu lokaler Zeit
             if dtstart_utc.tzinfo is None:
                 # Falls keine Zeitzone: interpretiere als UTC
-                logger.info(f"[TIMEZONE] dtstart_utc hat keine Zeitzone, interpretiere als UTC")
                 dtstart_utc = pytz.UTC.localize(dtstart_utc)
             elif dtstart_utc.tzinfo != pytz.UTC:
                 # Falls andere Zeitzone: konvertiere zu UTC
-                logger.info(f"[TIMEZONE] dtstart_utc hat Zeitzone {dtstart_utc.tzinfo}, konvertiere zu UTC")
                 dtstart_utc = dtstart_utc.astimezone(pytz.UTC)
-            else:
-                logger.info(f"[TIMEZONE] dtstart_utc ist bereits UTC: {dtstart_utc}")
             
-            logger.info(f"[TIMEZONE] dtstart_utc (nach Normalisierung zu UTC): {dtstart_utc}")
             dtstart = dtstart_utc.astimezone(local_tz)
-            logger.info(f"[TIMEZONE] dtstart für rrule: {dtstart} (lokal, {timezone_str}), ursprünglich: {dtstart_utc} (UTC)")
             
             # Bestimme until-Datum
             if until_date:
@@ -154,8 +144,6 @@ class CalendarSeriesService:
             logger.info(f"[TIMEZONE] Generiere {len(valid_occurrences_dates)} Termine aus rrule")
             
             for idx, occ_start in enumerate(valid_occurrences_dates):
-                logger.info(f"[TIMEZONE] Termin {idx+1}/{len(valid_occurrences_dates)}: occ_start (von rrule) = {occ_start}, tzinfo = {occ_start.tzinfo}")
-                
                 # KRITISCH: Die rrule behält die Zeitzone des dtstart bei, auch wenn das Datum
                 # in eine andere Zeitzone (Sommer-/Winterzeit) fällt.
                 # Beispiel: dtstart = 2025-04-03 09:30:00+02:00 (Sommerzeit)
@@ -168,21 +156,16 @@ class CalendarSeriesService:
                 if occ_start.tzinfo is not None:
                     # Extrahiere naive Zeit (Datum + Uhrzeit ohne Zeitzone)
                     occ_start_naive = occ_start.replace(tzinfo=None)
-                    logger.info(f"[TIMEZONE] Termin {idx+1}: Extrahiere naive Zeit: {occ_start_naive}")
                     
                     # Lokalisiere für das spezifische Datum neu (berücksichtigt automatisch DST)
                     occ_start_corrected = local_tz.localize(occ_start_naive, is_dst=None)
-                    logger.info(f"[TIMEZONE] Termin {idx+1}: Neu lokalisiert für Datum {occ_start_naive.date()}: {occ_start_corrected} (ursprünglich: {occ_start})")
                     
                     # Konvertiere zu UTC
                     occ_start_utc = occ_start_corrected.astimezone(pytz.UTC)
-                    logger.info(f"[TIMEZONE] Termin {idx+1}: occ_start korrigiert: {occ_start} -> {occ_start_corrected} -> UTC: {occ_start_utc}")
                 else:
                     # Falls naive: lokalisiere direkt
-                    logger.info(f"[TIMEZONE] Termin {idx+1}: occ_start ist naive, lokalisiere als {timezone_str}")
                     occ_start_localized = local_tz.localize(occ_start, is_dst=None)
                     occ_start_utc = occ_start_localized.astimezone(pytz.UTC)
-                    logger.info(f"[TIMEZONE] Termin {idx+1}: occ_start (naive) {occ_start} -> lokalisiert {occ_start_localized} -> UTC: {occ_start_utc}")
                 
                 # Berechne end_date basierend auf ursprünglicher Dauer
                 occ_end = self._calculate_end_date(

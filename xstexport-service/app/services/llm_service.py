@@ -57,8 +57,6 @@ class LLMService:
         system_prompt = self._build_system_prompt()
         user_prompt = self._build_user_prompt(rhythm, start_date, end_date)
         
-        logger.info(f"[TIMEZONE] parse_meeting_series: User-Prompt für LLM = '{user_prompt}'")
-        
         # Max. 3 Retry-Versuche bei Netzwerkfehlern
         max_retries = 3
         last_error = None
@@ -66,13 +64,10 @@ class LLMService:
         for attempt in range(max_retries):
             try:
                 response_text = await self._call_ollama(system_prompt, user_prompt)
-                logger.info(f"[TIMEZONE] parse_meeting_series: LLM-Response (roh) = '{response_text[:500]}...'")
                 
                 rrule_data = self._parse_json_response(response_text)
-                logger.info(f"[TIMEZONE] parse_meeting_series: Nach JSON-Parsing = {rrule_data}")
                 
                 validated_data = self._validate_rrule_fields(rrule_data)
-                logger.info(f"[TIMEZONE] parse_meeting_series: Nach Validierung = {validated_data}")
                 logger.info(f"[TIMEZONE] parse_meeting_series: meeting_series_start_time (final) = {validated_data.get('meeting_series_start_time')}, Typ = {type(validated_data.get('meeting_series_start_time'))}")
                 
                 return validated_data
@@ -286,29 +281,20 @@ End Date: {end_date}"""
             return None
         
         try:
-            logger.info(f"[TIMEZONE] _convert_to_timestamp: Input-String = '{value}'")
-            
             # Ersetze 'Z' durch '+00:00' für UTC
             value_normalized = value.replace('Z', '+00:00')
-            logger.info(f"[TIMEZONE] _convert_to_timestamp: Nach 'Z' Ersetzung = '{value_normalized}'")
             
             # Versuche ISO-Format zu parsen
             dt = datetime.fromisoformat(value_normalized)
-            logger.info(f"[TIMEZONE] _convert_to_timestamp: Nach fromisoformat = {dt}, tzinfo = {dt.tzinfo}")
             
             # Wenn keine Zeitzone vorhanden, füge Standard-Zeitzone hinzu
             if dt.tzinfo is None:
                 tz = pytz.timezone(default_tz)
                 dt = tz.localize(dt)
-                logger.info(f"[TIMEZONE] _convert_to_timestamp: Nach localize mit {default_tz} = {dt}")
             
             # WICHTIG: Konvertiere zu UTC, da die Datenbank UTC erwartet
             if dt.tzinfo != pytz.UTC:
-                dt_original = dt
                 dt = dt.astimezone(pytz.UTC)
-                logger.info(f"[TIMEZONE] _convert_to_timestamp: Nach astimezone(UTC): {dt_original} -> {dt}")
-            else:
-                logger.info(f"[TIMEZONE] _convert_to_timestamp: Bereits UTC, keine Konvertierung nötig")
             
             logger.info(f"[TIMEZONE] _convert_to_timestamp: Finaler Wert (UTC) = {dt}")
             return dt
