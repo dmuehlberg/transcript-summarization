@@ -6,4 +6,7 @@ jellyfish
 rapidfuzz
 python-dotenv
 python-multipart
-pytz 
+pytz
+requests
+md2cf
+mistune 

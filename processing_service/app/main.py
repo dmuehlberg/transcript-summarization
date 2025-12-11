@@ -6,6 +6,13 @@ from .sync import sync_recipient_names
 from .transcript import tokenize_transcript, replace_tokens
 from .matcher import match_tokens
 from .db import init_db, upsert_transcription, upsert_mp3_file, get_db_connection, update_transcription_meeting_info, get_pending_transcriptions
+from .confluence import (
+    build_auth_header,
+    get_space_id,
+    get_parent_page_id,
+    create_confluence_page,
+    convert_markdown_to_storage_format
+)
 from typing import Optional
 import json
 import os
@@ -14,6 +21,7 @@ import re
 from datetime import datetime
 import pytz
 from dotenv import load_dotenv
+import requests
 
 load_dotenv()
 
@@ -47,6 +55,15 @@ class MeetingInfoRequest(BaseModel):
 
 class MeetingsByDateRequest(BaseModel):
     recording_date: str
+
+class ConfluencePageRequest(BaseModel):
+    space_name: str
+    parent_page_title: Optional[str] = None
+    content: str
+    content_format: Optional[str] = "storage"  # "markdown" oder "storage"
+    page_title: str
+    user: str
+    site_url: str
 
 @app.post("/correct-transcript")
 async def correct_transcript(
@@ -425,5 +442,187 @@ def get_meetings_by_date(recording_date: str):
         
     except HTTPException as e:
         raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/create-confluence-page")
+async def create_confluence_page_endpoint(request: ConfluencePageRequest):
+    """
+    Erstellt eine neue Seite in Confluence über die V2 API.
+    
+    Steps:
+    1. API Key aus .env laden
+    2. Auth Header erstellen
+    3. Content Format prüfen und ggf. konvertieren
+    4. Space ID lookup
+    5. Parent Page ID lookup (optional)
+    6. Page erstellen
+    7. Response zurückgeben
+    """
+    try:
+        # 1. API Key laden
+        api_key = os.getenv("CONFLUENCE_API_KEY")
+        if not api_key:
+            raise HTTPException(
+                status_code=500,
+                detail="CONFLUENCE_API_KEY nicht in .env gefunden"
+            )
+        
+        # 2. Email bestimmen (Parameter oder .env)
+        email = request.user or os.getenv("CONFLUENCE_EMAIL")
+        if not email:
+            raise HTTPException(
+                status_code=400,
+                detail="User (Email) muss angegeben werden"
+            )
+        
+        # 3. Auth Header erstellen
+        auth_header = build_auth_header(email, api_key)
+        
+        # 4. Content Format prüfen und ggf. konvertieren
+        content_format = request.content_format.lower() if request.content_format else "storage"
+        if content_format not in ["markdown", "storage"]:
+            raise HTTPException(
+                status_code=400,
+                detail="content_format muss 'markdown' oder 'storage' sein"
+            )
+        
+        if content_format == "markdown":
+            try:
+                confluence_content = convert_markdown_to_storage_format(request.content)
+            except ValueError as e:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Fehler bei Markdown-Konvertierung: {str(e)}"
+                )
+        else:
+            confluence_content = request.content
+        
+        # 5. Space ID lookup
+        try:
+            space_id = get_space_id(request.site_url, request.space_name, auth_header)
+        except ValueError as e:
+            # Space nicht gefunden
+            raise HTTPException(
+                status_code=404,
+                detail=str(e)
+            )
+        except requests.exceptions.HTTPError as e:
+            if hasattr(e, 'response') and e.response is not None:
+                if e.response.status_code == 401:
+                    raise HTTPException(
+                        status_code=401,
+                        detail="Confluence API Authentifizierung fehlgeschlagen"
+                    )
+                elif e.response.status_code == 403:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Keine Berechtigung für diese Aktion"
+                    )
+            raise HTTPException(
+                status_code=500,
+                detail=f"Fehler beim Space Lookup: {str(e)}"
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Fehler beim Space Lookup: {str(e)}"
+            )
+        
+        # 6. Parent Page ID lookup (optional)
+        parent_id = None
+        if request.parent_page_title:
+            try:
+                parent_id = get_parent_page_id(
+                    request.site_url,
+                    space_id,
+                    request.parent_page_title,
+                    auth_header
+                )
+                if parent_id is None:
+                    # Parent Page nicht gefunden, aber kein Fehler (wird als Root-Level erstellt)
+                    pass
+            except requests.exceptions.HTTPError as e:
+                if hasattr(e, 'response') and e.response is not None:
+                    if e.response.status_code == 401:
+                        raise HTTPException(
+                            status_code=401,
+                            detail="Confluence API Authentifizierung fehlgeschlagen"
+                        )
+                    elif e.response.status_code == 403:
+                        raise HTTPException(
+                            status_code=403,
+                            detail="Keine Berechtigung für diese Aktion"
+                        )
+                # Parent Page nicht gefunden ist kein Fehler
+                parent_id = None
+            except Exception as e:
+                # Bei anderen Fehlern Parent ID auf None setzen
+                parent_id = None
+        
+        # 7. Page erstellen
+        try:
+            page_response = create_confluence_page(
+                request.site_url,
+                space_id,
+                request.page_title,
+                confluence_content,
+                parent_id,
+                auth_header
+            )
+        except requests.exceptions.HTTPError as e:
+            if hasattr(e, 'response') and e.response is not None:
+                if e.response.status_code == 401:
+                    raise HTTPException(
+                        status_code=401,
+                        detail="Confluence API Authentifizierung fehlgeschlagen"
+                    )
+                elif e.response.status_code == 403:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Keine Berechtigung für diese Aktion"
+                    )
+                elif e.response.status_code == 400:
+                    error_detail = "Ungültige Request-Parameter"
+                    try:
+                        error_data = e.response.json()
+                        if "message" in error_data:
+                            error_detail = error_data["message"]
+                    except:
+                        error_detail = e.response.text
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Confluence API Fehler: {error_detail}"
+                    )
+                else:
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Confluence API Fehler: {e.response.text}"
+                    )
+            else:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Confluence API Fehler: {str(e)}"
+                )
+        
+        # 8. Response formatieren
+        page_url = page_response.get("_links", {}).get("webui", "")
+        if page_url and not page_url.startswith("http"):
+            # Relativer Pfad, muss mit site_url kombiniert werden
+            page_url = f"{request.site_url}{page_url}"
+        
+        return {
+            "status": "success",
+            "page_id": page_response.get("id"),
+            "page_title": page_response.get("title"),
+            "page_url": page_url,
+            "space_id": space_id,
+            "parent_id": parent_id,
+            "content_format_used": content_format
+        }
+        
+    except HTTPException:
+        # HTTPExceptions weiterwerfen
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) 
