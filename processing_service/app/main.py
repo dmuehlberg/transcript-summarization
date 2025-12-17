@@ -581,20 +581,42 @@ async def create_confluence_page_endpoint(
             )
         except requests.exceptions.HTTPError as e:
             if hasattr(e, 'response') and e.response is not None:
-                if e.response.status_code == 401:
+                status_code = e.response.status_code
+                error_detail = str(e)
+                
+                # Versuche mehr Details aus der Response zu extrahieren
+                try:
+                    error_body = e.response.text
+                    if error_body:
+                        error_detail += f" - Response: {error_body[:500]}"  # Erste 500 Zeichen
+                except:
+                    pass
+                
+                if status_code == 401:
                     raise HTTPException(
                         status_code=401,
-                        detail="Confluence API Authentifizierung fehlgeschlagen"
+                        detail=f"Confluence API Authentifizierung fehlgeschlagen. Bitte prüfe API Key und Email-Adresse. Details: {error_detail}"
                     )
-                elif e.response.status_code == 403:
+                elif status_code == 403:
                     raise HTTPException(
                         status_code=403,
-                        detail="Keine Berechtigung für diese Aktion"
+                        detail=f"Keine Berechtigung für diese Aktion. Details: {error_detail}"
                     )
-            raise HTTPException(
-                status_code=500,
-                detail=f"Fehler beim Space Lookup: {str(e)}"
-            )
+                elif status_code == 404:
+                    raise HTTPException(
+                        status_code=404,
+                        detail=f"Confluence API Endpoint nicht gefunden. Möglicherweise wird V2 API nicht unterstützt oder die URL ist falsch. Details: {error_detail}"
+                    )
+                else:
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Fehler beim Space Lookup (Status {status_code}): {error_detail}"
+                    )
+            else:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Fehler beim Space Lookup: {str(e)}"
+                )
         except Exception as e:
             raise HTTPException(
                 status_code=500,

@@ -39,7 +39,7 @@ def get_space_id(site_url: str, space_name: str, auth_header: str) -> str:
     Sucht Space ID anhand des Space-Namens.
     
     Args:
-        site_url: Base URL der Confluence-Instanz
+        site_url: Base URL der Confluence-Instanz (z.B. https://domain.atlassian.net)
         space_name: Name des Spaces
         auth_header: Authorization Header (Basic Auth)
     
@@ -49,6 +49,8 @@ def get_space_id(site_url: str, space_name: str, auth_header: str) -> str:
     Raises:
         requests.exceptions.HTTPError: Wenn Space nicht gefunden wird oder API-Fehler auftritt
     """
+    # Stelle sicher, dass site_url kein trailing slash hat
+    site_url = site_url.rstrip('/')
     url = f"{site_url}/wiki/api/v2/spaces"
     headers = {
         "Authorization": auth_header,
@@ -62,6 +64,29 @@ def get_space_id(site_url: str, space_name: str, auth_header: str) -> str:
     while next_url:
         params = {"limit": 100}
         response = requests.get(next_url, headers=headers, params=params)
+        
+        # Detailliertes Error Handling
+        if response.status_code == 404:
+            # Prüfe ob es ein Problem mit der URL oder der API-Version ist
+            error_detail = f"Endpoint nicht gefunden. URL: {next_url}, Status: {response.status_code}"
+            try:
+                error_body = response.text
+                if error_body:
+                    error_detail += f", Response: {error_body}"
+            except:
+                pass
+            raise requests.exceptions.HTTPError(error_detail, response=response)
+        elif response.status_code == 401:
+            raise requests.exceptions.HTTPError(
+                "Authentifizierung fehlgeschlagen. Bitte prüfe API Key und Email.",
+                response=response
+            )
+        elif response.status_code == 403:
+            raise requests.exceptions.HTTPError(
+                "Keine Berechtigung für diese Aktion.",
+                response=response
+            )
+        
         response.raise_for_status()
         
         data = response.json()
@@ -89,7 +114,7 @@ def get_parent_page_id(site_url: str, space_id: str, parent_title: str, auth_hea
     Sucht Parent Page ID anhand des Titels.
     
     Args:
-        site_url: Base URL der Confluence-Instanz
+        site_url: Base URL der Confluence-Instanz (z.B. https://domain.atlassian.net)
         space_id: ID des Spaces
         parent_title: Titel der Parent Page
         auth_header: Authorization Header
@@ -100,6 +125,8 @@ def get_parent_page_id(site_url: str, space_id: str, parent_title: str, auth_hea
     Raises:
         requests.exceptions.HTTPError: Bei API-Fehlern
     """
+    # Stelle sicher, dass site_url kein trailing slash hat
+    site_url = site_url.rstrip('/')
     url = f"{site_url}/wiki/api/v2/pages"
     headers = {
         "Authorization": auth_header,
@@ -142,7 +169,7 @@ def create_confluence_page(
     Erstellt eine neue Confluence-Seite.
     
     Args:
-        site_url: Base URL der Confluence-Instanz
+        site_url: Base URL der Confluence-Instanz (z.B. https://domain.atlassian.net)
         space_id: ID des Spaces
         page_title: Titel der neuen Seite
         content: Content im Confluence Storage Format
@@ -155,6 +182,8 @@ def create_confluence_page(
     Raises:
         requests.exceptions.HTTPError: Bei API-Fehlern
     """
+    # Stelle sicher, dass site_url kein trailing slash hat
+    site_url = site_url.rstrip('/')
     url = f"{site_url}/wiki/api/v2/pages"
     headers = {
         "Authorization": auth_header,
