@@ -72,7 +72,7 @@ class ConfluencePageRequest(BaseModel):
     content: str
     content_format: Optional[str] = "storage"  # "markdown" oder "storage"
     page_title: str
-    user: str
+    user: Optional[str] = None  # Optional, wird aus .env gelesen falls nicht angegeben
     site_url: str
 
 @app.post("/correct-transcript")
@@ -494,7 +494,7 @@ async def create_confluence_page_endpoint(
             content = json_request.content
             content_format = json_request.content_format
             page_title = json_request.page_title
-            user_email = json_request.user
+            user_email = json_request.user  # Kann None sein
             site_url = json_request.site_url
         elif content_type.startswith("multipart/form-data"):
             # Form-Data Request - Parameter werden bereits von FastAPI geparst
@@ -513,17 +513,13 @@ async def create_confluence_page_endpoint(
                     status_code=400,
                     detail="page_title muss angegeben werden"
                 )
-            if not user:
-                raise HTTPException(
-                    status_code=400,
-                    detail="user muss angegeben werden"
-                )
             if not site_url:
                 raise HTTPException(
                     status_code=400,
                     detail="site_url muss angegeben werden"
                 )
-            user_email = user
+            # user ist optional, wird aus .env gelesen falls nicht angegeben
+            user_email = user  # Kann None sein
             if not content_format:
                 content_format = "storage"
         else:
@@ -540,12 +536,13 @@ async def create_confluence_page_endpoint(
                 detail="CONFLUENCE_API_KEY nicht in .env gefunden"
             )
         
-        # 2. Email bestimmen (Parameter oder .env)
-        email = user_email or os.getenv("CONFLUENCE_EMAIL")
+        # 2. Email bestimmen (aus .env oder Parameter, .env hat Priorität wenn beide vorhanden)
+        # Wenn user_email im Request angegeben ist, wird es verwendet, sonst aus .env
+        email = user_email if user_email else os.getenv("CONFLUENCE_EMAIL")
         if not email:
             raise HTTPException(
                 status_code=400,
-                detail="User (Email) muss angegeben werden"
+                detail="User (Email) muss entweder als Parameter 'user' übergeben werden oder in .env als CONFLUENCE_EMAIL gesetzt sein"
             )
         
         # 3. Auth Header erstellen
