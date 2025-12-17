@@ -39,7 +39,17 @@ def http_exception_handler(request: Request, exc: HTTPException):
 
 @app.exception_handler(RequestValidationError)
 def validation_exception_handler(request: Request, exc: RequestValidationError):
-    return JSONResponse(status_code=422, content={"detail": exc.errors()})
+    # Konvertiere bytes zu strings für JSON-Serialisierung
+    errors = []
+    for error in exc.errors():
+        cleaned_error = {}
+        for key, value in error.items():
+            if isinstance(value, bytes):
+                cleaned_error[key] = value.decode('utf-8', errors='replace')
+            else:
+                cleaned_error[key] = value
+        errors.append(cleaned_error)
+    return JSONResponse(status_code=422, content={"detail": errors})
 
 @app.exception_handler(Exception)
 def generic_exception_handler(request: Request, exc: Exception):
@@ -446,9 +456,20 @@ def get_meetings_by_date(recording_date: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/create-confluence-page")
-async def create_confluence_page_endpoint(request: ConfluencePageRequest):
+async def create_confluence_page_endpoint(
+    http_request: Request,
+    space_name: Optional[str] = Form(None),
+    parent_page_title: Optional[str] = Form(None),
+    content: Optional[str] = Form(None),
+    content_format: Optional[str] = Form(None),
+    page_title: Optional[str] = Form(None),
+    user: Optional[str] = Form(None),
+    site_url: Optional[str] = Form(None)
+):
     """
     Erstellt eine neue Seite in Confluence über die V2 API.
+    
+    Unterstützt sowohl JSON (application/json) als auch multipart/form-data.
     
     Steps:
     1. API Key aus .env laden
@@ -460,6 +481,57 @@ async def create_confluence_page_endpoint(request: ConfluencePageRequest):
     7. Response zurückgeben
     """
     try:
+        # Request-Daten aus JSON oder Form-Data extrahieren
+        content_type = http_request.headers.get("content-type", "")
+        
+        if content_type.startswith("application/json"):
+            # JSON-Request
+            data = await http_request.json()
+            json_request = ConfluencePageRequest(**data)
+            
+            space_name = json_request.space_name
+            parent_page_title = json_request.parent_page_title
+            content = json_request.content
+            content_format = json_request.content_format
+            page_title = json_request.page_title
+            user_email = json_request.user
+            site_url = json_request.site_url
+        elif content_type.startswith("multipart/form-data"):
+            # Form-Data Request - Parameter werden bereits von FastAPI geparst
+            if not space_name:
+                raise HTTPException(
+                    status_code=400,
+                    detail="space_name muss angegeben werden"
+                )
+            if not content:
+                raise HTTPException(
+                    status_code=400,
+                    detail="content muss angegeben werden"
+                )
+            if not page_title:
+                raise HTTPException(
+                    status_code=400,
+                    detail="page_title muss angegeben werden"
+                )
+            if not user:
+                raise HTTPException(
+                    status_code=400,
+                    detail="user muss angegeben werden"
+                )
+            if not site_url:
+                raise HTTPException(
+                    status_code=400,
+                    detail="site_url muss angegeben werden"
+                )
+            user_email = user
+            if not content_format:
+                content_format = "storage"
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="Content-Type muss application/json oder multipart/form-data sein"
+            )
+        
         # 1. API Key laden
         api_key = os.getenv("CONFLUENCE_API_KEY")
         if not api_key:
@@ -469,7 +541,7 @@ async def create_confluence_page_endpoint(request: ConfluencePageRequest):
             )
         
         # 2. Email bestimmen (Parameter oder .env)
-        email = request.user or os.getenv("CONFLUENCE_EMAIL")
+        email = user_email or os.getenv("CONFLUENCE_EMAIL")
         if not email:
             raise HTTPException(
                 status_code=400,
@@ -480,7 +552,7 @@ async def create_confluence_page_endpoint(request: ConfluencePageRequest):
         auth_header = build_auth_header(email, api_key)
         
         # 4. Content Format prüfen und ggf. konvertieren
-        content_format = request.content_format.lower() if request.content_format else "storage"
+        content_format = content_format.lower() if content_format else "storage"
         if content_format not in ["markdown", "storage"]:
             raise HTTPException(
                 status_code=400,
@@ -489,18 +561,18 @@ async def create_confluence_page_endpoint(request: ConfluencePageRequest):
         
         if content_format == "markdown":
             try:
-                confluence_content = convert_markdown_to_storage_format(request.content)
+                confluence_content = convert_markdown_to_storage_format(content)
             except ValueError as e:
                 raise HTTPException(
                     status_code=400,
                     detail=f"Fehler bei Markdown-Konvertierung: {str(e)}"
                 )
         else:
-            confluence_content = request.content
+            confluence_content = content
         
         # 5. Space ID lookup
         try:
-            space_id = get_space_id(request.site_url, request.space_name, auth_header)
+            space_id = get_space_id(site_url, space_name, auth_header)
         except ValueError as e:
             # Space nicht gefunden
             raise HTTPException(
@@ -531,12 +603,12 @@ async def create_confluence_page_endpoint(request: ConfluencePageRequest):
         
         # 6. Parent Page ID lookup (optional)
         parent_id = None
-        if request.parent_page_title:
+        if parent_page_title:
             try:
                 parent_id = get_parent_page_id(
-                    request.site_url,
+                    site_url,
                     space_id,
-                    request.parent_page_title,
+                    parent_page_title,
                     auth_header
                 )
                 if parent_id is None:
@@ -563,9 +635,9 @@ async def create_confluence_page_endpoint(request: ConfluencePageRequest):
         # 7. Page erstellen
         try:
             page_response = create_confluence_page(
-                request.site_url,
+                site_url,
                 space_id,
-                request.page_title,
+                page_title,
                 confluence_content,
                 parent_id,
                 auth_header
@@ -609,7 +681,7 @@ async def create_confluence_page_endpoint(request: ConfluencePageRequest):
         page_url = page_response.get("_links", {}).get("webui", "")
         if page_url and not page_url.startswith("http"):
             # Relativer Pfad, muss mit site_url kombiniert werden
-            page_url = f"{request.site_url}{page_url}"
+            page_url = f"{site_url}{page_url}"
         
         return {
             "status": "success",

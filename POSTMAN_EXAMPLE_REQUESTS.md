@@ -4,7 +4,7 @@
 
 - **URL**: `http://localhost:8300/create-confluence-page`
 - **Methode**: `POST`
-- **Content-Type**: `application/json`
+- **Content-Type**: `application/json` ODER `multipart/form-data` (beide werden unterstützt)
 
 ---
 
@@ -293,6 +293,46 @@ Falls du eine Postman Collection importieren möchtest, hier ist die Collection-
 
 ---
 
+## Beispiel 6: Mit multipart/form-data (wie in Postman mit --form)
+
+### Request-Konfiguration
+
+**URL:**
+```
+POST http://localhost:8300/create-confluence-page
+```
+
+**Headers:**
+```
+Content-Type: multipart/form-data
+```
+
+**Body (form-data in Postman):**
+- `space_name`: `Capgemini`
+- `parent_page_title`: `Meetingprotokolle`
+- `content`: `# Überschrift\n\nInhalt hier...`
+- `content_format`: `markdown`
+- `page_title`: `API Test Postman`
+- `user`: `david.muehlberg@capgemini.com`
+- `site_url`: `https://davidmuehlberg.atlassian.net`
+
+**Hinweis:** In Postman wähle "Body" → "form-data" und füge die Felder als Key-Value-Paare hinzu.
+
+**cURL Beispiel:**
+```bash
+curl --location 'http://localhost:8300/create-confluence-page' \
+--header 'Content-Type: multipart/form-data' \
+--form 'space_name="Capgemini"' \
+--form 'parent_page_title="Meetingprotokolle"' \
+--form 'content="# Überschrift
+
+Inhalt hier..."' \
+--form 'content_format="markdown"' \
+--form 'page_title="API Test Postman"' \
+--form 'user="david.muehlberg@capgemini.com"' \
+--form 'site_url="https://davidmuehlberg.atlassian.net"'
+```
+
 ## Wichtige Hinweise
 
 1. **API Key**: Stelle sicher, dass `CONFLUENCE_API_KEY` in der `.env`-Datei gesetzt ist
@@ -300,6 +340,7 @@ Falls du eine Postman Collection importieren möchtest, hier ist die Collection-
 3. **Site URL**: Verwende die vollständige URL deiner Confluence-Instanz (ohne `/wiki` am Ende)
 4. **Space Name**: Der Space-Name muss exakt übereinstimmen (case-insensitive)
 5. **Parent Page**: Wenn die Parent Page nicht gefunden wird, wird die Seite auf Root-Level erstellt (kein Fehler)
+6. **Content-Type**: Der Endpoint unterstützt sowohl `application/json` als auch `multipart/form-data`
 
 ## Test-Reihenfolge
 
